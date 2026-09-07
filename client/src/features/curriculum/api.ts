@@ -1,0 +1,179 @@
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { http } from '@/lib/http';
+import { queryKeys } from '@/lib/query-keys';
+import { toast } from '@/lib/toast-bus';
+import { useSchoolId } from '@/app/providers/auth-provider';
+import type { ListQuery, Paginated } from '@/types/api';
+import type {
+  Curriculum,
+  CurriculumCoverage,
+  CurriculumTopic,
+  LessonNote,
+  SchemeOfWork,
+} from '@/types/curriculum';
+
+/** The scheme list omits the weeks; only the detail view needs them. */
+export interface SchemeSummary extends Omit<SchemeOfWork, 'weeks'> {
+  weeks: [];
+  weekCount: number;
+}
+
+export function useCurricula(query: { subjectId?: string; levelId?: string } = {}) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.list(schoolId, query),
+    queryFn: () => http.get<Curriculum[]>('/curricula', { query }),
+    enabled: Boolean(schoolId),
+  });
+}
+
+export function useCurriculumTopics(curriculumId: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.topics(schoolId, curriculumId ?? ''),
+    queryFn: () => http.get<CurriculumTopic[]>(`/curricula/${curriculumId}/topics`),
+    enabled: Boolean(schoolId && curriculumId),
+  });
+}
+
+export function useCurriculumCoverage(query: { curriculumId?: string; classId?: string } = {}) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.coverage(schoolId, query),
+    queryFn: () => http.get<CurriculumCoverage>('/curriculum-coverage', { query }),
+    enabled: Boolean(schoolId && query.curriculumId),
+  });
+}
+
+/**
+ * Marking objectives taught.
+ *
+ * This is the entry point for the coverage analytics: a school can only find
+ * the gap between "on the syllabus" and "actually taught" if teachers can
+ * record the difference in a couple of clicks (spec section 13).
+ */
+export function useMarkObjectivesTaught(curriculumId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { objectiveIds: string[]; taught: boolean }) =>
+      http.post<{ updated: number }>(`/curricula/${curriculumId}/coverage`, input),
+    onSuccess: (result, input) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.coverage(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
+      toast.success(
+        input.taught
+          ? `${result.updated} objective${result.updated === 1 ? '' : 's'} marked as taught`
+          : `${result.updated} objective${result.updated === 1 ? '' : 's'} marked as not taught`,
+      );
+    },
+  });
+}
+
+/* -- Schemes of work -------------------------------------------------------- */
+
+export function useSchemes(query: ListQuery) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.schemes(schoolId, query),
+    queryFn: () => http.get<Paginated<SchemeSummary>>('/schemes', { query }),
+    enabled: Boolean(schoolId),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useScheme(id: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.scheme(schoolId, id ?? ''),
+    queryFn: () => http.get<SchemeOfWork>(`/schemes/${id}`),
+    enabled: Boolean(schoolId && id),
+  });
+}
+
+/**
+ * Generates a *draft* scheme from the curriculum and the term's real teaching
+ * weeks. It is explicitly a starting point — the teacher reorders and edits it
+ * before submitting, and nothing about the generated plan is fixed (spec §14).
+ */
+export function useGenerateScheme() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { curriculumId: string; classId: string; termId: string }) =>
+      http.post<SchemeOfWork>('/schemes/generate', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.schemes(schoolId) });
+      toast.success('Draft scheme generated', {
+        description: 'Review and adjust it before submitting for approval.',
+      });
+    },
+  });
+}
+
+export function useSaveScheme(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ values, version }: { values: Partial<SchemeOfWork>; version: number }) =>
+      http.patch<SchemeOfWork>(`/schemes/${id}`, values, { version }),
+    onSuccess: (scheme) => {
+      queryClient.setQueryData(queryKeys.curriculum.scheme(schoolId, id), scheme);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.schemes(schoolId) });
+      toast.success(
+        scheme.status === 'APPROVED' ? 'Scheme approved' : 'Scheme of work saved',
+      );
+    },
+  });
+}
+
+/* -- Lesson notes ----------------------------------------------------------- */
+
+export function useLessonNotes(query: ListQuery) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.lessonNotes(schoolId, query),
+    queryFn: () => http.get<Paginated<LessonNote>>('/lesson-notes', { query }),
+    enabled: Boolean(schoolId),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useLessonNote(id: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.curriculum.lessonNote(schoolId, id ?? ''),
+    queryFn: () => http.get<LessonNote>(`/lesson-notes/${id}`),
+    enabled: Boolean(schoolId && id),
+  });
+}
+
+export function useSaveLessonNote(id?: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ values, version }: { values: Partial<LessonNote>; version?: number }) =>
+      id
+        ? http.patch<LessonNote>(`/lesson-notes/${id}`, values, { version })
+        : http.post<LessonNote>('/lesson-notes', values),
+    onSuccess: (note) => {
+      queryClient.setQueryData(queryKeys.curriculum.lessonNote(schoolId, note.id), note);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
+      const message: Record<LessonNote['status'], string> = {
+        DRAFT: 'Lesson note saved',
+        SUBMITTED: 'Lesson note submitted for review',
+        APPROVED: 'Lesson note approved',
+        RETURNED: 'Lesson note returned to the teacher',
+      };
+      toast.success(message[note.status]);
+    },
+  });
+}
