@@ -1,0 +1,1974 @@
+You are a senior software architect and full-stack TypeScript engineer.
+
+I am providing you with an EXISTING school management portal codebase and a research document containing the product requirements.
+
+Your job is to COMPLETE the existing application into a production-ready, multi-tenant School Management SaaS.
+
+DO NOT rebuild the project from scratch.
+
+First inspect and understand:
+1. The existing folder structure and architecture.
+2. Existing entities, repositories, services/use-cases, controllers, routes and React components.
+3. Existing database and Firebase configuration.
+4. The attached School Portal Research document.
+5. README, ARCHITECTURE.md, PRODUCT_ROADMAP.md and DEPLOYMENT.md.
+
+Preserve the existing architectural direction unless there is a strong technical reason to improve it.
+
+==================================================
+1. TECHNOLOGY STACK
+==================================================
+
+Frontend:
+- ReactJS
+- TypeScript
+- Vite
+- Tailwind CSS
+- TanStack Query for server state
+- React Router or the router already configured in the project
+- React Hook Form + Zod for forms/validation where appropriate
+
+Backend:
+- NodeJS
+- ExpressJS
+- TypeScript
+- TypeORM
+- PostgreSQL
+
+Firebase:
+- Firebase Authentication
+- Firestore
+- Firebase Storage
+- Firebase Cloud Messaging
+
+Deployment:
+- Firebase App Hosting
+- External production PostgreSQL database
+
+Use npm unless the existing project uses another package manager.
+
+Do not unnecessarily introduce frameworks that replace the selected stack.
+
+==================================================
+2. ARCHITECTURAL REQUIREMENTS
+==================================================
+
+Follow:
+
+- SOLID principles
+- Repository Pattern
+- Dependency Inversion
+- Separation of Concerns
+- Domain-oriented modular architecture
+- DTOs
+- Use-case/application services
+- Dependency injection where useful
+- Centralized configuration
+- Centralized error handling
+- Standardized API responses
+- Database migrations
+- Secure multi-tenancy
+- RBAC
+- Audit logging
+- Testable business logic
+
+The intended backend flow is approximately:
+
+HTTP Route
+  -> Controller
+  -> Validation
+  -> Application Use Case / Service
+  -> Repository Interface
+  -> Infrastructure Repository
+  -> TypeORM
+  -> PostgreSQL
+
+Business logic MUST NOT live inside Express controllers.
+
+Domain/application code should not directly depend on Express, Firebase or TypeORM when a suitable abstraction can be used.
+
+For external infrastructure create abstractions such as:
+
+IStudentRepository
+IPaymentGateway
+INotificationService
+INotificationChannel
+IFileStorage
+IMessageRepository
+IDocumentRenderer
+IAuditService
+
+Implement infrastructure adapters separately.
+
+==================================================
+3. DATA STORAGE RESPONSIBILITIES
+==================================================
+
+PostgreSQL is the SOURCE OF TRUTH for business data.
+
+Use PostgreSQL for:
+
+- Schools
+- School branches
+- Academic sessions
+- Terms
+- Levels
+- Classes
+- Subjects
+- Users/memberships
+- Roles/permissions
+- Students
+- Guardians
+- Student-guardian relationships
+- Enrolments
+- Admissions
+- Attendance
+- Curriculum
+- Schemes of work
+- Lesson notes
+- Timetables
+- Assessments
+- Scores
+- Results
+- Grading
+- Behaviour
+- Discipline
+- Houses
+- Fees
+- Invoices
+- Discounts
+- Payments
+- Financial balances
+- Transcripts
+- Notification records
+- Audit records
+- Configuration
+
+Firestore should NOT duplicate the relational database.
+
+Use Firestore only where realtime/document-oriented behaviour is beneficial, primarily:
+
+- Parent/teacher conversations
+- Realtime messaging
+- Realtime notification inbox where appropriate
+
+Use Firebase Storage for files such as:
+
+- School logos
+- Student photographs
+- Admission documents
+- Supporting documents
+- Gallery images
+- Generated report cards where persisted
+- Transcript/certificate files where appropriate
+
+Metadata and authorization information for uploaded files should remain in PostgreSQL.
+
+Firebase Cloud Messaging is a delivery channel, not the notification database.
+
+==================================================
+4. MULTI-TENANCY
+==================================================
+
+This application is SaaS and MUST support multiple schools.
+
+Most business records must belong to:
+
+schoolId
+
+Where branches are supported:
+
+schoolId
+branchId
+
+Never trust schoolId supplied by the browser for authorization.
+
+Resolve tenant membership from the authenticated user/session and validate access server-side.
+
+Every tenant-specific query must enforce tenant isolation.
+
+Repository methods should make it difficult to accidentally query records belonging to another school.
+
+Create appropriate compound PostgreSQL indexes such as:
+
+schoolId + admissionNo
+schoolId + studentId
+schoolId + classId
+schoolId + subjectId
+schoolId + sessionId
+schoolId + date
+schoolId + status
+
+Unique constraints that are logically school-specific must normally include schoolId.
+
+Design the data model so that one organization/owner can eventually manage multiple schools or branches.
+
+==================================================
+5. AUTHENTICATION AND AUTHORIZATION
+==================================================
+
+Use Firebase Authentication for identity.
+
+Backend must verify Firebase ID tokens using Firebase Admin.
+
+Firebase authentication answers:
+
+"Who is this user?"
+
+PostgreSQL membership/RBAC answers:
+
+"What is this user allowed to do in this school?"
+
+Implement:
+
+User
+SchoolMembership
+Role
+Permission
+RolePermission
+
+Support configurable roles while providing sensible defaults:
+
+SUPER_ADMIN
+SCHOOL_ADMIN
+PRINCIPAL
+VICE_PRINCIPAL
+TEACHER
+FORM_TEACHER
+BURSAR
+ADMISSION_OFFICER
+PARENT
+STUDENT
+
+Do not rely only on role names.
+
+Implement granular permissions such as:
+
+student.read
+student.create
+student.update
+
+attendance.read
+attendance.manage
+
+result.read
+result.enter
+result.approve
+result.publish
+
+finance.read
+invoice.manage
+payment.manage
+
+staff.manage
+settings.manage
+
+etc.
+
+Protect both backend routes and frontend navigation.
+
+Frontend permission hiding is UX only.
+
+The backend MUST always enforce authorization.
+
+==================================================
+6. PLATFORM/SCHOOL SETUP
+==================================================
+
+Build the complete onboarding/setup workflow.
+
+School:
+- Name
+- Code
+- Logo
+- Contact information
+- Address
+- Website information
+- Branding
+- Colours
+- Settings
+- Timezone
+- Currency
+- Country
+- Academic configuration
+
+Support school-defined structures.
+
+DO NOT hardcode:
+
+Nursery
+Primary
+JSS
+SSS
+
+Allow schools to define:
+
+School levels
+Class groups
+Class arms
+Subjects
+Academic sessions
+Terms
+
+Examples may include:
+
+Creche
+Nursery
+Primary
+Junior Secondary
+Senior Secondary
+
+or:
+
+Reception
+Year 1
+...
+Year 11
+
+==================================================
+7. STUDENT INFORMATION SYSTEM
+==================================================
+
+Implement complete student management.
+
+Student fields should support:
+
+- Admission number
+- First name
+- Middle name
+- Last name
+- Gender
+- Date of birth
+- Photo
+- Admission date
+- Status
+- Current class
+- House
+- Medical/emergency notes where appropriate
+- Custom school fields where appropriate
+
+Implement:
+
+Student registration
+Student editing
+Student profile
+Student search
+Student filtering
+Student status
+Class assignment
+Promotion
+Transfer
+Graduation
+Withdrawal
+Student documents
+
+Maintain historical enrolment rather than overwriting academic history.
+
+Create StudentEnrollment containing:
+
+student
+academic session
+term/year where appropriate
+level
+class
+status
+
+==================================================
+8. GUARDIANS AND PARENT PORTAL
+==================================================
+
+A guardian account can belong to MULTIPLE students.
+
+A student can have MULTIPLE guardians.
+
+Create proper many-to-many relationship data.
+
+Guardian relationship information should support:
+
+Father
+Mother
+Guardian
+Sponsor
+Other
+
+and:
+
+Primary contact
+Emergency contact
+Financial responsibility
+Pickup authorization where appropriate
+
+Parent logs in ONCE and sees all associated children.
+
+Parent portal should include:
+
+- Child overview
+- Results
+- Attendance
+- Fees
+- Payments
+- Outstanding balances
+- Calendar
+- Messages
+- Announcements
+- Behaviour
+- Notifications
+- Documents
+
+Provide an easy child switcher.
+
+==================================================
+9. BULK IMPORT
+==================================================
+
+Bulk import is a CORE requirement, not an optional feature.
+
+Support CSV/XLSX import for at least:
+
+Students
+Guardians
+Staff
+Subjects
+Fees
+
+Build:
+
+Upload
+Column mapping
+Preview
+Validation
+Error reporting
+Duplicate detection
+Import confirmation
+Import result
+
+Do not partially corrupt data when imports fail.
+
+Use transactions/batching appropriately.
+
+Allow users to download an import error report.
+
+==================================================
+10. ADMISSIONS
+==================================================
+
+Build admissions workflow:
+
+Application form
+Applicant information
+Guardian information
+Document upload
+Application status
+Screening
+Interview/exam
+Admission decision
+Offer
+Acceptance
+Rejection
+
+Statuses could include:
+
+DRAFT
+SUBMITTED
+SCREENING
+SHORTLISTED
+OFFERED
+ACCEPTED
+REJECTED
+WITHDRAWN
+
+Provide an admissions dashboard:
+
+Applications
+Screened
+Offers
+Accepted
+Rejected
+Conversion rate
+
+IMPORTANT:
+
+When an applicant accepts admission, provide a transactional workflow that converts the applicant into a student WITHOUT retyping their information.
+
+Preserve submitted documents.
+
+==================================================
+11. ATTENDANCE
+==================================================
+
+Implement attendance for students.
+
+Support:
+
+Present
+Absent
+Late
+Excused
+
+For absence store reason/category.
+
+Allow:
+
+Daily class attendance
+Bulk marking
+Individual correction
+Attendance history
+Attendance statistics
+
+Support same-day absence notification.
+
+Example:
+
+Teacher marks student absent
+        ↓
+Attendance saved
+        ↓
+Notification event generated
+        ↓
+Parent notified
+
+Avoid sending duplicate notifications when attendance is edited repeatedly.
+
+==================================================
+12. CHILD COLLECTION SAFETY
+==================================================
+
+Implement pickup/collection management.
+
+Parents/guardians can have authorized pickup persons.
+
+Store:
+
+Name
+Photo
+Phone
+Relationship
+Authorization status
+
+School can record:
+
+Student
+Pickup person
+Time
+Staff member who released child
+
+Notify parent when appropriate.
+
+Maintain an immutable history of collection events.
+
+==================================================
+13. ACADEMIC CURRICULUM
+==================================================
+
+Curriculum is one of the application's major differentiators.
+
+Model:
+
+Curriculum
+Subject
+Topic
+LearningObjective
+
+Example:
+
+Biology
+ -> Photosynthesis
+     -> Define photosynthesis
+     -> Identify raw materials
+     -> State word equation
+     -> Describe experiment
+
+Teachers must be able to record which objectives were taught.
+
+Build curriculum coverage analytics:
+
+Taught
+Not taught
+Assessed
+Not assessed
+
+Allow management to identify curriculum gaps.
+
+==================================================
+14. SCHEME OF WORK
+==================================================
+
+Generate a draft scheme of work from:
+
+Academic calendar
+Teaching weeks
+Subject curriculum
+Learning objectives
+
+Teacher can:
+
+Generate
+Review
+Reorder
+Edit
+Approve
+
+Do not hardcode the generated scheme.
+
+==================================================
+15. LESSON NOTES
+==================================================
+
+Teacher lesson notes should support:
+
+Class
+Subject
+Date
+Topic
+Objectives
+Lesson content
+Teaching resources
+Assignment
+Challenges encountered
+Student difficulties
+Objectives covered
+
+Allow school-defined approval workflows where appropriate.
+
+==================================================
+16. TIMETABLE
+==================================================
+
+Build timetable management.
+
+Entities:
+
+Period
+Teacher
+Subject
+Class
+Room
+TimetableEntry
+
+Prevent:
+
+Teacher collision
+Class collision
+Room collision
+
+Provide useful conflict messages.
+
+Allow timetable generation assistance, but keep manual editing available.
+
+==================================================
+17. SHARED CALENDAR
+==================================================
+
+School calendar supports:
+
+Holidays
+Examinations
+Tests
+PTA meetings
+Events
+Fee deadlines
+Admission dates
+Staff events
+
+Different events may target:
+
+Everyone
+Staff
+Parents
+Students
+Specific classes
+Specific roles
+
+Detect obvious scheduling conflicts where applicable.
+
+==================================================
+18. CBT / ASSESSMENT
+==================================================
+
+Build a question bank.
+
+Support:
+
+Multiple choice
+True/false
+Short answer where appropriate
+
+Questions may belong to:
+
+Subject
+Topic
+Learning objective
+Difficulty
+
+Provide:
+
+PRACTICE mode
+EXAM mode
+
+Objective questions should support automatic marking.
+
+Teachers can configure:
+
+Duration
+Attempts
+Start/end time
+Randomization
+Pass score
+
+Design carefully for unstable internet.
+
+Where feasible, preserve answers locally and synchronize safely so temporary connectivity loss does not destroy an examination attempt.
+
+==================================================
+19. RESULTS AND GRADING
+==================================================
+
+Do NOT hardcode one grading system.
+
+Each school can define:
+
+Assessment components
+Maximum scores
+CA/exam weighting
+Pass marks
+Letter grades
+Grade boundaries
+Remarks
+Different grading schemes for different sections
+
+Example:
+
+CA = 40
+Exam = 60
+
+but another school may use:
+
+CA = 30
+Exam = 70
+
+Build:
+
+Score entry
+Bulk score entry
+Validation
+Result computation
+Teacher review
+Approval
+Publication
+
+Use workflow statuses:
+
+DRAFT
+SUBMITTED
+APPROVED
+PUBLISHED
+
+After publication, changes must require appropriate permission and MUST be audited.
+
+Do not silently overwrite published marks.
+
+==================================================
+20. REPORT CARDS
+==================================================
+
+Build flexible report card generation.
+
+Include:
+
+School branding
+Student details
+Subject results
+Totals
+Average
+Grade
+Position if enabled
+Attendance
+Behaviour
+Teacher comment
+Principal comment
+Charts
+Verification information
+
+Allow schools to configure report layouts.
+
+Build reusable teacher/principal comment templates.
+
+Provide visual student performance charts.
+
+Generate printable/PDF-friendly reports.
+
+==================================================
+21. DOCUMENT TEMPLATE SYSTEM
+==================================================
+
+Avoid building unrelated hardcoded report generators.
+
+Design a reusable document template system capable of eventually supporting:
+
+Report cards
+Receipts
+Invoices
+Admission forms
+Broadsheets
+Transcripts
+
+Allow:
+
+School logo
+School colours
+Headers
+Footers
+Field placement
+Sections
+Reusable templates
+
+Do not build an unnecessarily complex Canva clone.
+
+A structured template/layout system is sufficient.
+
+==================================================
+22. TRANSCRIPTS AND VERIFICATION
+==================================================
+
+Generate multi-year student transcripts.
+
+Transcript must use historical enrolment/results.
+
+Provide document verification.
+
+Each published transcript/report where appropriate receives:
+
+Verification identifier
+QR code
+
+Public verification endpoint:
+
+/verify/:code
+
+It should show limited, privacy-conscious information sufficient to verify authenticity.
+
+Never expose the student's complete private record publicly.
+
+==================================================
+23. BEHAVIOUR
+==================================================
+
+Schools must define their own behaviour/skill categories.
+
+Examples:
+
+Punctuality
+Neatness
+Honesty
+Handwriting
+Leadership
+Sports
+
+Allow school-defined rating scales.
+
+Build:
+
+Continuous behaviour updates
+House points
+Positive behaviour
+Negative incidents
+Behaviour history
+
+==================================================
+24. DISCIPLINE
+==================================================
+
+Implement formal discipline workflow.
+
+Incident
+ -> Referral
+ -> Review
+ -> Action
+ -> Resolution
+
+Record:
+
+Reporter
+Student
+Description
+Evidence
+Date
+Action
+Reviewer
+Resolution
+
+Every important change must be auditable.
+
+==================================================
+25. HOUSES
+==================================================
+
+Schools can define houses.
+
+Students belong to houses.
+
+Implement house points:
+
+Student earns points
+        ↓
+Points contribute to student
+        ↓
+Points contribute to house
+
+Provide leaderboards by:
+
+Term
+Session
+House
+Student
+
+==================================================
+26. FEES AND BILLING
+==================================================
+
+Build flexible fee management.
+
+Entities should support:
+
+FeeItem
+FeeStructure
+Invoice
+InvoiceLine
+Discount
+Scholarship
+Payment
+PaymentAllocation
+
+Handle:
+
+Part payment
+Full payment
+Sibling discounts
+Staff-child discounts
+Scholarships
+Optional charges
+Transport
+Boarding
+Outstanding balances
+Previous-term balances
+Credits/adjustments
+
+Keep:
+
+Fee definitions
+
+separate from:
+
+Invoices
+
+and separate from:
+
+Payments.
+
+Never use one mutable "balance" field as the only financial history.
+
+Balances should be derivable from ledger/invoice/payment information.
+
+==================================================
+27. PAYMENT ARCHITECTURE
+==================================================
+
+Create a provider abstraction:
+
+IPaymentGateway
+
+Example implementations:
+
+PaystackPaymentGateway
+FlutterwavePaymentGateway
+
+Do not tightly couple finance logic to one provider.
+
+Support:
+
+Payment initialization
+Payment reference
+Webhook processing
+Verification
+Payment allocation
+Receipts
+
+WEBHOOKS MUST BE IDEMPOTENT.
+
+Never mark a payment successful merely because the browser returned from a payment page.
+
+Verify provider events server-side.
+
+Never store card details.
+
+The platform should not unnecessarily hold school funds.
+
+==================================================
+28. COMMUNICATION
+==================================================
+
+Create unified notification architecture.
+
+Notification
+NotificationRecipient
+NotificationPreference
+NotificationDelivery
+
+Channels:
+
+IN_APP
+PUSH
+EMAIL
+SMS
+
+Create channel adapters.
+
+FCM implementation should be one adapter.
+
+Support:
+
+Announcements
+Attendance alerts
+Result published alerts
+Fee reminders
+Admission notifications
+Calendar reminders
+
+Record delivery attempts/status where appropriate.
+
+==================================================
+29. PARENT-TEACHER MESSAGING
+==================================================
+
+Use Firestore where realtime messaging is useful.
+
+Support:
+
+Conversation
+Participants
+Messages
+Read state
+Attachments where permitted
+
+Authorization MUST still be determined by backend/domain rules.
+
+Parents should only contact appropriate staff based on school configuration/student relationship.
+
+Do not expose arbitrary users to each other.
+
+==================================================
+30. NEWS FEED
+==================================================
+
+School can publish:
+
+News
+Announcements
+Events
+Photos
+
+Target:
+
+All users
+Parents
+Staff
+Students
+Classes
+
+Parent dashboard should show relevant content.
+
+Respect student photo consent settings.
+
+==================================================
+31. SCHOOL WEBSITE
+==================================================
+
+Each school should optionally have a public website/profile generated from its configuration.
+
+Support:
+
+Logo
+Brand colours
+About
+Admissions
+Contact
+News
+Events
+Gallery
+Testimonials
+
+Architecture should allow:
+
+school.platformdomain.com
+
+and eventually:
+
+schoolcustomdomain.com
+
+Public content must be separated from authenticated school data.
+
+==================================================
+32. ANALYTICS
+==================================================
+
+Build dashboards for management.
+
+At minimum:
+
+Student count
+Attendance rate
+Fee billed
+Fee collected
+Outstanding fees
+Admissions funnel
+Result performance
+Subject performance
+Curriculum coverage
+Behaviour trends
+
+Parent dashboard:
+
+Child attendance
+Academic trend
+Fee balance
+Recent messages
+Upcoming events
+
+Teacher dashboard:
+
+Classes
+Attendance tasks
+Score-entry tasks
+Lesson plans
+Upcoming assessments
+
+==================================================
+33. AUDIT TRAIL
+==================================================
+
+Audit sensitive operations.
+
+Particularly:
+
+Result changes
+Published result changes
+Payments
+Invoice adjustments
+Student status
+Role changes
+Permissions
+Admissions
+Discipline
+
+Audit record should include where appropriate:
+
+schoolId
+actorUserId
+action
+entityType
+entityId
+before
+after
+timestamp
+request metadata
+
+Audit records should not casually be editable through application APIs.
+
+==================================================
+34. CONCURRENCY
+==================================================
+
+This is a multi-user system.
+
+Prevent lost updates.
+
+Use one or more of:
+
+Optimistic locking
+Version columns
+Transactions
+Atomic updates
+
+For important mutable records, consider:
+
+@VersionColumn()
+
+When user A modifies a record after user B loaded it, user B must not silently overwrite user A's newer data.
+
+Return a meaningful conflict response.
+
+==================================================
+35. API DESIGN
+==================================================
+
+Use consistent REST APIs.
+
+Example:
+
+GET    /api/v1/students
+POST   /api/v1/students
+GET    /api/v1/students/:id
+PATCH  /api/v1/students/:id
+DELETE /api/v1/students/:id
+
+Standard success response:
+
+{
+  "success": true,
+  "data": {},
+  "message": "..."
+}
+
+Standard failure:
+
+{
+  "success": false,
+  "error": {
+    "code": "...",
+    "message": "...",
+    "details": []
+  }
+}
+
+Use correct HTTP status codes.
+
+Implement:
+
+Pagination
+Filtering
+Searching
+Sorting
+
+for large collections.
+
+Do not return thousands of database rows to the frontend unnecessarily.
+
+==================================================
+36. VALIDATION
+==================================================
+
+Validate all external input.
+
+Prefer shared Zod schemas where practical.
+
+Do not trust:
+
+req.body
+req.params
+req.query
+Firebase custom claims
+client supplied schoolId
+
+without appropriate validation/authorization.
+
+==================================================
+37. FRONTEND ARCHITECTURE
+==================================================
+
+Build a professional responsive dashboard.
+
+Organize frontend by features/modules rather than creating one enormous components folder.
+
+Example:
+
+src/
+  app/
+  components/
+  features/
+    students/
+    admissions/
+    academics/
+    attendance/
+    results/
+    finance/
+    behaviour/
+    messaging/
+    settings/
+  hooks/
+  lib/
+  services/
+  types/
+
+Create reusable components for:
+
+Data tables
+Pagination
+Search
+Filters
+Forms
+Dialogs
+Confirmations
+Loading states
+Empty states
+Error states
+Permission guards
+File uploads
+Charts
+
+Use TanStack Query for backend data.
+
+Do not create duplicated fetch logic throughout components.
+
+==================================================
+38. UX REQUIREMENTS
+==================================================
+
+The system should feel like a modern SaaS application, not an admin template demonstration.
+
+Desktop:
+sidebar navigation
+
+Mobile:
+responsive navigation
+
+Provide:
+
+Breadcrumbs
+Page titles
+Search
+Useful empty states
+Skeleton/loading states
+Error messages
+Toast feedback
+Confirmation dialogs
+Unsaved-change warnings where useful
+
+Large tables must support responsive behaviour.
+
+Accessibility:
+semantic HTML
+labels
+keyboard navigation
+reasonable contrast
+focus states
+
+==================================================
+39. OFFLINE / POOR CONNECTIVITY
+==================================================
+
+Nigerian schools frequently experience unreliable internet and power.
+
+Design important teacher workflows with resilience.
+
+Prioritize:
+
+Attendance
+Score entry
+CBT answers
+
+Where practical:
+
+Save drafts locally
+Queue unsynchronized mutations
+Show synchronization status
+Retry safely
+Detect conflicts
+
+Do not pretend data has been saved to the server when it only exists locally.
+
+Clearly display:
+
+Saved
+Saving
+Offline
+Pending sync
+Conflict
+
+==================================================
+40. SECURITY
+==================================================
+
+Implement production security.
+
+Use:
+
+Helmet
+CORS allowlist
+Rate limiting
+Request size limits
+Firebase token verification
+RBAC
+Tenant authorization
+Input validation
+Parameterized ORM queries
+Secure file validation
+Safe logging
+Secret management
+
+Do NOT:
+
+Commit credentials
+Expose Firebase Admin credentials
+Log tokens
+Log passwords
+Log sensitive student data unnecessarily
+Trust frontend authorization
+Use wildcard production CORS without reason
+
+Validate uploaded:
+
+MIME type
+File extension
+File size
+
+Use generated storage names.
+
+==================================================
+41. CHILD DATA / PRIVACY
+==================================================
+
+This application contains children's information.
+
+Build privacy-conscious defaults.
+
+Support photo consent.
+
+If photo consent is disabled, ensure student photos are not accidentally displayed in public content/documents where prohibited.
+
+Provide architecture for data export.
+
+Provide school-level data retention/deactivation capability.
+
+Never use student information for AI training features.
+
+==================================================
+42. DATABASE
+==================================================
+
+Use TypeORM migrations.
+
+CRITICAL:
+
+synchronize: false
+
+Do not enable synchronize=true in production or as the primary schema-management strategy.
+
+Provide:
+
+migration:generate
+migration:run
+migration:revert
+
+scripts.
+
+Use:
+
+UUID primary keys where appropriate
+Foreign keys
+Unique constraints
+Indexes
+Transactions
+createdAt
+updatedAt
+
+Use deletedAt/soft delete only where business requirements justify it.
+
+Do not use JSON strings for data that clearly deserves relational tables.
+
+JSONB is acceptable for genuinely dynamic configuration.
+
+==================================================
+43. PERFORMANCE
+==================================================
+
+Prevent obvious scaling problems.
+
+Use:
+
+Pagination
+Database indexes
+Selective relations
+QueryBuilder where useful
+Transactions
+Bulk operations
+Caching only where justified
+
+Avoid N+1 queries.
+
+Do not load all students/results/messages to calculate simple dashboard totals.
+
+Use SQL aggregation.
+
+==================================================
+44. TESTING
+==================================================
+
+Add meaningful tests.
+
+Unit tests:
+- Use cases
+- Result calculation
+- Fee calculation
+- Permissions
+- Attendance rules
+
+Integration tests:
+- Repositories
+- Authentication middleware
+- Tenant isolation
+- Result workflow
+- Payments
+
+Critical test:
+
+A user belonging to School A MUST NEVER be able to retrieve or modify School B's records.
+
+Also test concurrency where important.
+
+==================================================
+45. OBSERVABILITY
+==================================================
+
+Use structured logging.
+
+Provide:
+
+GET /health/live
+GET /health/ready
+
+Readiness should verify required dependencies where appropriate.
+
+Log:
+
+Request ID
+Method
+Path
+Status
+Duration
+
+Avoid logging sensitive payloads.
+
+Use centralized exception handling.
+
+==================================================
+46. FIREBASE APP HOSTING
+==================================================
+
+Make the complete application deployable to Firebase App Hosting.
+
+The build must correctly produce:
+
+React frontend
+Express backend
+
+Configure:
+
+apphosting.yaml
+environment variables
+build commands
+runtime/start command
+static assets
+SPA fallback
+API routing
+
+Avoid the common bug where:
+
+/api/*
+
+returns React's:
+
+index.html
+
+API routes must be registered BEFORE SPA fallback.
+
+Expected routing:
+
+/api/*
+    -> Express API
+
+/assets/*
+    -> static frontend assets
+
+everything else
+    -> React index.html
+
+==================================================
+47. ENVIRONMENT CONFIGURATION
+==================================================
+
+Create/update:
+
+.env.example
+
+Validate environment variables at startup.
+
+Include placeholders for:
+
+NODE_ENV
+PORT
+DATABASE_URL
+
+Firebase Admin configuration
+
+Firebase client configuration
+
+Storage bucket
+
+Payment provider configuration
+
+CORS origins
+
+Application URL
+
+Never commit real secrets.
+
+==================================================
+48. POSTGRESQL PRODUCTION
+==================================================
+
+Production DB connection must support:
+
+DATABASE_URL
+
+and appropriate SSL configuration.
+
+Connection configuration should accommodate providers that require SSL without breaking local PostgreSQL development.
+
+Use connection pooling.
+
+Do not automatically run destructive migrations at arbitrary application startup.
+
+Document the production migration process.
+
+==================================================
+49. CI/CD
+==================================================
+
+Create GitHub Actions where appropriate.
+
+Pipeline:
+
+Install
+   ↓
+Lint
+   ↓
+Typecheck
+   ↓
+Test
+   ↓
+Build
+   ↓
+Migration validation
+   ↓
+Deploy
+
+Production migrations should be deliberately controlled.
+
+==================================================
+50. DOCUMENTATION
+==================================================
+
+Update README.md.
+
+Document:
+
+Architecture
+Installation
+Environment variables
+Local development
+Database setup
+Firebase setup
+Migration commands
+Testing
+Build
+Deployment
+Adding a new module
+Adding repository implementation
+Adding notification provider
+Adding payment provider
+
+Update ARCHITECTURE.md if implementation changes architectural decisions.
+
+==================================================
+51. IMPLEMENTATION PRIORITY
+==================================================
+
+Do NOT randomly implement modules.
+
+Work in this order:
+
+PHASE 1 — FOUNDATION
+
+1. Audit existing codebase
+2. Fix architecture/build/type errors
+3. PostgreSQL connection/migrations
+4. Firebase authentication
+5. Multi-tenancy
+6. RBAC
+7. Audit infrastructure
+8. School setup
+9. Academic session/term configuration
+10. Levels/classes/subjects
+
+PHASE 2 — CORE SCHOOL OPERATIONS
+
+11. Students
+12. Guardians
+13. Enrolments
+14. Bulk import
+15. Staff
+16. Attendance
+17. Parent portal
+
+PHASE 3 — RESULTS & FINANCE
+
+18. Assessment configuration
+19. Score entry
+20. Result computation
+21. Approval/publishing
+22. Report cards
+23. Fees
+24. Invoices
+25. Payments
+26. Receipts
+
+At this point the application must already be usable by a real school.
+
+PHASE 4 — ACADEMIC DIFFERENTIATION
+
+27. Curriculum objectives
+28. Scheme of work
+29. Lesson notes
+30. Timetable
+31. Calendar
+32. CBT
+33. Transcripts
+34. Verification
+
+PHASE 5 — ENGAGEMENT & SAFETY
+
+35. Behaviour definitions
+36. Behaviour tracking
+37. Houses/points
+38. Discipline
+39. Child collection
+40. Parent-teacher messaging
+41. News feed
+42. School website
+
+PHASE 6 — ADVANCED
+
+43. Admissions analytics
+44. Management dashboards
+45. Withdrawal-risk indicators
+46. Multi-branch/group dashboard
+47. Offline synchronization
+48. Advanced reporting
+
+PHASE 7 — PRODUCTION HARDENING
+
+49. Security review
+50. Performance review
+51. Tenant-isolation tests
+52. Integration tests
+53. Production migrations
+54. Firebase App Hosting configuration
+55. PostgreSQL production configuration
+56. CI/CD
+57. Documentation
+58. Final build/typecheck/test
+
+==================================================
+52. IMPLEMENTATION RULES
+==================================================
+
+IMPORTANT:
+
+Do not simply create empty files or TODO placeholders.
+
+A module is considered implemented only when its critical path works end-to-end:
+
+Entity
+ -> Migration
+ -> Repository
+ -> Use Case
+ -> Validation
+ -> Controller
+ -> Route
+ -> Authorization
+ -> Frontend API client
+ -> React UI
+ -> Error/loading states
+
+Do not mark a feature complete merely because its entity exists.
+
+Do not create fake API implementations when the real backend can be implemented.
+
+Do not replace PostgreSQL persistence with localStorage.
+
+Do not leave major screens backed by hardcoded mock data.
+
+Mock data may be used for development/demo seeds only.
+
+Do not rewrite working modules without reason.
+
+Refactor incrementally.
+
+Keep the application buildable throughout implementation.
+
+After every major phase run:
+
+npm lint
+npm typecheck
+npm test
+npm build
+
+Fix failures before proceeding.
+
+==================================================
+53. UI EXPECTATIONS
+==================================================
+
+Build polished interfaces for each user persona.
+
+ADMIN DASHBOARD
+
+Show:
+- Total students
+- Staff
+- Attendance today
+- Fees collected
+- Outstanding fees
+- Admission activity
+- Recent activity
+- Upcoming events
+
+TEACHER DASHBOARD
+
+Show:
+- Today's classes
+- Attendance
+- Score entry
+- Lesson notes
+- Upcoming assessments
+- Messages
+
+PARENT DASHBOARD
+
+Show:
+- Children selector
+- Attendance
+- Results
+- Outstanding fees
+- Recent payments
+- Messages
+- Upcoming events
+- Notifications
+
+STUDENT DASHBOARD
+
+Show:
+- Timetable
+- Results
+- Attendance
+- CBT/practice
+- Calendar
+- Announcements
+
+BURSAR DASHBOARD
+
+Show:
+- Amount billed
+- Amount collected
+- Outstanding
+- Recent payments
+- Unreconciled transactions
+- Debtors
+
+Use role/permission-aware navigation.
+
+==================================================
+54. DEFINITION OF DONE
+==================================================
+
+The project is complete when:
+
+1. It installs cleanly.
+2. TypeScript compiles without errors.
+3. Production build succeeds.
+4. Database migrations create the complete schema.
+5. Firebase Authentication works.
+6. Multiple schools can coexist safely.
+7. Cross-school access is prevented.
+8. School administrator can configure a school.
+9. Students/guardians can be created/imported.
+10. Teacher can take attendance.
+11. Teacher can enter results.
+12. Authorized staff can approve/publish results.
+13. Parent can see all their children.
+14. Parent can view results and attendance.
+15. Bursar can create invoices and record/reconcile payments.
+16. Report cards can be generated.
+17. Notifications work.
+18. Files upload securely to Firebase Storage.
+19. Realtime messaging works through Firestore.
+20. Audit trail records sensitive changes.
+21. Important multi-user updates handle conflicts.
+22. APIs are paginated and validated.
+23. Critical workflows have tests.
+24. Health endpoints work.
+25. README and deployment documentation are accurate.
+26. The project is ready for Firebase App Hosting.
+27. PostgreSQL production connection is configurable.
+28. No major feature relies on hardcoded mock data.
+29. No production secrets exist in source control.
+30. synchronize remains false.
+31. Production build, typecheck and tests all pass.
+
+==================================================
+55. STARTING INSTRUCTIONS
+==================================================
+
+Before changing code:
+
+1. Inspect the entire supplied repository.
+2. Read the research document.
+3. Read README.md.
+4. Read ARCHITECTURE.md.
+5. Read PRODUCT_ROADMAP.md.
+6. Read DEPLOYMENT.md.
+7. Inspect package.json files.
+8. Inspect TypeORM configuration.
+9. Inspect existing entities.
+10. Inspect Firebase configuration.
+11. Inspect frontend structure.
+
+Then produce a concise implementation audit:
+
+EXISTING
+PARTIAL
+MISSING
+NEEDS REFACTORING
+
+Map the findings to the phases above.
+
+Then begin implementation.
+
+Do not stop after producing the audit or implementation plan.
+
+Proceed to modify and complete the actual project.
+
+When an architectural decision is ambiguous, choose the option that maximizes:
+
+1. Data integrity
+2. Tenant isolation
+3. Maintainability
+4. Extensibility
+5. Testability
+6. Security
+7. Performance
+8. Ease of use
+
+Do not sacrifice architectural integrity merely to finish faster.
+
+At the end, provide:
+
+- What was implemented
+- Remaining limitations, if any
+- Database migrations added
+- Environment variables required
+- Test results
+- Build result
+- Deployment instructions
+- Default/demo credentials only if a development seed was intentionally created
+- Any manual Firebase/PostgreSQL configuration still required
