@@ -141,7 +141,10 @@ export const financeHandlers = [
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     if (!context.can('finance.read')) return errors.forbidden();
-    return ok(scoped(db.feeItems, context.schoolId));
+
+    const url = new URL(request.url);
+    const { page, pageSize } = readListParams(url);
+    return ok(paginate(scoped(db.feeItems, context.schoolId), page, pageSize));
   }),
 
   http.post(`${base}/fee-items`, async ({ request }) => {
@@ -172,7 +175,10 @@ export const financeHandlers = [
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     if (!context.can('finance.read')) return errors.forbidden();
-    return ok(scoped(db.feeStructures, context.schoolId));
+
+    const url = new URL(request.url);
+    const { page, pageSize } = readListParams(url);
+    return ok(paginate(scoped(db.feeStructures, context.schoolId), page, pageSize));
   }),
 
   http.get(`${base}/discounts`, async ({ request }) => {
