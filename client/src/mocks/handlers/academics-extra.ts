@@ -355,7 +355,14 @@ export const academicsExtraHandlers = [
     if (!context) return errors.unauthenticated();
     if (!context.can('timetable.read')) return errors.forbidden();
 
-    const timetable = scoped(db.timetables, context.schoolId)[0];
+    // "Current" means the timetable for the current term, not merely "the
+    // school's only timetable" — a school keeps a separate timetable per
+    // term, so switching which term is current must switch which timetable
+    // this returns rather than relabelling whichever one already existed.
+    const currentTerm = scoped(db.terms, context.schoolId).find((term) => term.isCurrent);
+    const timetable = currentTerm
+      ? scoped(db.timetables, context.schoolId).find((entry) => entry.termId === currentTerm.id)
+      : undefined;
     if (!timetable) return errors.notFound('Timetable');
 
     const url = new URL(request.url);

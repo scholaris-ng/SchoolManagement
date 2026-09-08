@@ -12,6 +12,17 @@ const scoped = (schoolId: Scope, ...parts: unknown[]) => ['school', schoolId ?? 
 export const queryKeys = {
   session: () => ['session'] as const,
 
+  /**
+   * Every cached query for one school — the prefix `scoped()` builds every
+   * other key from. React Query matches a query key by prefix, so
+   * invalidating this evicts everything below it in one call. Use it for a
+   * change with no fixed blast radius, such as which term is current: that
+   * drives attendance, results, invoicing, the timetable and every
+   * dashboard, and enumerating each of those keys individually is exactly
+   * how one gets missed.
+   */
+  all: (schoolId: Scope) => scoped(schoolId),
+
   school: {
     detail: (schoolId: Scope) => scoped(schoolId, 'school'),
     branches: (schoolId: Scope) => scoped(schoolId, 'branches'),

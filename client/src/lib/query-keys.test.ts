@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from './query-keys';
 
 /**
@@ -79,5 +80,55 @@ describe('query keys are scoped to the active school', () => {
       expect(key[0]).toBe('school');
       expect(key[1]).toBe('sch_a');
     }
+  });
+
+  /**
+   * `queryKeys.all` is what a change with no fixed blast radius invalidates —
+   * e.g. which term is current, which affects attendance, results, invoicing,
+   * the timetable and every dashboard. React Query matches by prefix, so this
+   * only works if `all` is genuinely a prefix of every other key; that is what
+   * these two tests hold the line on.
+   */
+  it('is a prefix of every other scoped key for the same school', () => {
+    const all = queryKeys.all('sch_a');
+    const others = [
+      queryKeys.academics.terms('sch_a'),
+      queryKeys.students.list('sch_a'),
+      queryKeys.finance.invoices('sch_a', {}),
+      queryKeys.timetable.list('sch_a'),
+      queryKeys.dashboard.admin('sch_a'),
+    ];
+
+    for (const key of others) {
+      expect(key.slice(0, all.length)).toEqual(all);
+    }
+  });
+
+  it('scopes to one school, not every school', () => {
+    const all = queryKeys.all('sch_a');
+    const otherSchool = queryKeys.students.list('sch_b');
+    expect(otherSchool.slice(0, all.length)).not.toEqual(all);
+  });
+
+  it('actually marks every cached query for that school stale, not just in theory', async () => {
+    const queryClient = new QueryClient();
+    const schoolKeys = [
+      queryKeys.academics.terms('sch_a'),
+      queryKeys.timetable.list('sch_a'),
+      queryKeys.dashboard.admin('sch_a'),
+      queryKeys.finance.invoices('sch_a', {}),
+    ];
+    const otherSchoolKey = queryKeys.students.list('sch_b');
+
+    for (const key of [...schoolKeys, otherSchoolKey]) {
+      queryClient.setQueryData(key, { seeded: true });
+    }
+
+    await queryClient.invalidateQueries({ queryKey: queryKeys.all('sch_a') });
+
+    for (const key of schoolKeys) {
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+    expect(queryClient.getQueryState(otherSchoolKey)?.isInvalidated).toBe(false);
   });
 });

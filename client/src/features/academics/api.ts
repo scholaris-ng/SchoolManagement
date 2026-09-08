@@ -171,14 +171,19 @@ export function useSaveTerm() {
   });
 }
 
+/**
+ * Which term is current drives attendance, score entry, invoicing, the
+ * timetable, report cards and every dashboard — there is no fixed list of
+ * pages this doesn't touch. Rather than invalidate each of those query keys
+ * individually (and miss one, the way the timetable page's own name/term
+ * label went stale before this), every cached query for the school is
+ * invalidated, so nothing keeps showing the term that just stopped being
+ * current.
+ */
 export function useSetCurrentTerm() {
   return useAcademicMutation<string, Term>({
     request: (termId) => http.post<Term>(`/academics/terms/${termId}/set-current`),
-    invalidate: (schoolId) => [
-      queryKeys.academics.terms(schoolId),
-      queryKeys.academics.sessions(schoolId),
-      queryKeys.dashboard.admin(schoolId),
-    ],
+    invalidate: (schoolId) => [queryKeys.all(schoolId)],
     successMessage: 'Current term updated',
   });
 }
