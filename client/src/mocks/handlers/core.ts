@@ -1,5 +1,5 @@
 import { http, delay } from 'msw';
-import { db, resolveContext, scoped } from '../context';
+import { db, findMembership, resolveContext, scoped, staffBlockReason } from '../context';
 import { errors, latency, ok } from '../http-helpers';
 
 const base = '/api/v1';
@@ -8,6 +8,15 @@ const base = '/api/v1';
 export const coreHandlers = [
   http.get(`${base}/auth/session`, async ({ request }) => {
     await delay(latency());
+
+    // A blocked staff membership is a distinct, explainable failure — not the
+    // same generic "you are not signed in" a missing/expired token gets.
+    const found = findMembership(request);
+    if (found) {
+      const reason = staffBlockReason(found.membership);
+      if (reason) return errors.forbidden(reason);
+    }
+
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     return ok({ user: context.user, activeSchoolId: context.schoolId });

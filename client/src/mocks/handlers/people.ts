@@ -11,7 +11,7 @@ import {
   readListParams,
   sortRows,
 } from '../http-helpers';
-import type { Student, StudentGuardianLink } from '@/types/people';
+import type { StaffMember, Student, StudentGuardianLink } from '@/types/people';
 
 const base = '/api/v1';
 
@@ -586,5 +586,133 @@ export const peopleHandlers = [
     if (!context) return errors.unauthenticated();
     const member = scoped(db.staff, context.schoolId).find((entry) => entry.id === params.id);
     return member ? ok(member) : errors.notFound('Staff member');
+  }),
+
+  http.post(`${base}/staff`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('staff.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Record<string, unknown>;
+
+    if (
+      scoped(db.staff, context.schoolId).some(
+        (member) => member.staffNo.toLowerCase() === String(body.staffNo).toLowerCase(),
+      )
+    ) {
+      return errors.validation('That staff number is already in use.', [
+        { field: 'staffNo', message: 'Already used by another staff member in this school.' },
+      ]);
+    }
+    if (
+      scoped(db.staff, context.schoolId).some(
+        (member) => member.email.toLowerCase() === String(body.email).toLowerCase(),
+      )
+    ) {
+      return errors.validation('That email is already in use.', [
+        { field: 'email', message: 'Already used by another staff member in this school.' },
+      ]);
+    }
+
+    const subjectIds = (body.subjectIds as string[] | undefined) ?? [];
+    const classIds = (body.classIds as string[] | undefined) ?? [];
+    const subjects = subjectIds
+      .map((entryId) => db.subjects.find((subject) => subject.id === entryId))
+      .filter(Boolean) as typeof db.subjects;
+    const classes = classIds
+      .map((entryId) => db.classes.find((schoolClass) => schoolClass.id === entryId))
+      .filter(Boolean) as typeof db.classes;
+
+    const member: StaffMember = {
+      id: nextId('stf'),
+      schoolId: context.schoolId,
+      userId: null,
+      staffNo: String(body.staffNo),
+      firstName: String(body.firstName),
+      lastName: String(body.lastName),
+      fullName: `${body.firstName} ${body.lastName}`,
+      email: String(body.email),
+      phone: String(body.phone),
+      gender: body.gender as StaffMember['gender'],
+      photoUrl: (body.photoUrl as string) || null,
+      designation: String(body.designation),
+      department: (body.department as string) || null,
+      employmentType: body.employmentType as StaffMember['employmentType'],
+      employmentDate: String(body.employmentDate),
+      status: (body.status as StaffMember['status']) ?? 'ACTIVE',
+      roleNames: (body.roleNames as StaffMember['roleNames']) ?? [],
+      subjectIds: subjects.map((subject) => subject.id),
+      subjectNames: subjects.map((subject) => subject.name),
+      classIds: classes.map((schoolClass) => schoolClass.id),
+      classNames: classes.map((schoolClass) => schoolClass.name),
+      isFormTeacher: Boolean(body.isFormTeacher),
+      createdAt: new Date().toISOString(),
+      version: 1,
+    };
+
+    db.staff.unshift(member);
+    return created(member, 'Staff member added');
+  }),
+
+  http.patch(`${base}/staff/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('staff.manage')) return errors.forbidden();
+
+    const member = scoped(db.staff, context.schoolId).find((entry) => entry.id === params.id);
+    if (!member) return errors.notFound('Staff member');
+
+    const ifMatch = request.headers.get('if-match');
+    if (ifMatch && Number(ifMatch) !== member.version) return errors.versionConflict();
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const previousStatus = member.status;
+
+    const subjectIds = (body.subjectIds as string[] | undefined) ?? member.subjectIds;
+    const classIds = (body.classIds as string[] | undefined) ?? member.classIds;
+    const subjects = subjectIds
+      .map((entryId) => db.subjects.find((subject) => subject.id === entryId))
+      .filter(Boolean) as typeof db.subjects;
+    const classes = classIds
+      .map((entryId) => db.classes.find((schoolClass) => schoolClass.id === entryId))
+      .filter(Boolean) as typeof db.classes;
+
+    Object.assign(member, body, {
+      fullName: [body.firstName ?? member.firstName, body.lastName ?? member.lastName]
+        .filter(Boolean)
+        .join(' '),
+      subjectIds: subjects.map((subject) => subject.id),
+      subjectNames: subjects.map((subject) => subject.name),
+      classIds: classes.map((schoolClass) => schoolClass.id),
+      classNames: classes.map((schoolClass) => schoolClass.name),
+      version: member.version + 1,
+    });
+
+    // A status change into or out of "on leave"/"exited" is exactly what stops
+    // (or restores) that person's ability to sign in — worth its own trail.
+    if (body.status && body.status !== previousStatus) {
+      db.auditLog.unshift({
+        id: nextId('aud'),
+        schoolId: context.schoolId,
+        actorUserId: context.user.id,
+        actorName: context.user.displayName,
+        actorRole: context.membership.roles[0] ?? 'Member',
+        action: 'staff.status_changed',
+        entityType: 'StaffMember',
+        entityId: member.id,
+        entityLabel: `${member.fullName} — ${String(body.status).toLowerCase().replace('_', ' ')}`,
+        before: { status: previousStatus },
+        after: { status: body.status },
+        ipAddress: null,
+        userAgent: null,
+        requestId: request.headers.get('x-request-id'),
+        occurredAt: new Date().toISOString(),
+        severity: previousStatus === 'ACTIVE' ? 'WARNING' : 'INFO',
+      });
+    }
+
+    return ok(member, 'Staff record updated');
   }),
 ];

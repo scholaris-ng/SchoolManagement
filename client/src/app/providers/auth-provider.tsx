@@ -40,6 +40,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const sessionQueryFn = () => http.get<SessionPayload>('/auth/session');
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [identityUser, setIdentityUser] = useState<IdentityUser | null>(null);
@@ -76,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sessionQuery = useQuery({
     queryKey: queryKeys.session(),
-    queryFn: () => http.get<SessionPayload>('/auth/session'),
+    queryFn: sessionQueryFn,
     enabled: identityReady && Boolean(identityUser),
     staleTime: 5 * 60_000,
     retry: (failureCount, error) => {
@@ -131,7 +133,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       await identity.signIn(email, password);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+      // Identity only confirms the credentials; a blocked staff membership (on
+      // leave, exited) fails here, and the caller needs that error to show it —
+      // an `invalidateQueries` alone would fail silently in the background. This
+      // is called directly, not through `queryClient.fetchQuery`, so the shared
+      // query cache's own `onError` toast doesn't also fire and duplicate the
+      // message the sign-in form is about to show inline.
+      try {
+        const session = await sessionQueryFn();
+        queryClient.setQueryData(queryKeys.session(), session);
+      } catch (error) {
+        await identity.signOut();
+        throw error;
+      }
     },
     [queryClient],
   );

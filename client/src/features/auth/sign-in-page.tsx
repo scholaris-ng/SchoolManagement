@@ -64,8 +64,12 @@ export function SignInPage() {
 
   const signInAs = async (email: string) => {
     setError(null);
-    await signIn(email, 'demo');
-    navigate('/', { replace: true });
+    try {
+      await signIn(email, 'demo');
+      navigate('/', { replace: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Sign-in failed. Please try again.');
+    }
   };
 
   return (
