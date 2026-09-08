@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDateTime, formatFileSize } from '@/lib/format';
-import { downloadTextFile, exportRowsToCsv, parseCsv, suggestColumnMapping } from '@/lib/csv';
+import { exportRowsToXlsx, parseXlsx, suggestColumnMapping } from '@/lib/xlsx';
 import { FILE_PRESETS, FileValidationError, validateFile } from '@/lib/file-storage';
 import type {
   ImportEntity,
@@ -26,7 +26,7 @@ import {
   IMPORT_ENTITY_DESCRIPTION,
   IMPORT_ENTITY_LABEL,
   IMPORT_TARGETS,
-  templateCsvFor,
+  templateSheetFor,
 } from './columns';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -110,18 +110,27 @@ export function ImportPage() {
       return;
     }
 
-    if (!selected.name.toLowerCase().endsWith('.csv')) {
+    if (!selected.name.toLowerCase().endsWith('.xlsx')) {
       setFileError(
-        'Please save the spreadsheet as CSV first (File → Save as → CSV). Excel files are read column-by-column and CSV avoids surprises with merged cells and formulas.',
+        'Please upload an Excel workbook (.xlsx). If yours is an older .xls or a CSV, open it in Excel and use File → Save as → Excel Workbook.',
       );
       return;
     }
 
-    const text = await selected.text();
-    const parsed = parseCsv(text);
+    let parsed;
+    try {
+      parsed = await parseXlsx(selected);
+    } catch {
+      setFileError(
+        'That workbook could not be opened. Check it is not password-protected, then try again.',
+      );
+      return;
+    }
 
     if (parsed.headers.length === 0 || parsed.rows.length === 0) {
-      setFileError('That file has no rows we could read. Check it has a header row and data.');
+      setFileError(
+        'That workbook has no rows we could read. Check the first sheet has a header row and data below it.',
+      );
       return;
     }
 
@@ -130,6 +139,7 @@ export function ImportPage() {
       fileName: selected.name,
       sizeBytes: selected.size,
       rowCount: parsed.rows.length,
+      sheetName: parsed.sheetName,
       headers: parsed.headers,
       sampleRows: parsed.rows.slice(0, 5),
     });
@@ -157,8 +167,8 @@ export function ImportPage() {
 
   const downloadErrorReport = () => {
     const issues = result?.issues ?? preview?.issues ?? [];
-    exportRowsToCsv(
-      `import-errors-${new Date().toISOString().slice(0, 10)}.csv`,
+    void exportRowsToXlsx(
+      `import-errors-${new Date().toISOString().slice(0, 10)}.xlsx`,
       issues.map((issue) => ({
         Row: issue.rowNumber,
         Severity: issue.severity,
@@ -166,6 +176,7 @@ export function ImportPage() {
         Problem: issue.message,
         Value: issue.value ?? '',
       })),
+      { sheetName: 'Import errors' },
     );
   };
 
@@ -179,12 +190,14 @@ export function ImportPage() {
           entity && (
             <Button
               variant="outline"
-              onClick={() =>
-                downloadTextFile(
-                  `${entity.toLowerCase()}-import-template.csv`,
-                  templateCsvFor(entity),
-                )
-              }
+              onClick={() => {
+                const template = templateSheetFor(entity);
+                void exportRowsToXlsx(
+                  `${entity.toLowerCase()}-import-template.xlsx`,
+                  template.rows,
+                  { headers: template.headers, sheetName: IMPORT_ENTITY_LABEL[entity] },
+                );
+              }}
             >
               <Download />
               Download template
@@ -231,8 +244,9 @@ export function ImportPage() {
           <CardHeader>
             <CardTitle>2. Upload your file</CardTitle>
             <CardDescription>
-              CSV, up to {formatFileSize(FILE_PRESETS.spreadsheet.maxBytes)}. The file is read in
-              your browser for this preview — it is only sent when you validate.
+              Excel workbook (.xlsx), up to {formatFileSize(FILE_PRESETS.spreadsheet.maxBytes)}. The
+              first sheet is read in your browser for this preview — it is only sent when you
+              validate.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -244,6 +258,7 @@ export function ImportPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{file.fileName}</p>
                   <p className="text-xs text-muted-foreground">
+                    {file.sheetName && <>Sheet &ldquo;{file.sheetName}&rdquo; · </>}
                     {file.rowCount.toLocaleString()} rows · {file.headers.length} columns ·{' '}
                     {formatFileSize(file.sizeBytes)}
                   </p>
@@ -258,7 +273,7 @@ export function ImportPage() {
                 <input
                   ref={inputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="sr-only"
                   onChange={(event) => {
                     const selected = event.target.files?.[0];
@@ -272,7 +287,7 @@ export function ImportPage() {
                   className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 text-center transition-colors hover:border-primary/50 hover:bg-accent/40"
                 >
                   <UploadCloud className="size-6 text-muted-foreground" aria-hidden="true" />
-                  <span className="font-medium">Choose a CSV file</span>
+                  <span className="font-medium">Choose an Excel file</span>
                   <span className="text-xs text-muted-foreground">
                     Not sure of the format? Download the template above and fill it in.
                   </span>

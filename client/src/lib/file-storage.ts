@@ -47,14 +47,10 @@ export const FILE_PRESETS = {
     label: 'PDF, PNG or JPG up to 10 MB',
   },
   spreadsheet: {
-    accept: '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    mimeTypes: [
-      'text/csv',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ],
+    accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    mimeTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
     maxBytes: 20 * 1024 * 1024,
-    label: 'CSV or XLSX up to 20 MB',
+    label: 'Excel workbook (.xlsx) up to 20 MB',
   },
 } as const;
 
@@ -73,8 +69,9 @@ export function validateFile(file: File, preset: FilePreset): void {
   }
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   const mimeOk = (mimeTypes as readonly string[]).includes(file.type);
-  const extensionOk =
-    preset === 'spreadsheet' ? ['csv', 'xlsx', 'xls'].includes(extension) : mimeOk;
+  // Windows reports several MIME types for .xlsx depending on what is
+  // installed, so the extension is the reliable signal for workbooks.
+  const extensionOk = preset === 'spreadsheet' ? extension === 'xlsx' : mimeOk;
   if (!mimeOk && !extensionOk) {
     throw new FileValidationError(`"${file.name}" is not an accepted file type. Accepted: ${label}.`);
   }

@@ -15,7 +15,7 @@ import { StatusBadge } from '@/components/data/status-badge';
 import { Avatar } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { PermissionGate } from '@/components/guards/permission-gate';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 
 const STATUS_OPTIONS = [
   { value: 'ACTIVE', label: 'Active' },
@@ -140,8 +140,8 @@ export function StudentsListPage() {
     const rows = (students.data?.items ?? []).filter((student) =>
       selectedIds.includes(student.id),
     );
-    exportRowsToCsv(
-      `students-${new Date().toISOString().slice(0, 10)}.csv`,
+    void exportRowsToXlsx(
+      `students-${new Date().toISOString().slice(0, 10)}.xlsx`,
       rows.map((student) => ({
         'Admission no': student.admissionNo,
         Surname: student.lastName,
@@ -153,6 +153,7 @@ export function StudentsListPage() {
         House: student.houseName ?? '',
         Status: student.status,
       })),
+      { sheetName: 'Students' },
     );
   };
 
@@ -230,7 +231,7 @@ export function StudentsListPage() {
       <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
         <Button variant="outline" size="sm" onClick={exportSelection}>
           <Download />
-          Export CSV
+          Export Excel
         </Button>
       </SelectionBar>
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Download, Lock, ScrollText } from 'lucide-react';
 import { formatDateTime, formatRelative } from '@/lib/format';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuditLog } from '@/features/settings/api';
 import type { AuditLogEntry } from '@/types/engagement';
@@ -104,8 +104,8 @@ export function AuditPage() {
             variant="outline"
             disabled={rows.length === 0}
             onClick={() =>
-              exportRowsToCsv(
-                `audit-${new Date().toISOString().slice(0, 10)}.csv`,
+              void exportRowsToXlsx(
+                `audit-${new Date().toISOString().slice(0, 10)}.xlsx`,
                 rows.map((row) => ({
                   When: row.occurredAt,
                   Actor: row.actorName,
@@ -118,6 +118,7 @@ export function AuditPage() {
                   'IP address': row.ipAddress ?? '',
                   'Request id': row.requestId ?? '',
                 })),
+                { sheetName: 'Audit trail' },
               )
             }
           >

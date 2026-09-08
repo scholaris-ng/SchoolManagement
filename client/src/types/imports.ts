@@ -12,6 +12,8 @@ export interface ImportSessionFile {
   fileName: string;
   sizeBytes: number;
   rowCount: number;
+  /** Worksheet the rows were read from, shown in the upload summary. */
+  sheetName?: string;
   headers: string[];
   sampleRows: Record<string, string>[];
 }

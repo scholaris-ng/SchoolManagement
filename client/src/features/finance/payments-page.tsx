@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CheckCheck, CreditCard, Download, Plus, Receipt } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
 import { usePayments, useReconcilePayment } from './api';
@@ -160,8 +160,8 @@ export function PaymentsPage() {
   );
 
   const exportPayments = () => {
-    exportRowsToCsv(
-      `payments-${new Date().toISOString().slice(0, 10)}.csv`,
+    void exportRowsToXlsx(
+      `payments-${new Date().toISOString().slice(0, 10)}.xlsx`,
       (payments.data?.items ?? []).map((payment) => ({
         Receipt: payment.receiptNo ?? '',
         Reference: payment.reference,
@@ -174,6 +174,7 @@ export function PaymentsPage() {
         Reconciled: payment.isReconciled ? 'Yes' : 'No',
         'Recorded by': payment.recordedByName ?? '',
       })),
+      { sheetName: 'Payments' },
     );
   };
 

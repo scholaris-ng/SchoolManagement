@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CreditCard, Download, Wallet } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useClasses } from '@/features/academics/api';
 import { useDebtors } from './api';
@@ -132,8 +132,8 @@ export function DebtorsPage() {
   );
 
   const exportDebtors = () => {
-    exportRowsToCsv(
-      `debtors-${new Date().toISOString().slice(0, 10)}.csv`,
+    void exportRowsToXlsx(
+      `debtors-${new Date().toISOString().slice(0, 10)}.xlsx`,
       (debtors.data?.items ?? []).map((row) => ({
         Student: row.studentName,
         'Admission no': row.admissionNo,
@@ -145,6 +145,7 @@ export function DebtorsPage() {
         'Overdue invoices': row.overdueInvoices,
         'Last payment': row.lastPaymentAt ?? '',
       })),
+      { sheetName: 'Debtors' },
     );
   };
 

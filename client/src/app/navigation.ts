@@ -206,7 +206,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { label: 'Record a payment', to: '/finance/payments/new', icon: CreditCard, require: 'payment.manage', keywords: ['receipt', 'cash'] },
   { label: 'Create an invoice', to: '/finance/invoices/new', icon: Receipt, require: 'invoice.manage', keywords: ['bill', 'fees'] },
   { label: 'Post an announcement', to: '/announcements/new', icon: Megaphone, require: 'announcement.manage', keywords: ['notice'] },
-  { label: 'Import records', to: '/import', icon: UploadCloud, require: 'import.run', keywords: ['csv', 'excel', 'bulk'] },
+  { label: 'Import records', to: '/import', icon: UploadCloud, require: 'import.run', keywords: ['excel', 'xlsx', 'spreadsheet', 'bulk'] },
   { label: 'Log an incident', to: '/discipline/new', icon: Gavel, require: 'discipline.manage', keywords: ['behaviour', 'referral'] },
   { label: 'Add a calendar event', to: '/calendar', icon: CalendarDays, require: 'calendar.manage', keywords: ['holiday', 'exam'] },
 ];

@@ -124,10 +124,17 @@ export const IMPORT_ENTITY_DESCRIPTION: Record<ImportEntity, string> = {
   FEES: 'Fee items that fee structures and invoices are built from.',
 };
 
-/** Builds a starter CSV so a school never has to guess the column names. */
-export function templateCsvFor(entity: ImportEntity): string {
+/**
+ * Builds a starter workbook so a school never has to guess the column names:
+ * the labelled header row plus one filled-in example to copy down.
+ */
+export function templateSheetFor(entity: ImportEntity): {
+  headers: string[];
+  rows: Record<string, string>[];
+} {
   const targets = IMPORT_TARGETS[entity];
-  const header = targets.map((target) => target.label).join(',');
-  const example = targets.map((target) => target.example ?? '').join(',');
-  return `${header}\r\n${example}`;
+  const headers = targets.map((target) => target.label);
+  const example: Record<string, string> = {};
+  for (const target of targets) example[target.label] = target.example ?? '';
+  return { headers, rows: [example] };
 }

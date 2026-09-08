@@ -5,7 +5,7 @@
 ### Foundation layer
 - Multi-school tenancy, school-defined levels/classes/subjects/terms/sessions
 - User accounts, role/permission management and parent-to-many-children model
-- Audit trail, bulk CSV import, branding, document/file storage
+- Audit trail, bulk Excel (.xlsx) import, branding, document/file storage
 - Notification engine with in-app + FCM and provider adapters for SMS/email
 
 ### Academic operations

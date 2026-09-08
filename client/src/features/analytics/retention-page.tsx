@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, formatRelative } from '@/lib/format';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useSchool } from '@/features/settings/api';
 import { useRetentionRisk } from './api';
@@ -166,8 +166,8 @@ export function RetentionPage() {
             variant="outline"
             disabled={rows.length === 0}
             onClick={() =>
-              exportRowsToCsv(
-                `retention-risk-${new Date().toISOString().slice(0, 10)}.csv`,
+              void exportRowsToXlsx(
+                `retention-risk-${new Date().toISOString().slice(0, 10)}.xlsx`,
                 rows.map((row) => ({
                   Student: row.studentName,
                   'Admission no': row.admissionNo,
@@ -179,6 +179,7 @@ export function RetentionPage() {
                   'Attendance rate': row.attendanceRate,
                   'Guardian last login': row.guardianLastLoginAt ?? 'never',
                 })),
+                { sheetName: 'Retention risk' },
               )
             }
           >

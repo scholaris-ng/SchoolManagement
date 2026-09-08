@@ -122,7 +122,7 @@ src/
   components/   Reusable UI: data tables, forms, dialogs, guards, charts
   features/     One folder per domain: students, admissions, results, finance…
   hooks/        Cross-feature hooks (list state, outbox, media queries)
-  lib/          Transport, env, permissions, storage, formatting, CSV, push
+  lib/          Transport, env, permissions, storage, formatting, Excel, push
   mocks/        Development API (compiled out of production builds)
   types/        The wire contract shared with the API
 ```
@@ -186,7 +186,7 @@ The product holds records about children, and the client is built to match:
 cd client && npm test
 ```
 
-Covers permission evaluation, tenant-scoped cache keys, CSV import/export
+Covers permission evaluation, tenant-scoped cache keys, Excel import/export
 parsing, and the pages where a mistake would be most costly: the parent
 portal's child scoping, role and permission editing, the audit trail, and
 retention risk. `src/test/harness.tsx` renders a page with the providers it gets

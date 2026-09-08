@@ -14,7 +14,7 @@ import {
 import { Download, ScrollText, Table2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPercent, ordinal } from '@/lib/format';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useClasses, useCurrentTerm, useTerms } from '@/features/academics/api';
 import { useBroadsheet, useResultAnalytics } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -56,8 +56,8 @@ export function ResultsPage() {
 
   const exportBroadsheet = () => {
     if (!broadsheet.data) return;
-    exportRowsToCsv(
-      `broadsheet-${broadsheet.data.className}-${broadsheet.data.termName}.csv`.replace(/\s+/g, '-'),
+    void exportRowsToXlsx(
+      `broadsheet-${broadsheet.data.className}-${broadsheet.data.termName}.xlsx`.replace(/\s+/g, '-'),
       broadsheet.data.rows.map((row) => ({
         Position: row.position,
         'Admission no': row.admissionNo,
@@ -72,6 +72,7 @@ export function ResultsPage() {
         Average: row.average,
         Grade: row.grade,
       })),
+      { sheetName: `${broadsheet.data.className} broadsheet` },
     );
   };
 
@@ -86,7 +87,7 @@ export function ResultsPage() {
           broadsheet.data && (
             <Button variant="outline" onClick={exportBroadsheet}>
               <Download />
-              Export CSV
+              Export Excel
             </Button>
           )
         }

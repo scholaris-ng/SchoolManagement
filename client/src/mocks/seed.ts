@@ -2086,8 +2086,8 @@ function seedAudit(db: MockDb, schoolId: string): void {
 
 function seedImports(db: MockDb, schoolId: string): void {
   const jobs: [ImportJob['entity'], string, ImportJob['status'], number, number, number][] = [
-    ['STUDENTS', 'jss1-register-2025.csv', 'COMPLETED', 42, 42, 0],
-    ['STAFF', 'teaching-staff.csv', 'PARTIAL', 15, 13, 2],
+    ['STUDENTS', 'jss1-register-2025.xlsx', 'COMPLETED', 42, 42, 0],
+    ['STAFF', 'teaching-staff.xlsx', 'PARTIAL', 15, 13, 2],
   ];
 
   jobs.forEach(([entity, fileName, status, totalRows, created, failed], index) => {

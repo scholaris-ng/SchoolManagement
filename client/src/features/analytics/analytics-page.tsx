@@ -24,7 +24,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
-import { exportRowsToCsv } from '@/lib/csv';
+import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useCurrentTerm, useTermOptions } from '@/features/academics/api';
 import { useResultAnalytics } from '@/features/results/api';
@@ -338,8 +338,8 @@ function AcademicPanel({ termId }: { termId: string }) {
               size="sm"
               disabled={(data?.subjects.length ?? 0) === 0}
               onClick={() =>
-                exportRowsToCsv(
-                  `subject-performance-${new Date().toISOString().slice(0, 10)}.csv`,
+                void exportRowsToXlsx(
+                  `subject-performance-${new Date().toISOString().slice(0, 10)}.xlsx`,
                   (data?.subjects ?? []).map((row) => ({
                     Subject: row.subjectName,
                     Average: row.averageScore,
@@ -348,6 +348,7 @@ function AcademicPanel({ termId }: { termId: string }) {
                     Highest: row.highest,
                     Lowest: row.lowest,
                   })),
+                  { sheetName: 'Subject performance' },
                 )
               }
             >
@@ -847,8 +848,8 @@ function StaffPanel({ termId }: { termId: string }) {
               size="sm"
               disabled={(performance.data?.length ?? 0) === 0}
               onClick={() =>
-                exportRowsToCsv(
-                  `staff-performance-${new Date().toISOString().slice(0, 10)}.csv`,
+                void exportRowsToXlsx(
+                  `staff-performance-${new Date().toISOString().slice(0, 10)}.xlsx`,
                   (performance.data ?? []).map((row) => ({
                     Teacher: row.staffName,
                     Designation: row.designation,
@@ -859,6 +860,7 @@ function StaffPanel({ termId }: { termId: string }) {
                     'Curriculum coverage': row.curriculumCoverage,
                     Overall: row.compositeScore,
                   })),
+                  { sheetName: 'Staff performance' },
                 )
               }
             >
