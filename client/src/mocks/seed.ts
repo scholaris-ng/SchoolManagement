@@ -70,6 +70,7 @@ import type {
 import type { CbtAssessment, Question } from '@/types/assessment';
 import type { AuthenticatedUser, SchoolMembership } from '@/types/tenant';
 import type { Role } from '@/types/rbac';
+import type { ImportJob } from '@/types/imports';
 
 /**
  * In-memory fixture database for development.
@@ -128,6 +129,7 @@ export interface MockDb {
   notifications: AppNotification[];
   auditLog: AuditLogEntry[];
   websites: WebsiteContent[];
+  importJobs: ImportJob[];
 }
 
 const random = createRandom();
@@ -193,7 +195,7 @@ export function buildSeed(): MockDb {
     timetables: [], calendarEvents: [], admissions: [], behaviourScales: [], behaviourTraits: [],
     observations: [], housePoints: [], incidents: [], pickupPersons: [], collectionEvents: [],
     questions: [], assessments: [], announcements: [], news: [], conversations: [], messages: [],
-    notifications: [], auditLog: [], websites: [],
+    notifications: [], auditLog: [], websites: [], importJobs: [],
   };
 
   SCHOOL_BLUEPRINTS.forEach((blueprint, schoolIndex) => {
@@ -310,6 +312,7 @@ function seedSchool(
   seedEngagement(db, schoolId);
   seedAudit(db, schoolId);
   seedRoles(db, schoolId);
+  seedImports(db, schoolId);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2077,6 +2080,30 @@ function seedAudit(db: MockDb, schoolId: string): void {
       requestId: id('req'),
       occurredAt: addDays(TODAY, -index).toISOString(),
       severity,
+    });
+  });
+}
+
+function seedImports(db: MockDb, schoolId: string): void {
+  const jobs: [ImportJob['entity'], string, ImportJob['status'], number, number, number][] = [
+    ['STUDENTS', 'jss1-register-2025.csv', 'COMPLETED', 42, 42, 0],
+    ['STAFF', 'teaching-staff.csv', 'PARTIAL', 15, 13, 2],
+  ];
+
+  jobs.forEach(([entity, fileName, status, totalRows, created, failed], index) => {
+    const occurredAt = addDays(TODAY, -(21 - index * 9));
+    db.importJobs.push({
+      id: id('imp'),
+      schoolId,
+      entity,
+      fileName,
+      status,
+      totalRows,
+      created,
+      failed,
+      startedByName: 'Adaeze Okonkwo',
+      startedAt: occurredAt.toISOString(),
+      completedAt: occurredAt.toISOString(),
     });
   });
 }

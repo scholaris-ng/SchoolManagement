@@ -83,6 +83,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: BarChart3,
         require: 'analytics.read',
         personas: ['admin', 'bursar'],
+        end: true,
       },
       {
         label: 'Retention risk',

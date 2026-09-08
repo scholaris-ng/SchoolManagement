@@ -6,6 +6,7 @@ import { attendanceResultsHandlers } from './attendance-results';
 import { financeHandlers } from './finance';
 import { engagementHandlers } from './engagement';
 import { dashboardHandlers } from './dashboards';
+import { importsHandlers } from './imports';
 
 /**
  * The development API.
@@ -26,6 +27,7 @@ export const handlers = [
   ...financeHandlers,
   ...engagementHandlers,
   ...dashboardHandlers,
+  ...importsHandlers,
 
   // Anything under /api that no handler claimed is a bug in the client, not a
   // silent 404 from a passthrough — make it loud during development.

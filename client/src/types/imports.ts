@@ -57,9 +57,10 @@ export interface ImportResult {
 
 export interface ImportJob {
   id: string;
+  schoolId: string;
   entity: ImportEntity;
   fileName: string;
-  status: 'UPLOADED' | 'MAPPED' | 'VALIDATED' | 'IMPORTING' | 'COMPLETED' | 'FAILED';
+  status: 'UPLOADED' | 'MAPPED' | 'VALIDATED' | 'IMPORTING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
   totalRows: number;
   created: number;
   failed: number;

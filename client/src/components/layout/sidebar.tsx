@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, type NavItem } from '@/app/navigation';
@@ -24,6 +24,7 @@ export function Sidebar({
   className,
 }: SidebarProps) {
   const { can, persona, membership } = useAuth();
+  const { pathname } = useLocation();
 
   // Sections are filtered once per permission change rather than per render of
   // every link, and an entirely empty section disappears rather than showing a
@@ -42,6 +43,27 @@ export function Sidebar({
       ),
     [can, persona],
   );
+
+  /**
+   * Several entries share a path prefix with another entry of their own
+   * (`/analytics` and `/analytics/retention`, `/finance` and `/finance/fees`,
+   * `/results` and `/results/entry`…). React Router's own `isActive` is
+   * computed per-link, so both light up whenever the more specific one is
+   * open. Pick a single winner sidebar-wide instead: whichever matching entry
+   * has the longest `to` is the one actually on screen.
+   */
+  const activeTo = useMemo(() => {
+    let best: NavItem | null = null;
+    for (const section of sections) {
+      for (const item of section.items) {
+        const isMatch = item.end
+          ? pathname === item.to
+          : pathname === item.to || pathname.startsWith(`${item.to}/`);
+        if (isMatch && (!best || item.to.length > best.to.length)) best = item;
+      }
+    }
+    return best?.to ?? null;
+  }, [sections, pathname]);
 
   return (
     <div
@@ -90,12 +112,17 @@ export function Sidebar({
             <ul className="space-y-0.5">
               {section.items.map((item) => {
                 const badge = item.badgeKey ? badges[item.badgeKey] : undefined;
+                const isActive = item.to === activeTo;
                 const link = (
                   <NavLink
                     to={item.to}
-                    end={item.end}
+                    // Only the sidebar-wide winner may report itself active; every
+                    // other entry is forced to an exact match (which the current
+                    // path can't satisfy, or it would have won) so React Router
+                    // doesn't also mark a less-specific ancestor as current.
+                    end={isActive ? item.end : true}
                     onClick={onNavigate}
-                    className={({ isActive }) =>
+                    className={() =>
                       cn(
                         'group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                         collapsed && 'justify-center px-2',
