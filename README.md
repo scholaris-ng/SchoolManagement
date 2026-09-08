@@ -68,6 +68,29 @@ data and the MSW worker script are all excluded from `dist/` — verify with:
 cd client && npm run build && ls dist && grep -rl "msw\|DEMO_PERSONAS" dist/ || echo "clean"
 ```
 
+## Demo deployments
+
+Until the API exists, a deployed build has nothing to talk to — signing in
+returns 404 from `/api/v1/auth/session`. Building with `VITE_DEMO_MODE=true`
+produces a *demo* bundle instead: it keeps the mock API and the persona sign-in
+shortcuts, and every screen carries a banner saying the data is invented.
+
+On Vercel, set `VITE_DEMO_MODE` to `true` in the project's environment variables
+and redeploy. Locally:
+
+```bash
+cd client && VITE_DEMO_MODE=true npm run build && npm run preview
+```
+
+It must be asked for at build time and cannot be switched on from the browser,
+so an ordinary production build still compiles the mocks out entirely. Never set
+it on a deployment a real school will use.
+
+`src/mocks/demo-smoke.test.ts` runs the mock handlers under Node and checks that
+every persona signs in, each dashboard responds, and neither seeded school can
+see the other's records — so a broken demo fails in CI rather than on a
+published URL.
+
 ## Environment variables
 
 Copy `client/.env.example` to `client/.env`. Everything prefixed `VITE_` is
@@ -82,6 +105,7 @@ server.
 | `VITE_APP_URL` | Public app URL, used in verification links and QR codes |
 | `VITE_USE_MOCK_API` | Run against the in-browser mock API (development only) |
 | `VITE_USE_MOCK_AUTH` | Bypass Firebase and sign in as a seeded persona (development only) |
+| `VITE_DEMO_MODE` | Build a demo deployment that keeps the mock API and personas |
 | `VITE_FIREBASE_*` | Firebase web configuration |
 | `VITE_FIREBASE_VAPID_KEY` | Public VAPID key for web push |
 

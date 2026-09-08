@@ -6,20 +6,24 @@ import path from 'node:path';
 
 /**
  * MSW's worker script lives in `public/` so the dev server can serve it, which
- * would otherwise copy it into every production build. Nothing loads it there —
- * the mock bundle is compiled out — but shipping an interception worker to a
- * live school portal is not something to leave to chance.
+ * would otherwise copy it into every production build. Nothing would load it
+ * there — the mock bundle is compiled out — but shipping a request-interception
+ * worker to a live school portal is not something to leave to chance.
+ *
+ * A demo build is the exception: it *is* the mock API, so it needs the worker.
  */
-function excludeMockWorkerFromBuild(): Plugin {
+function excludeMockWorkerFromBuild(isDemo: boolean): Plugin {
   return {
     name: 'scholaris:exclude-mock-worker',
     apply: 'build',
     generateBundle(_options, bundle) {
+      if (isDemo) return;
       for (const fileName of Object.keys(bundle)) {
         if (fileName === 'mockServiceWorker.js') delete bundle[fileName];
       }
     },
     closeBundle() {
+      if (isDemo) return;
       const artefact = path.resolve(__dirname, 'dist/mockServiceWorker.js');
       if (fs.existsSync(artefact)) fs.rmSync(artefact);
     },
@@ -29,9 +33,10 @@ function excludeMockWorkerFromBuild(): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiTarget = env.VITE_DEV_API_PROXY || 'http://localhost:4000';
+  const isDemo = env.VITE_DEMO_MODE === 'true';
 
   return {
-    plugins: [react(), excludeMockWorkerFromBuild()],
+    plugins: [react(), excludeMockWorkerFromBuild(isDemo)],
     resolve: {
       alias: { '@': path.resolve(__dirname, './src') },
     },

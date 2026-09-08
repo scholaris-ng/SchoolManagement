@@ -14,16 +14,21 @@ import '@/styles/index.css';
 const queryClient = createQueryClient();
 
 /**
- * Development only: the in-browser mock API is started *before* React mounts so
- * the very first query is intercepted rather than racing the worker
- * registration. `env.useMockApi` cannot be true in a production build.
+ * Whether the mock bundle exists in this build at all.
+ *
+ * Both operands are substituted at build time, so an ordinary production build
+ * folds this to `false` and Rollup eliminates the dynamic import below —
+ * handlers, seeded student names and MSW itself never reach `dist/`. A demo
+ * build (`VITE_DEMO_MODE=true`) opts in and keeps them.
+ */
+const MOCKS_COMPILED_IN = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
+
+/**
+ * The mock API is started *before* React mounts so the very first query is
+ * intercepted rather than racing the worker registration.
  */
 async function enableMocking(): Promise<void> {
-  // `import.meta.env.PROD` is substituted at build time, so this guard makes the
-  // whole branch statically unreachable in a production build. Without it the
-  // mock bundle — handlers, seeded student names and all — is still emitted as a
-  // lazy chunk and published, even though nothing would ever load it.
-  if (import.meta.env.PROD || !env.useMockApi) return;
+  if (!MOCKS_COMPILED_IN || !env.useMockApi) return;
   try {
     const { startMockApi } = await import('@/mocks/browser');
     await startMockApi();

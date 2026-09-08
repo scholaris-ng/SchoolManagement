@@ -11,6 +11,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { LoadingState } from '@/components/ui/feedback';
 import { OfflineBanner } from '@/components/layout/offline-banner';
+import { DemoBanner } from '@/components/layout/demo-banner';
 
 /**
  * The authenticated application frame: permanent sidebar on desktop, a slide-in
@@ -96,6 +97,7 @@ export function AppShell() {
 
       <div className={cn('flex min-w-0 flex-1 flex-col')}>
         <Topbar onOpenMobileNav={() => setMobileNavOpen(true)} />
+        <DemoBanner />
         <OfflineBanner />
         <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
           <Suspense fallback={<LoadingState label="Loading page…" />}>

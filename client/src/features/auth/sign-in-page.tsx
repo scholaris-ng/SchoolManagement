@@ -11,17 +11,21 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
 import { FullPageLoader } from '@/components/layout/full-page-loader';
+import { DemoBanner } from '@/components/layout/demo-banner';
 
 /**
- * Development-only sign-in shortcuts.
+ * Sign-in shortcuts for the seeded personas.
  *
- * `import.meta.env.PROD` is a build-time constant, so in a production build
- * this whole branch is unreachable and Rollup drops the chunk — the seeded
- * persona list never reaches a published bundle.
+ * Both operands are build-time constants, so an ordinary production build drops
+ * the chunk entirely and the persona list never reaches a published bundle. A
+ * demo build keeps it, because clicking a role is the whole point of one.
  */
-const DevPersonaPanel = import.meta.env.PROD
-  ? null
-  : lazy(() => import('./dev-personas').then((m) => ({ default: m.DevPersonaPanel })));
+const PERSONAS_COMPILED_IN =
+  import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
+
+const DevPersonaPanel = PERSONAS_COMPILED_IN
+  ? lazy(() => import('./dev-personas').then((m) => ({ default: m.DevPersonaPanel })))
+  : null;
 
 const signInSchema = z.object({
   email: z.string().trim().min(1, 'Enter your email address').email('Enter a valid email address'),
@@ -66,6 +70,9 @@ export function SignInPage() {
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <DemoBanner />
+      </div>
       {/* Brand panel — hidden on small screens where it would only push the
           form below the fold. */}
       <div className="relative hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
@@ -144,7 +151,7 @@ export function SignInPage() {
             </Button>
           </form>
 
-          {DevPersonaPanel && env.isDevelopment && isMockIdentity && (
+          {DevPersonaPanel && (env.isDevelopment || env.isDemo) && isMockIdentity && (
             <Suspense fallback={null}>
               <DevPersonaPanel onSignInAs={(email) => void signInAs(email)} />
             </Suspense>
