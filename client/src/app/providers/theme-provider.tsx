@@ -81,6 +81,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
  */
 function BrandingBridge() {
   const { membership } = useAuth();
+  const { resolved } = useTheme();
   const branding = membership?.branding;
 
   useEffect(() => {
@@ -91,7 +92,14 @@ function BrandingBridge() {
       root.style.setProperty('--primary', primary);
       root.style.setProperty('--ring', primary);
       const [hue, saturation] = primary.split(' ');
-      root.style.setProperty('--primary-subtle', `${hue} ${saturation} 96%`);
+      // Mirrors the built-in light/dark tokens: a near-white, fully-saturated
+      // wash in light mode, but darkened and desaturated in dark mode — a
+      // 96%-lightness tint in light mode's own inline style, otherwise the
+      // dark theme's own light foreground text reads as invisible on top of it.
+      root.style.setProperty(
+        '--primary-subtle',
+        resolved === 'dark' ? `${hue} 40% 20%` : `${hue} ${saturation} 96%`,
+      );
     } else {
       root.style.removeProperty('--primary');
       root.style.removeProperty('--ring');
@@ -101,7 +109,7 @@ function BrandingBridge() {
     const accent = branding?.accentColor ? hexToHsl(branding.accentColor) : null;
     if (accent) root.style.setProperty('--info', accent);
     else root.style.removeProperty('--info');
-  }, [branding?.primaryColor, branding?.accentColor]);
+  }, [branding?.primaryColor, branding?.accentColor, resolved]);
 
   useEffect(() => {
     if (!membership) return;
