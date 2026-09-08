@@ -2,7 +2,7 @@ import { http, delay } from 'msw';
 import { db, resolveContext, scoped, visibleStudentIds } from '../context';
 import { created, errors, latency, ok, paginate } from '../http-helpers';
 import type { AttendanceRecord, AttendanceStatus } from '@/types/attendance';
-import type { ReportCard, ScoreSheet, SubjectResultLine } from '@/types/results';
+import type { Broadsheet, BroadsheetRow, ReportCard, ScoreSheet, SubjectResultLine } from '@/types/results';
 
 const base = '/api/v1';
 let sequence = 500_000;
@@ -551,6 +551,25 @@ export const attendanceResultsHandlers = [
     return report ? ok(report) : errors.notFound('Results');
   }),
 
+  http.get(`${base}/broadsheet`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('result.read') && !context.can('reportcard.read')) return errors.forbidden();
+
+    const url = new URL(request.url);
+    const classId = url.searchParams.get('classId');
+    const termId = url.searchParams.get('termId');
+    if (!classId || !termId) return errors.validation('A class and term are required.');
+
+    const schoolClass = scoped(db.classes, context.schoolId).find((entry) => entry.id === classId);
+    const term = scoped(db.terms, context.schoolId).find((entry) => entry.id === termId);
+    if (!schoolClass || !term) return errors.notFound('Class or term');
+
+    const broadsheet = buildBroadsheet(context.schoolId, schoolClass, term);
+    return ok(broadsheet);
+  }),
+
   http.get(`${base}/report-cards/:studentId/:termId`, async ({ request, params }) => {
     await delay(latency());
     const context = resolveContext(request);
@@ -595,6 +614,94 @@ export const attendanceResultsHandlers = [
     return created(template, 'Comment template saved');
   }),
 ];
+
+/**
+ * Every student in a class ranked against every subject for one term.
+ *
+ * Included as soon as a subject is submitted, the same bar `/analytics/results`
+ * uses — a raw, untouched draft isn't ready to rank a class by, but a school
+ * still wants to watch the picture come together before everything publishes.
+ */
+function buildBroadsheet(
+  schoolId: string,
+  schoolClass: { id: string; name: string },
+  term: { id: string; name: string; sessionName: string },
+): Broadsheet {
+  const sheets = db.scoreSheets.filter(
+    (sheet) =>
+      sheet.schoolId === schoolId &&
+      sheet.classId === schoolClass.id &&
+      sheet.termId === term.id &&
+      sheet.status !== 'DRAFT',
+  );
+
+  const subjects = sheets.map((sheet) => ({
+    subjectId: sheet.subjectId,
+    subjectName: sheet.subjectName,
+  }));
+
+  const scoredStudentIds = new Set(
+    sheets.flatMap((sheet) => sheet.rows.filter((row) => row.total !== null).map((row) => row.studentId)),
+  );
+  const roster = scoped(db.students, schoolId).filter(
+    (student) => student.currentClassId === schoolClass.id && scoredStudentIds.has(student.id),
+  );
+
+  const scheme =
+    scoped(db.gradingSchemes, schoolId).find((entry) => entry.isDefault) ??
+    scoped(db.gradingSchemes, schoolId)[0];
+
+  const rows: BroadsheetRow[] = roster.map((student) => {
+    const subjectScores: Record<string, number | null> = {};
+    let total = 0;
+    let subjectCount = 0;
+
+    sheets.forEach((sheet) => {
+      const row = sheet.rows.find((entry) => entry.studentId === student.id);
+      const score = row?.total ?? null;
+      subjectScores[sheet.subjectId] = score;
+      if (score !== null) {
+        total += score;
+        subjectCount += 1;
+      }
+    });
+
+    const average = subjectCount ? Math.round((total / subjectCount) * 10) / 10 : 0;
+    const band = scheme?.bands.find((entry) => average >= entry.minScore && average <= entry.maxScore);
+
+    return {
+      studentId: student.id,
+      studentName: student.fullName,
+      admissionNo: student.admissionNo,
+      subjects: subjectScores,
+      total,
+      average,
+      grade: band?.label ?? '—',
+      position: 0,
+    };
+  });
+
+  rows
+    .sort((a, b) => b.total - a.total)
+    .forEach((row, index) => {
+      row.position = index + 1;
+    });
+
+  const classAverage = rows.length
+    ? Math.round((rows.reduce((sum, row) => sum + row.average, 0) / rows.length) * 10) / 10
+    : 0;
+
+  return {
+    classId: schoolClass.id,
+    className: schoolClass.name,
+    termId: term.id,
+    termName: term.name,
+    sessionName: term.sessionName,
+    subjects,
+    rows,
+    classAverage,
+  };
+}
 
 function recomputeSheetStats(sheet: ScoreSheet): void {
   const scored = sheet.rows.filter((row) => row.total !== null);

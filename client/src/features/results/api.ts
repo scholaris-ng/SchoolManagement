@@ -6,6 +6,7 @@ import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery, Paginated } from '@/types/api';
 import type {
+  Broadsheet,
   CommentTemplate,
   GradingScheme,
   ReportCard,
@@ -170,28 +171,6 @@ export function useResultAnalytics(termId?: string) {
     queryFn: () => http.get<ResultAnalytics>('/analytics/results', { query: { termId } }),
     enabled: Boolean(schoolId),
   });
-}
-
-export interface BroadsheetRow {
-  studentId: string;
-  studentName: string;
-  admissionNo: string;
-  subjects: Record<string, number | null>;
-  total: number;
-  average: number;
-  grade: string;
-  position: number;
-}
-
-export interface Broadsheet {
-  classId: string;
-  className: string;
-  termId: string;
-  termName: string;
-  sessionName: string;
-  subjects: { subjectId: string; subjectName: string }[];
-  rows: BroadsheetRow[];
-  classAverage: number;
 }
 
 export function useBroadsheet(classId: string | undefined, termId: string | undefined) {

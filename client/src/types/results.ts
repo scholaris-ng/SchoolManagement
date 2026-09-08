@@ -145,6 +145,29 @@ export interface ReportCard {
   };
 }
 
+export interface BroadsheetRow {
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  subjects: Record<string, number | null>;
+  total: number;
+  average: number;
+  grade: string;
+  position: number;
+}
+
+/** Every student in a class against every subject for one term, ranked. */
+export interface Broadsheet {
+  classId: string;
+  className: string;
+  termId: string;
+  termName: string;
+  sessionName: string;
+  subjects: { subjectId: string; subjectName: string }[];
+  rows: BroadsheetRow[];
+  classAverage: number;
+}
+
 export interface CommentTemplate {
   id: string;
   schoolId: string;
