@@ -8,6 +8,7 @@ import type {
   Curriculum,
   CurriculumCoverage,
   CurriculumTopic,
+  LearningObjective,
   LessonNote,
   SchemeOfWork,
 } from '@/types/curriculum';
@@ -27,12 +28,133 @@ export function useCurricula(query: { subjectId?: string; levelId?: string } = {
   });
 }
 
+/**
+ * Creates or edits a curriculum — the subject-and-level shell that topics and
+ * objectives are built inside. Nothing is pre-loaded: a school defines its own
+ * curricula from here before scheme generation or coverage tracking has
+ * anything to work with.
+ */
+export function useSaveCurriculum() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, values }: { id?: string; values: Partial<Curriculum> }) =>
+      id
+        ? http.patch<Curriculum>(`/curricula/${id}`, values)
+        : http.post<Curriculum>('/curricula', values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Curriculum saved');
+    },
+  });
+}
+
+export function useDeleteCurriculum() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => http.delete<void>(`/curricula/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Curriculum deleted');
+    },
+  });
+}
+
 export function useCurriculumTopics(curriculumId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.topics(schoolId, curriculumId ?? ''),
     queryFn: () => http.get<CurriculumTopic[]>(`/curricula/${curriculumId}/topics`),
     enabled: Boolean(schoolId && curriculumId),
+  });
+}
+
+export function useSaveTopic(curriculumId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, values }: { id?: string; values: Partial<CurriculumTopic> }) =>
+      id
+        ? http.patch<CurriculumTopic>(`/curricula/${curriculumId}/topics/${id}`, values)
+        : http.post<CurriculumTopic>(`/curricula/${curriculumId}/topics`, values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Topic saved');
+    },
+  });
+}
+
+export function useDeleteTopic(curriculumId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (topicId: string) =>
+      http.delete<void>(`/curricula/${curriculumId}/topics/${topicId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Topic deleted');
+    },
+  });
+}
+
+export function useSaveObjective(curriculumId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      topicId,
+      id,
+      values,
+    }: {
+      topicId: string;
+      id?: string;
+      values: Partial<LearningObjective>;
+    }) =>
+      id
+        ? http.patch<LearningObjective>(
+            `/curricula/${curriculumId}/topics/${topicId}/objectives/${id}`,
+            values,
+          )
+        : http.post<LearningObjective>(
+            `/curricula/${curriculumId}/topics/${topicId}/objectives`,
+            values,
+          ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Objective saved');
+    },
+  });
+}
+
+export function useDeleteObjective(curriculumId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ topicId, objectiveId }: { topicId: string; objectiveId: string }) =>
+      http.delete<void>(`/curricula/${curriculumId}/topics/${topicId}/objectives/${objectiveId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
+      toast.success('Objective deleted');
+    },
   });
 }
 

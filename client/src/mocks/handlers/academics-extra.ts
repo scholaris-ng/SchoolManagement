@@ -1,11 +1,36 @@
 import { http, delay } from 'msw';
 import { db, resolveContext, scoped } from '../context';
-import { created, errors, latency, matchesSearch, ok, paginate, readListParams } from '../http-helpers';
-import type { CurriculumCoverage, TimetableConflict, Weekday } from '@/types/curriculum';
+import {
+  created,
+  errors,
+  latency,
+  matchesSearch,
+  noContent,
+  ok,
+  paginate,
+  readListParams,
+} from '../http-helpers';
+import type {
+  Curriculum,
+  CurriculumCoverage,
+  CurriculumTopic,
+  LearningObjective,
+  TimetableConflict,
+  Weekday,
+} from '@/types/curriculum';
 
 const base = '/api/v1';
 let sequence = 800_000;
 const nextId = (prefix: string) => `${prefix}_${(sequence += 1).toString(36)}`;
+
+/** Keeps a curriculum's denormalised topic/objective counts in sync with its topics. */
+function recalcCurriculumCounts(curriculumId: string): void {
+  const curriculum = db.curricula.find((entry) => entry.id === curriculumId);
+  if (!curriculum) return;
+  const topics = db.topics.filter((topic) => topic.curriculumId === curriculumId);
+  curriculum.topicCount = topics.length;
+  curriculum.objectiveCount = topics.reduce((total, topic) => total + topic.objectives.length, 0);
+}
 
 /** Curriculum, schemes of work, lesson notes, timetable, calendar and CBT. */
 export const academicsExtraHandlers = [
@@ -28,6 +53,101 @@ export const academicsExtraHandlers = [
     );
   }),
 
+  http.post(`${base}/curricula`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<Curriculum>;
+    if (!body.subjectId || !body.levelId) {
+      return errors.validation('A curriculum needs a subject and a level.');
+    }
+    const subject = db.subjects.find((entry) => entry.id === body.subjectId);
+    const level = db.levels.find((entry) => entry.id === body.levelId);
+    if (!subject) return errors.notFound('Subject');
+    if (!level) return errors.notFound('Level');
+
+    const duplicate = scoped(db.curricula, context.schoolId).some(
+      (entry) => entry.subjectId === subject.id && entry.levelId === level.id,
+    );
+    if (duplicate) {
+      return errors.conflict(`A curriculum for ${subject.name} at ${level.name} already exists.`);
+    }
+
+    const curriculum: Curriculum = {
+      id: nextId('cur'),
+      schoolId: context.schoolId,
+      name: body.name?.trim() || `${subject.name} — ${level.name}`,
+      subjectId: subject.id,
+      subjectName: subject.name,
+      levelId: level.id,
+      levelName: level.name,
+      sessionId: null,
+      description: body.description?.trim() || null,
+      topicCount: 0,
+      objectiveCount: 0,
+      isActive: true,
+    };
+    db.curricula.push(curriculum);
+
+    return created(curriculum, 'Curriculum created');
+  }),
+
+  http.patch(`${base}/curricula/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+
+    const body = (await request.json()) as Partial<Curriculum>;
+    const subject = body.subjectId
+      ? db.subjects.find((entry) => entry.id === body.subjectId)
+      : undefined;
+    const level = body.levelId ? db.levels.find((entry) => entry.id === body.levelId) : undefined;
+    if (body.subjectId && !subject) return errors.notFound('Subject');
+    if (body.levelId && !level) return errors.notFound('Level');
+
+    Object.assign(curriculum, body, {
+      name: body.name?.trim() || curriculum.name,
+      description:
+        body.description !== undefined ? body.description?.trim() || null : curriculum.description,
+      subjectName: subject?.name ?? curriculum.subjectName,
+      levelName: level?.name ?? curriculum.levelName,
+    });
+
+    return ok(curriculum, 'Curriculum updated');
+  }),
+
+  http.delete(`${base}/curricula/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+
+    const hasSchemes = db.schemes.some((scheme) => scheme.curriculumId === curriculum.id);
+    if (hasSchemes) {
+      return errors.conflict(
+        'This curriculum has schemes of work built from it. Remove them first.',
+      );
+    }
+
+    db.topics = db.topics.filter((topic) => topic.curriculumId !== curriculum.id);
+    db.curricula = db.curricula.filter((entry) => entry.id !== curriculum.id);
+
+    return noContent();
+  }),
+
   http.get(`${base}/curricula/:id/topics`, async ({ request, params }) => {
     await delay(latency());
     const context = resolveContext(request);
@@ -41,6 +161,180 @@ export const academicsExtraHandlers = [
 
     return ok(db.topics.filter((topic) => topic.curriculumId === curriculum.id));
   }),
+
+  http.post(`${base}/curricula/:id/topics`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+
+    const body = (await request.json()) as Partial<CurriculumTopic>;
+    if (!body.title?.trim()) return errors.validation('A topic needs a title.');
+
+    const existingTopics = db.topics.filter((topic) => topic.curriculumId === curriculum.id);
+    const topic: CurriculumTopic = {
+      id: nextId('top'),
+      curriculumId: curriculum.id,
+      title: body.title.trim(),
+      description: body.description?.trim() || null,
+      sequence: body.sequence ?? existingTopics.length + 1,
+      suggestedWeeks: body.suggestedWeeks ?? 1,
+      objectives: [],
+    };
+    db.topics.push(topic);
+    recalcCurriculumCounts(curriculum.id);
+
+    return created(topic, 'Topic added');
+  }),
+
+  http.patch(`${base}/curricula/:id/topics/:topicId`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+    const topic = db.topics.find(
+      (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
+    );
+    if (!topic) return errors.notFound('Topic');
+
+    const body = (await request.json()) as Partial<CurriculumTopic>;
+    Object.assign(topic, body, {
+      title: body.title?.trim() || topic.title,
+      description: body.description !== undefined ? body.description?.trim() || null : topic.description,
+    });
+
+    return ok(topic, 'Topic updated');
+  }),
+
+  http.delete(`${base}/curricula/:id/topics/:topicId`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+    const topic = db.topics.find(
+      (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
+    );
+    if (!topic) return errors.notFound('Topic');
+
+    db.topics = db.topics.filter((entry) => entry.id !== topic.id);
+    recalcCurriculumCounts(curriculum.id);
+
+    return noContent();
+  }),
+
+  http.post(`${base}/curricula/:id/topics/:topicId/objectives`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!curriculum) return errors.notFound('Curriculum');
+    const topic = db.topics.find(
+      (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
+    );
+    if (!topic) return errors.notFound('Topic');
+
+    const body = (await request.json()) as Partial<LearningObjective>;
+    if (!body.statement?.trim()) return errors.validation('An objective needs a statement.');
+
+    const subject = db.subjects.find((entry) => entry.id === curriculum.subjectId);
+    const sequence = body.sequence ?? topic.objectives.length + 1;
+
+    const objective: LearningObjective = {
+      id: nextId('obj'),
+      topicId: topic.id,
+      code: `${subject?.code ?? 'GEN'}.${topic.sequence}.${sequence}`,
+      statement: body.statement.trim(),
+      sequence,
+      bloomLevel: body.bloomLevel ?? null,
+      taught: false,
+      assessed: false,
+      taughtOn: null,
+      questionCount: 0,
+    };
+    topic.objectives.push(objective);
+    recalcCurriculumCounts(curriculum.id);
+
+    return created(objective, 'Objective added');
+  }),
+
+  http.patch(
+    `${base}/curricula/:id/topics/:topicId/objectives/:objectiveId`,
+    async ({ request, params }) => {
+      await delay(latency());
+      const context = resolveContext(request);
+      if (!context) return errors.unauthenticated();
+      if (!context.can('curriculum.manage')) return errors.forbidden();
+
+      const curriculum = scoped(db.curricula, context.schoolId).find(
+        (entry) => entry.id === params.id,
+      );
+      if (!curriculum) return errors.notFound('Curriculum');
+      const topic = db.topics.find(
+        (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
+      );
+      if (!topic) return errors.notFound('Topic');
+      const objective = topic.objectives.find((entry) => entry.id === params.objectiveId);
+      if (!objective) return errors.notFound('Objective');
+
+      // Coverage flags (taught/assessed) are only ever changed through the
+      // dedicated coverage endpoint, never here — editing an objective's
+      // statement must never silently reset what has already been recorded.
+      const body = (await request.json()) as Partial<LearningObjective>;
+      Object.assign(objective, {
+        statement: body.statement?.trim() || objective.statement,
+        bloomLevel: body.bloomLevel !== undefined ? body.bloomLevel : objective.bloomLevel,
+        sequence: body.sequence ?? objective.sequence,
+      });
+
+      return ok(objective, 'Objective updated');
+    },
+  ),
+
+  http.delete(
+    `${base}/curricula/:id/topics/:topicId/objectives/:objectiveId`,
+    async ({ request, params }) => {
+      await delay(latency());
+      const context = resolveContext(request);
+      if (!context) return errors.unauthenticated();
+      if (!context.can('curriculum.manage')) return errors.forbidden();
+
+      const curriculum = scoped(db.curricula, context.schoolId).find(
+        (entry) => entry.id === params.id,
+      );
+      if (!curriculum) return errors.notFound('Curriculum');
+      const topic = db.topics.find(
+        (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
+      );
+      if (!topic) return errors.notFound('Topic');
+
+      const exists = topic.objectives.some((entry) => entry.id === params.objectiveId);
+      if (!exists) return errors.notFound('Objective');
+
+      topic.objectives = topic.objectives.filter((entry) => entry.id !== params.objectiveId);
+      recalcCurriculumCounts(curriculum.id);
+
+      return noContent();
+    },
+  ),
 
   http.post(`${base}/curricula/:id/coverage`, async ({ request, params }) => {
     await delay(latency());

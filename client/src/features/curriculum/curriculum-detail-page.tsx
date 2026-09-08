@@ -6,14 +6,27 @@ import {
   ChevronDown,
   ClipboardCheck,
   ClipboardX,
+  Pencil,
+  Plus,
   Target,
+  Trash2,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, formatPercent } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses } from '@/features/academics/api';
-import { useCurricula, useCurriculumCoverage, useCurriculumTopics, useMarkObjectiveCoverage } from './api';
+import {
+  useCurricula,
+  useCurriculumCoverage,
+  useCurriculumTopics,
+  useDeleteObjective,
+  useDeleteTopic,
+  useMarkObjectiveCoverage,
+  useSaveObjective,
+  useSaveTopic,
+} from './api';
+import type { CurriculumTopic, LearningObjective } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -27,9 +40,27 @@ import {
   Progress,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { NativeSelect } from '@/components/ui/input';
+import { Input, NativeSelect, Textarea } from '@/components/ui/input';
+import {
+  ConfirmDialog,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatCard } from '@/components/data/stat-card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+
+const BLOOM_LEVELS = [
+  'REMEMBER',
+  'UNDERSTAND',
+  'APPLY',
+  'ANALYSE',
+  'EVALUATE',
+  'CREATE',
+] as const;
 
 /**
  * One curriculum, down to the objective.
@@ -49,9 +80,26 @@ export function CurriculumDetailPage() {
   const coverage = useCurriculumCoverage({ curriculumId: id, classId: classId || undefined });
   const classes = useClasses();
   const markCoverage = useMarkObjectiveCoverage(id ?? '');
+  const saveTopic = useSaveTopic(id ?? '');
+  const deleteTopic = useDeleteTopic(id ?? '');
+  const saveObjective = useSaveObjective(id ?? '');
+  const deleteObjective = useDeleteObjective(id ?? '');
 
   const [selected, setSelected] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [topicDialog, setTopicDialog] = useState<{ open: boolean; topic?: CurriculumTopic }>({
+    open: false,
+  });
+  const [objectiveDialog, setObjectiveDialog] = useState<{
+    open: boolean;
+    topicId?: string;
+    objective?: LearningObjective;
+  }>({ open: false });
+  const [pendingDeleteTopic, setPendingDeleteTopic] = useState<CurriculumTopic | null>(null);
+  const [pendingDeleteObjective, setPendingDeleteObjective] = useState<{
+    topicId: string;
+    objective: LearningObjective;
+  } | null>(null);
 
   const curriculum = curricula.data?.find((entry) => entry.id === id);
   const canManage = can('curriculum.manage');
@@ -138,6 +186,12 @@ export function CurriculumDetailPage() {
                 ))}
               </NativeSelect>
             </div>
+            {canManage && (
+              <Button onClick={() => setTopicDialog({ open: true })}>
+                <Plus />
+                Add topic
+              </Button>
+            )}
           </div>
         }
       />
@@ -312,6 +366,27 @@ export function CurriculumDetailPage() {
                         tone={rate === 100 ? 'success' : rate > 0 ? 'warning' : 'danger'}
                       />
                     </div>
+                    {canManage && (
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${topic.title}`}
+                          onClick={() => setTopicDialog({ open: true, topic })}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-danger hover:text-danger"
+                          aria-label={`Delete ${topic.title}`}
+                          onClick={() => setPendingDeleteTopic(topic)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
 
@@ -320,51 +395,100 @@ export function CurriculumDetailPage() {
                     {topic.description && (
                       <p className="mb-3 text-sm text-muted-foreground">{topic.description}</p>
                     )}
-                    <ul className="divide-y divide-border rounded-md border border-border">
-                      {topic.objectives.map((objective) => (
-                        <li
-                          key={objective.id}
-                          className="flex flex-wrap items-start gap-3 p-3 text-sm"
+                    {canManage && (
+                      <div className="mb-3 flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setObjectiveDialog({ open: true, topicId: topic.id })}
                         >
-                          {canManage && (
-                            <Checkbox
-                              checked={selected.includes(objective.id)}
-                              onCheckedChange={() => toggleObjective(objective.id)}
-                              aria-label={`Select ${objective.code}`}
-                              className="mt-0.5"
-                            />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p>
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {objective.code}
-                              </span>{' '}
-                              {objective.statement}
-                            </p>
-                            {objective.taughtOn && (
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                Taught {formatDate(objective.taughtOn)}
+                          <Plus />
+                          Add objective
+                        </Button>
+                      </div>
+                    )}
+                    {topic.objectives.length === 0 ? (
+                      <EmptyState
+                        compact
+                        icon={<Target />}
+                        title="No objectives in this topic yet"
+                      />
+                    ) : (
+                      <ul className="divide-y divide-border rounded-md border border-border">
+                        {topic.objectives.map((objective) => (
+                          <li
+                            key={objective.id}
+                            className="flex flex-wrap items-start gap-3 p-3 text-sm"
+                          >
+                            {canManage && (
+                              <Checkbox
+                                checked={selected.includes(objective.id)}
+                                onCheckedChange={() => toggleObjective(objective.id)}
+                                aria-label={`Select ${objective.code}`}
+                                className="mt-0.5"
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p>
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {objective.code}
+                                </span>{' '}
+                                {objective.statement}
                               </p>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 flex-wrap gap-1.5">
-                            {objective.bloomLevel && (
-                              <Badge tone="outline">{objective.bloomLevel.toLowerCase()}</Badge>
-                            )}
-                            <Badge tone={objective.taught ? 'success' : 'neutral'}>
-                              {objective.taught ? 'Taught' : 'Not taught'}
-                            </Badge>
-                            <Badge tone={objective.assessed ? 'primary' : 'neutral'}>
-                              {objective.assessed ? 'Assessed' : 'Not assessed'}
-                            </Badge>
-                            {typeof objective.questionCount === 'number' &&
-                              objective.questionCount > 0 && (
-                                <Badge tone="info">{objective.questionCount} questions</Badge>
+                              {objective.taughtOn && (
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  Taught {formatDate(objective.taughtOn)}
+                                </p>
                               )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap gap-1.5">
+                              {objective.bloomLevel && (
+                                <Badge tone="outline">{objective.bloomLevel.toLowerCase()}</Badge>
+                              )}
+                              <Badge tone={objective.taught ? 'success' : 'neutral'}>
+                                {objective.taught ? 'Taught' : 'Not taught'}
+                              </Badge>
+                              <Badge tone={objective.assessed ? 'primary' : 'neutral'}>
+                                {objective.assessed ? 'Assessed' : 'Not assessed'}
+                              </Badge>
+                              {typeof objective.questionCount === 'number' &&
+                                objective.questionCount > 0 && (
+                                  <Badge tone="info">{objective.questionCount} questions</Badge>
+                                )}
+                            </div>
+                            {canManage && (
+                              <div className="flex shrink-0 gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Edit ${objective.code}`}
+                                  onClick={() =>
+                                    setObjectiveDialog({
+                                      open: true,
+                                      topicId: topic.id,
+                                      objective,
+                                    })
+                                  }
+                                >
+                                  <Pencil />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-danger hover:text-danger"
+                                  aria-label={`Delete ${objective.code}`}
+                                  onClick={() =>
+                                    setPendingDeleteObjective({ topicId: topic.id, objective })
+                                  }
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </CardContent>
                 )}
               </Card>
@@ -372,6 +496,223 @@ export function CurriculumDetailPage() {
           })}
         </div>
       )}
+
+      <TopicDialog
+        key={topicDialog.topic?.id ?? 'new-topic'}
+        state={topicDialog}
+        save={saveTopic}
+        nextSequence={(topics.data?.length ?? 0) + 1}
+        onClose={() => setTopicDialog({ open: false })}
+      />
+      <ObjectiveDialog
+        key={`${objectiveDialog.topicId ?? 'none'}-${objectiveDialog.objective?.id ?? 'new'}`}
+        state={objectiveDialog}
+        save={saveObjective}
+        onClose={() => setObjectiveDialog({ open: false })}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteTopic)}
+        onOpenChange={(open) => !open && setPendingDeleteTopic(null)}
+        title="Delete this topic?"
+        description={`"${pendingDeleteTopic?.title}" and its ${pendingDeleteTopic?.objectives.length ?? 0} objective(s) will be permanently removed.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteTopic.isPending}
+        onConfirm={async () => {
+          if (pendingDeleteTopic) await deleteTopic.mutateAsync(pendingDeleteTopic.id);
+          setPendingDeleteTopic(null);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteObjective)}
+        onOpenChange={(open) => !open && setPendingDeleteObjective(null)}
+        title="Delete this objective?"
+        description={`"${pendingDeleteObjective?.objective.statement}" will be permanently removed.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteObjective.isPending}
+        onConfirm={async () => {
+          if (pendingDeleteObjective) {
+            await deleteObjective.mutateAsync({
+              topicId: pendingDeleteObjective.topicId,
+              objectiveId: pendingDeleteObjective.objective.id,
+            });
+          }
+          setPendingDeleteObjective(null);
+        }}
+      />
     </PageContainer>
+  );
+}
+
+function TopicDialog({
+  state,
+  save,
+  nextSequence,
+  onClose,
+}: {
+  state: { open: boolean; topic?: CurriculumTopic };
+  save: ReturnType<typeof useSaveTopic>;
+  nextSequence: number;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(state.topic?.title ?? '');
+  const [description, setDescription] = useState(state.topic?.description ?? '');
+  const [sequence, setSequence] = useState(String(state.topic?.sequence ?? nextSequence));
+  const [suggestedWeeks, setSuggestedWeeks] = useState(String(state.topic?.suggestedWeeks ?? 1));
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>{state.topic ? 'Edit topic' : 'New topic'}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="topic-title" required>
+              Title
+            </Label>
+            <Input
+              id="topic-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. Photosynthesis"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="topic-description">Description</Label>
+            <Textarea
+              id="topic-description"
+              value={description ?? ''}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="topic-sequence" required>
+                Sequence
+              </Label>
+              <Input
+                id="topic-sequence"
+                type="number"
+                min={1}
+                value={sequence}
+                onChange={(event) => setSequence(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="topic-weeks">Suggested weeks</Label>
+              <Input
+                id="topic-weeks"
+                type="number"
+                min={1}
+                value={suggestedWeeks}
+                onChange={(event) => setSuggestedWeeks(event.target.value)}
+              />
+            </div>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!title.trim()}
+            onClick={() =>
+              void save
+                .mutateAsync({
+                  id: state.topic?.id,
+                  values: {
+                    title: title.trim(),
+                    description: description.trim() || null,
+                    sequence: Number(sequence) || nextSequence,
+                    suggestedWeeks: Number(suggestedWeeks) || 1,
+                  },
+                })
+                .then(onClose)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ObjectiveDialog({
+  state,
+  save,
+  onClose,
+}: {
+  state: { open: boolean; topicId?: string; objective?: LearningObjective };
+  save: ReturnType<typeof useSaveObjective>;
+  onClose: () => void;
+}) {
+  const [statement, setStatement] = useState(state.objective?.statement ?? '');
+  const [bloomLevel, setBloomLevel] = useState<string>(state.objective?.bloomLevel ?? '');
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>{state.objective ? 'Edit objective' : 'New objective'}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="objective-statement" required>
+              Statement
+            </Label>
+            <Textarea
+              id="objective-statement"
+              value={statement}
+              onChange={(event) => setStatement(event.target.value)}
+              placeholder="e.g. Define photosynthesis"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="objective-bloom">Bloom level</Label>
+            <NativeSelect
+              id="objective-bloom"
+              value={bloomLevel}
+              onChange={(event) => setBloomLevel(event.target.value)}
+            >
+              <option value="">Not set</option>
+              {BLOOM_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level.charAt(0) + level.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!statement.trim() || !state.topicId}
+            onClick={() =>
+              state.topicId &&
+              void save
+                .mutateAsync({
+                  topicId: state.topicId,
+                  id: state.objective?.id,
+                  values: {
+                    statement: statement.trim(),
+                    bloomLevel: (bloomLevel || null) as LearningObjective['bloomLevel'],
+                  },
+                })
+                .then(onClose)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
