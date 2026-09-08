@@ -28,6 +28,7 @@ export const queryKeys = {
     subjects: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'subjects', query ?? {}),
     rooms: (schoolId: Scope) => scoped(schoolId, 'rooms'),
     houses: (schoolId: Scope) => scoped(schoolId, 'houses'),
+    periods: (schoolId: Scope) => scoped(schoolId, 'periods'),
   },
 
   students: {

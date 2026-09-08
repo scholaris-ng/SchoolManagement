@@ -426,6 +426,7 @@ function seedAcademicStructure(
       levelNames,
       teacherCount: random.int(1, 4),
       isActive: true,
+      schedule: [],
     });
   });
 

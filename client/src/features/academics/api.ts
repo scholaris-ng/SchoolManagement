@@ -13,6 +13,7 @@ import type {
   Subject,
   Term,
 } from '@/types/academics';
+import type { TimetablePeriod } from '@/types/curriculum';
 
 /**
  * Academic structure: sessions, terms, levels, classes, subjects, houses.
@@ -110,6 +111,17 @@ export function useHouses() {
   });
 }
 
+/** The school day's shape — the grid the timetable is built on. */
+export function usePeriods() {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.academics.periods(schoolId),
+    queryFn: () => http.get<TimetablePeriod[]>('/academics/periods'),
+    enabled: Boolean(schoolId),
+    staleTime: 10 * 60_000,
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Mutations                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -168,6 +180,17 @@ export function useSetCurrentTerm() {
       queryKeys.dashboard.admin(schoolId),
     ],
     successMessage: 'Current term updated',
+  });
+}
+
+export function useDeleteSession() {
+  return useAcademicMutation<string, void>({
+    request: (id) => http.delete<void>(`/academics/sessions/${id}`),
+    invalidate: (schoolId) => [
+      queryKeys.academics.sessions(schoolId),
+      queryKeys.academics.terms(schoolId),
+    ],
+    successMessage: 'Academic session deleted',
   });
 }
 
@@ -251,6 +274,29 @@ export function useSaveRoom() {
       id ? http.patch<Room>(`/academics/rooms/${id}`, values) : http.post<Room>('/academics/rooms', values),
     invalidate: (schoolId) => [queryKeys.academics.rooms(schoolId)],
     successMessage: 'Room saved',
+  });
+}
+
+export function useSavePeriod() {
+  return useAcademicMutation<{ id?: string; values: Partial<TimetablePeriod> }, TimetablePeriod>({
+    request: ({ id, values }) =>
+      id
+        ? http.patch<TimetablePeriod>(`/academics/periods/${id}`, values)
+        : http.post<TimetablePeriod>('/academics/periods', values),
+    // A new or retimed period changes what the timetable grid can show.
+    invalidate: (schoolId) => [queryKeys.academics.periods(schoolId), queryKeys.timetable.list(schoolId)],
+    successMessage: 'Period saved',
+  });
+}
+
+export function useDeletePeriod() {
+  return useAcademicMutation<string, void>({
+    request: (id) => http.delete<void>(`/academics/periods/${id}`),
+    invalidate: (schoolId) => [
+      queryKeys.academics.periods(schoolId),
+      queryKeys.timetable.list(schoolId),
+    ],
+    successMessage: 'Period deleted',
   });
 }
 

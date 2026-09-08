@@ -1,8 +1,21 @@
 import { http, delay } from 'msw';
 import { db, findMembership, resolveContext, scoped, staffBlockReason } from '../context';
-import { errors, latency, ok } from '../http-helpers';
+import { created, errors, latency, noContent, ok } from '../http-helpers';
+import type {
+  AcademicSession,
+  House,
+  Room,
+  SchoolClass,
+  SchoolLevel,
+  Subject,
+  Term,
+} from '@/types/academics';
+import type { TimetablePeriod } from '@/types/curriculum';
 
 const base = '/api/v1';
+
+let sequence = 100_000;
+const nextId = (prefix: string) => `${prefix}_${(sequence += 1).toString(36)}`;
 
 /** Session, school settings, academic structure and roles. */
 export const coreHandlers = [
@@ -174,11 +187,270 @@ export const coreHandlers = [
     return ok(target, 'Current term updated');
   }),
 
+  http.post(`${base}/academics/sessions`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<AcademicSession> & { terms?: Partial<Term>[] };
+    if (!body.name?.trim() || !body.startDate || !body.endDate) {
+      return errors.validation('A session needs a name and a start and end date.');
+    }
+
+    const session: AcademicSession = {
+      id: nextId('ses'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      startDate: body.startDate,
+      endDate: body.endDate,
+      isCurrent: false,
+      status: 'PLANNED',
+      termCount: body.terms?.length ?? 0,
+    };
+    db.sessions.push(session);
+
+    (body.terms ?? []).forEach((term, index) => {
+      db.terms.push({
+        id: nextId('trm'),
+        schoolId: context.schoolId,
+        sessionId: session.id,
+        sessionName: session.name,
+        name: term.name?.trim() || `Term ${index + 1}`,
+        sequence: index + 1,
+        startDate: term.startDate ?? session.startDate,
+        endDate: term.endDate ?? session.endDate,
+        teachingWeeks: term.teachingWeeks ?? 13,
+        isCurrent: false,
+        status: 'PLANNED',
+      });
+    });
+
+    return created(session, 'Academic session created');
+  }),
+
+  http.patch(`${base}/academics/sessions/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const session = scoped(db.sessions, context.schoolId).find((entry) => entry.id === params.id);
+    if (!session) return errors.notFound('Academic session');
+
+    const body = (await request.json()) as Partial<AcademicSession>;
+    Object.assign(session, body);
+
+    // Renaming a session should not orphan its terms' display name.
+    if (body.name) {
+      scoped(db.terms, context.schoolId)
+        .filter((term) => term.sessionId === session.id)
+        .forEach((term) => (term.sessionName = session.name));
+    }
+
+    return ok(session, 'Academic session updated');
+  }),
+
+  http.delete(`${base}/academics/sessions/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const session = scoped(db.sessions, context.schoolId).find((entry) => entry.id === params.id);
+    if (!session) return errors.notFound('Academic session');
+    if (session.isCurrent) {
+      return errors.conflict(
+        'This is the current session. Make another session current before deleting it.',
+      );
+    }
+
+    const termIds = new Set(
+      scoped(db.terms, context.schoolId)
+        .filter((term) => term.sessionId === session.id)
+        .map((term) => term.id),
+    );
+    db.sessions = db.sessions.filter((entry) => entry.id !== session.id);
+    db.terms = db.terms.filter((entry) => !termIds.has(entry.id));
+
+    return noContent();
+  }),
+
+  http.post(`${base}/academics/terms`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<Term> & { sessionId?: string };
+    if (!body.sessionId) return errors.validation('A term must belong to a session.');
+    const session = scoped(db.sessions, context.schoolId).find(
+      (entry) => entry.id === body.sessionId,
+    );
+    if (!session) return errors.notFound('Academic session');
+    if (!body.name?.trim() || !body.startDate || !body.endDate) {
+      return errors.validation('A term needs a name and a start and end date.');
+    }
+
+    const sequence =
+      scoped(db.terms, context.schoolId).filter((term) => term.sessionId === session.id).length + 1;
+
+    const term: Term = {
+      id: nextId('trm'),
+      schoolId: context.schoolId,
+      sessionId: session.id,
+      sessionName: session.name,
+      name: body.name.trim(),
+      sequence,
+      startDate: body.startDate,
+      endDate: body.endDate,
+      teachingWeeks: body.teachingWeeks ?? 13,
+      isCurrent: false,
+      status: 'PLANNED',
+    };
+    db.terms.push(term);
+    session.termCount += 1;
+
+    return created(term, 'Term added');
+  }),
+
+  http.patch(`${base}/academics/terms/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const term = scoped(db.terms, context.schoolId).find((entry) => entry.id === params.id);
+    if (!term) return errors.notFound('Term');
+
+    const body = (await request.json()) as Partial<Term>;
+    Object.assign(term, body);
+
+    return ok(term, 'Term updated');
+  }),
+
+  http.get(`${base}/academics/periods`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    return ok(scoped(db.periods, context.schoolId).sort((a, b) => a.sequence - b.sequence));
+  }),
+
+  http.post(`${base}/academics/periods`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<TimetablePeriod>;
+    if (!body.name?.trim() || !body.startTime || !body.endTime) {
+      return errors.validation('A period needs a name, a start time and an end time.');
+    }
+
+    const period: TimetablePeriod = {
+      id: nextId('per'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      startTime: body.startTime,
+      endTime: body.endTime,
+      sequence: body.sequence ?? scoped(db.periods, context.schoolId).length + 1,
+      isBreak: body.isBreak ?? false,
+    };
+    db.periods.push(period);
+
+    // The grid a school edits is the current timetable's own period list —
+    // it was seeded as a copy of this array, so a new period is pushed there
+    // too rather than left invisible until the timetable is regenerated.
+    scoped(db.timetables, context.schoolId).forEach((timetable) => timetable.periods.push(period));
+
+    return created(period, 'Period added');
+  }),
+
+  http.patch(`${base}/academics/periods/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const period = scoped(db.periods, context.schoolId).find((entry) => entry.id === params.id);
+    if (!period) return errors.notFound('Period');
+
+    const body = (await request.json()) as Partial<TimetablePeriod>;
+    Object.assign(period, body);
+
+    return ok(period, 'Period updated');
+  }),
+
+  http.delete(`${base}/academics/periods/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const period = scoped(db.periods, context.schoolId).find((entry) => entry.id === params.id);
+    if (!period) return errors.notFound('Period');
+
+    const inUse = scoped(db.timetables, context.schoolId).some((timetable) =>
+      timetable.entries.some((entry) => entry.periodId === period.id),
+    );
+    if (inUse) {
+      return errors.conflict(
+        'This period has lessons scheduled in it. Remove them from the timetable first.',
+      );
+    }
+
+    db.periods = db.periods.filter((entry) => entry.id !== period.id);
+    scoped(db.timetables, context.schoolId).forEach((timetable) => {
+      timetable.periods = timetable.periods.filter((entry) => entry.id !== period.id);
+    });
+
+    return noContent();
+  }),
+
   http.get(`${base}/academics/levels`, async ({ request }) => {
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     return ok(scoped(db.levels, context.schoolId));
+  }),
+
+  http.post(`${base}/academics/levels`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<SchoolLevel>;
+    if (!body.name?.trim()) return errors.validation('A level needs a name.');
+
+    const level: SchoolLevel = {
+      id: nextId('lvl'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      code: (body.code?.trim() || body.name.trim()).toUpperCase().replace(/\s+/g, ''),
+      sequence: body.sequence ?? scoped(db.levels, context.schoolId).length + 1,
+      gradingSchemeId: body.gradingSchemeId ?? null,
+      gradingSchemeName: body.gradingSchemeName ?? null,
+      classCount: 0,
+    };
+    db.levels.push(level);
+
+    return created(level, 'Level added');
+  }),
+
+  http.patch(`${base}/academics/levels/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const level = scoped(db.levels, context.schoolId).find((entry) => entry.id === params.id);
+    if (!level) return errors.notFound('Level');
+
+    const body = (await request.json()) as Partial<SchoolLevel>;
+    Object.assign(level, body);
+
+    return ok(level, 'Level updated');
   }),
 
   http.get(`${base}/academics/classes`, async ({ request }) => {
@@ -200,6 +472,71 @@ export const coreHandlers = [
     return record ? ok(record) : errors.notFound('Class');
   }),
 
+  http.post(`${base}/academics/classes`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<SchoolClass>;
+    if (!body.name?.trim() || !body.levelId) {
+      return errors.validation('A class needs a name and a level.');
+    }
+    const level = scoped(db.levels, context.schoolId).find((entry) => entry.id === body.levelId);
+    if (!level) return errors.notFound('Level');
+    const teacher = body.formTeacherId
+      ? db.staff.find((entry) => entry.id === body.formTeacherId)
+      : null;
+
+    const schoolClass: SchoolClass = {
+      id: nextId('cls'),
+      schoolId: context.schoolId,
+      levelId: level.id,
+      levelName: level.name,
+      name: body.name.trim(),
+      arm: body.arm?.trim() || null,
+      code: `${level.code}-${(scoped(db.classes, context.schoolId).length + 1).toString().padStart(2, '0')}`,
+      capacity: body.capacity ?? 40,
+      enrolledCount: 0,
+      formTeacherId: teacher?.id ?? null,
+      formTeacherName: teacher?.fullName ?? null,
+      roomId: null,
+      isActive: true,
+    };
+    db.classes.push(schoolClass);
+    level.classCount += 1;
+
+    return created(schoolClass, 'Class added');
+  }),
+
+  http.patch(`${base}/academics/classes/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const schoolClass = scoped(db.classes, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!schoolClass) return errors.notFound('Class');
+
+    const body = (await request.json()) as Partial<SchoolClass>;
+    const level = body.levelId
+      ? scoped(db.levels, context.schoolId).find((entry) => entry.id === body.levelId)
+      : undefined;
+    const teacherPatched = Object.prototype.hasOwnProperty.call(body, 'formTeacherId');
+    const teacher = teacherPatched
+      ? db.staff.find((entry) => entry.id === body.formTeacherId)
+      : undefined;
+
+    Object.assign(schoolClass, body, {
+      levelName: level?.name ?? schoolClass.levelName,
+      formTeacherName: teacherPatched ? (teacher?.fullName ?? null) : schoolClass.formTeacherName,
+    });
+
+    return ok(schoolClass, 'Class updated');
+  }),
+
   http.get(`${base}/academics/subjects`, async ({ request }) => {
     await delay(latency());
     const context = resolveContext(request);
@@ -211,6 +548,60 @@ export const coreHandlers = [
     return ok(rows);
   }),
 
+  http.post(`${base}/academics/subjects`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<Subject>;
+    if (!body.name?.trim() || !body.code?.trim()) {
+      return errors.validation('A subject needs a name and a code.');
+    }
+    const levelIds = body.levelIds ?? [];
+    const levelNames = levelIds
+      .map((id) => db.levels.find((entry) => entry.id === id)?.name)
+      .filter((name): name is string => Boolean(name));
+
+    const subject: Subject = {
+      id: nextId('sub'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      code: body.code.trim().toUpperCase(),
+      category: body.category?.trim() || null,
+      isCore: body.isCore ?? true,
+      levelIds,
+      levelNames,
+      teacherCount: 0,
+      isActive: true,
+      schedule: body.schedule ?? [],
+    };
+    db.subjects.push(subject);
+
+    return created(subject, 'Subject added');
+  }),
+
+  http.patch(`${base}/academics/subjects/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const subject = scoped(db.subjects, context.schoolId).find((entry) => entry.id === params.id);
+    if (!subject) return errors.notFound('Subject');
+
+    const body = (await request.json()) as Partial<Subject>;
+    const levelNames = body.levelIds
+      ? body.levelIds
+          .map((id) => db.levels.find((entry) => entry.id === id)?.name)
+          .filter((name): name is string => Boolean(name))
+      : undefined;
+
+    Object.assign(subject, body, levelNames ? { levelNames } : {});
+
+    return ok(subject, 'Subject updated');
+  }),
+
   http.get(`${base}/academics/rooms`, async ({ request }) => {
     await delay(latency());
     const context = resolveContext(request);
@@ -218,11 +609,88 @@ export const coreHandlers = [
     return ok(scoped(db.rooms, context.schoolId));
   }),
 
+  http.post(`${base}/academics/rooms`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<Room>;
+    if (!body.name?.trim()) return errors.validation('A room needs a name.');
+
+    const room: Room = {
+      id: nextId('rom'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      code: (body.code?.trim() || body.name.trim()).toUpperCase().replace(/\s+/g, ''),
+      capacity: body.capacity ?? 30,
+      type: body.type ?? 'CLASSROOM',
+    };
+    db.rooms.push(room);
+
+    return created(room, 'Room added');
+  }),
+
+  http.patch(`${base}/academics/rooms/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const room = scoped(db.rooms, context.schoolId).find((entry) => entry.id === params.id);
+    if (!room) return errors.notFound('Room');
+
+    const body = (await request.json()) as Partial<Room>;
+    Object.assign(room, body);
+
+    return ok(room, 'Room updated');
+  }),
+
   http.get(`${base}/academics/houses`, async ({ request }) => {
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     return ok(scoped(db.houses, context.schoolId));
+  }),
+
+  http.post(`${base}/academics/houses`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as Partial<House>;
+    if (!body.name?.trim()) return errors.validation('A house needs a name.');
+
+    const house: House = {
+      id: nextId('hse'),
+      schoolId: context.schoolId,
+      name: body.name.trim(),
+      color: body.color?.trim() || '#2563eb',
+      motto: body.motto?.trim() || null,
+      captainStudentId: null,
+      captainName: null,
+      memberCount: 0,
+      points: 0,
+    };
+    db.houses.push(house);
+
+    return created(house, 'House added');
+  }),
+
+  http.patch(`${base}/academics/houses/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('academics.manage')) return errors.forbidden();
+
+    const house = scoped(db.houses, context.schoolId).find((entry) => entry.id === params.id);
+    if (!house) return errors.notFound('House');
+
+    const body = (await request.json()) as Partial<House>;
+    Object.assign(house, body);
+
+    return ok(house, 'House updated');
   }),
 
   /* ---------------------------------------------------------------------- */

@@ -361,12 +361,15 @@ export const academicsExtraHandlers = [
     const url = new URL(request.url);
     const classId = url.searchParams.get('classId');
     const teacherId = url.searchParams.get('teacherId');
+    const subjectId = url.searchParams.get('subjectId');
 
     return ok({
       ...timetable,
       entries: timetable.entries.filter(
         (entry) =>
-          (!classId || entry.classId === classId) && (!teacherId || entry.teacherId === teacherId),
+          (!classId || entry.classId === classId) &&
+          (!teacherId || entry.teacherId === teacherId) &&
+          (!subjectId || entry.subjectId === subjectId),
       ),
     });
   }),
@@ -480,6 +483,22 @@ export const academicsExtraHandlers = [
 
     timetable.entries = timetable.entries.filter((entry) => entry.id !== params.entryId);
     return ok({ removed: true }, 'Lesson removed from the timetable');
+  }),
+
+  http.delete(`${base}/timetables/:id/entries`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('timetable.manage')) return errors.forbidden();
+
+    const timetable = scoped(db.timetables, context.schoolId).find(
+      (entry) => entry.id === params.id,
+    );
+    if (!timetable) return errors.notFound('Timetable');
+
+    const removed = timetable.entries.length;
+    timetable.entries = [];
+    return ok({ removed }, 'Timetable cleared');
   }),
 
   /* ---------------------------------------------------------------------- */

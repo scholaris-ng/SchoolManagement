@@ -1,3 +1,5 @@
+import type { Weekday } from './curriculum';
+
 export interface AcademicSession {
   id: string;
   schoolId: string;
@@ -52,6 +54,12 @@ export interface SchoolClass {
   isActive: boolean;
 }
 
+/** One slot in a subject's usual weekly spread — which day, which period. */
+export interface SubjectScheduleSlot {
+  day: Weekday;
+  periodId: string;
+}
+
 export interface Subject {
   id: string;
   schoolId: string;
@@ -63,6 +71,8 @@ export interface Subject {
   levelNames: string[];
   teacherCount: number;
   isActive: boolean;
+  /** When this subject is normally taught, independent of any one class's timetable. */
+  schedule: SubjectScheduleSlot[];
 }
 
 export interface Room {

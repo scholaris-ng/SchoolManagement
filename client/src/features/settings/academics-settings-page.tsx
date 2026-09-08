@@ -1,22 +1,39 @@
 import { useState } from 'react';
-import { CalendarRange, GraduationCap, Layers, Plus, Trophy, Users } from 'lucide-react';
+import {
+  CalendarRange,
+  Clock,
+  GraduationCap,
+  Layers,
+  Pencil,
+  Plus,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatTime } from '@/lib/format';
+import { WEEKDAYS } from '@/lib/weekdays';
 import {
   useAcademicSessions,
   useClasses,
+  useDeletePeriod,
+  useDeleteSession,
   useHouses,
   useLevels,
+  usePeriods,
   useSaveClass,
   useSaveHouse,
   useSaveLevel,
+  useSavePeriod,
+  useSaveSession,
   useSaveSubject,
+  useSaveTerm,
   useSetCurrentTerm,
   useSubjects,
   useTerms,
 } from '@/features/academics/api';
 import { useTeacherOptions } from '@/features/staff/api';
-import type { House, SchoolClass, SchoolLevel, Subject } from '@/types/academics';
+import type { AcademicSession, House, SchoolClass, SchoolLevel, Subject, Term } from '@/types/academics';
+import type { TimetablePeriod, Weekday } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -30,6 +47,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import {
+  ConfirmDialog,
   Dialog,
   DialogBody,
   DialogContent,
@@ -42,7 +60,7 @@ import { StatusBadge } from '@/components/data/status-badge';
 import { EmptyState, LoadingState } from '@/components/ui/feedback';
 import { SettingsTabs } from './settings-tabs';
 
-type Tab = 'sessions' | 'levels' | 'classes' | 'subjects' | 'houses';
+type Tab = 'sessions' | 'periods' | 'levels' | 'classes' | 'subjects' | 'houses';
 
 /**
  * The academic structure, defined by the school rather than the software.
@@ -56,13 +74,30 @@ export function AcademicsSettingsPage() {
 
   const sessions = useAcademicSessions();
   const terms = useTerms();
+  const periods = usePeriods();
   const levels = useLevels();
   const classes = useClasses({ includeInactive: true });
   const subjects = useSubjects();
   const houses = useHouses();
 
   const setCurrentTerm = useSetCurrentTerm();
+  const deleteSession = useDeleteSession();
+  const deletePeriod = useDeletePeriod();
 
+  const [sessionDialog, setSessionDialog] = useState<{ open: boolean; session?: AcademicSession }>({
+    open: false,
+  });
+  const [termDialog, setTermDialog] = useState<{
+    open: boolean;
+    term?: Term;
+    sessionId?: string;
+    sessionName?: string;
+  }>({ open: false });
+  const [periodDialog, setPeriodDialog] = useState<{ open: boolean; period?: TimetablePeriod }>({
+    open: false,
+  });
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<AcademicSession | null>(null);
+  const [pendingDeletePeriod, setPendingDeletePeriod] = useState<TimetablePeriod | null>(null);
   const [levelDialog, setLevelDialog] = useState<{ open: boolean; level?: SchoolLevel }>({
     open: false,
   });
@@ -76,6 +111,7 @@ export function AcademicsSettingsPage() {
 
   const tabs: { id: Tab; label: string; icon: typeof Layers }[] = [
     { id: 'sessions', label: 'Sessions & terms', icon: CalendarRange },
+    { id: 'periods', label: 'Periods', icon: Clock },
     { id: 'levels', label: 'Levels', icon: Layers },
     { id: 'classes', label: 'Classes', icon: Users },
     { id: 'subjects', label: 'Subjects', icon: GraduationCap },
@@ -83,7 +119,8 @@ export function AcademicsSettingsPage() {
   ];
 
   const newAction = {
-    sessions: null,
+    sessions: () => setSessionDialog({ open: true }),
+    periods: () => setPeriodDialog({ open: true }),
     levels: () => setLevelDialog({ open: true }),
     classes: () => setClassDialog({ open: true }),
     subjects: () => setSubjectDialog({ open: true }),
@@ -155,6 +192,28 @@ export function AcademicsSettingsPage() {
                       <span className="text-xs text-muted-foreground">
                         {formatDate(session.startDate)} – {formatDate(session.endDate)}
                       </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-6 px-2 text-xs"
+                        onClick={() => setSessionDialog({ open: true, session })}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-danger hover:text-danger"
+                        disabled={session.isCurrent}
+                        title={
+                          session.isCurrent
+                            ? 'Make another session current before deleting this one'
+                            : undefined
+                        }
+                        onClick={() => setPendingDeleteSession(session)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                     <ul className="grid gap-2 sm:grid-cols-3">
                       {(terms.data ?? [])
@@ -169,21 +228,33 @@ export function AcademicsSettingsPage() {
                           >
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-medium">{term.name}</p>
-                              {term.isCurrent ? (
-                                <Badge tone="primary">Current</Badge>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs"
-                                  loading={
-                                    setCurrentTerm.isPending && setCurrentTerm.variables === term.id
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label={`Edit ${term.name}`}
+                                  onClick={() =>
+                                    setTermDialog({ open: true, term, sessionId: session.id })
                                   }
-                                  onClick={() => setCurrentTerm.mutate(term.id)}
+                                  className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                                 >
-                                  Make current
-                                </Button>
-                              )}
+                                  <Pencil className="size-3.5" aria-hidden="true" />
+                                </button>
+                                {term.isCurrent ? (
+                                  <Badge tone="primary">Current</Badge>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs"
+                                    loading={
+                                      setCurrentTerm.isPending && setCurrentTerm.variables === term.id
+                                    }
+                                    onClick={() => setCurrentTerm.mutate(term.id)}
+                                  >
+                                    Make current
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                             <p className="mt-0.5 text-xs text-muted-foreground">
                               {formatDate(term.startDate)} – {formatDate(term.endDate)}
@@ -193,10 +264,81 @@ export function AcademicsSettingsPage() {
                             </p>
                           </li>
                         ))}
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTermDialog({
+                              open: true,
+                              sessionId: session.id,
+                              sessionName: session.name,
+                            })
+                          }
+                          className="grid h-full min-h-[4.5rem] w-full place-items-center rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40"
+                        >
+                          + Add term
+                        </button>
+                      </li>
                     </ul>
                   </li>
                 ))}
               </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === 'periods' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>The school day</CardTitle>
+            <CardDescription>
+              Period names and times, in order. This is the grid the timetable is built on — a class
+              or teacher can only be scheduled into a period defined here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {periods.isPending ? (
+              <LoadingState label="Loading periods…" />
+            ) : (periods.data?.length ?? 0) === 0 ? (
+              <EmptyState
+                compact
+                icon={<Clock />}
+                title="No periods defined"
+                description="Add the first period below — the timetable has nowhere to place a lesson until the school day is laid out."
+              />
+            ) : (
+              <ol className="divide-y divide-border">
+                {periods.data?.map((period) => (
+                  <li key={period.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold tabular-nums">
+                      {period.sequence}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{period.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatTime(period.startTime)} – {formatTime(period.endTime)}
+                      </p>
+                    </div>
+                    {period.isBreak && <Badge tone="warning">Break</Badge>}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPeriodDialog({ open: true, period })}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger hover:text-danger"
+                      onClick={() => setPendingDeletePeriod(period)}
+                    >
+                      Delete
+                    </Button>
+                  </li>
+                ))}
+              </ol>
             )}
           </CardContent>
         </Card>
@@ -317,6 +459,8 @@ export function AcademicsSettingsPage() {
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {subject.levelNames.join(', ') || 'No levels assigned'}
+                        {subject.schedule.length > 0 &&
+                          ` · ${subject.schedule.length} period${subject.schedule.length === 1 ? '' : 's'}/week`}
                       </p>
                     </div>
                     {subject.isCore && <Badge tone="primary">Core</Badge>}
@@ -378,6 +522,50 @@ export function AcademicsSettingsPage() {
         </Card>
       )}
 
+      <SessionDialog
+        key={sessionDialog.session?.id ?? 'new-session'}
+        state={sessionDialog}
+        onClose={() => setSessionDialog({ open: false })}
+      />
+      <TermDialog
+        key={termDialog.term?.id ?? `new-term-${termDialog.sessionId ?? ''}`}
+        state={termDialog}
+        onClose={() => setTermDialog({ open: false })}
+      />
+      <PeriodDialog
+        key={periodDialog.period?.id ?? 'new-period'}
+        state={periodDialog}
+        nextSequence={(periods.data?.length ?? 0) + 1}
+        onClose={() => setPeriodDialog({ open: false })}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteSession)}
+        onOpenChange={(open) => !open && setPendingDeleteSession(null)}
+        title="Delete this academic session?"
+        description={`"${pendingDeleteSession?.name}" and its ${pendingDeleteSession?.termCount ?? 0} term(s) will be permanently removed.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteSession.isPending}
+        onConfirm={async () => {
+          if (pendingDeleteSession) await deleteSession.mutateAsync(pendingDeleteSession.id);
+          setPendingDeleteSession(null);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeletePeriod)}
+        onOpenChange={(open) => !open && setPendingDeletePeriod(null)}
+        title="Delete this period?"
+        description={`"${pendingDeletePeriod?.name}" will be removed from the school day and from the timetable grid.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deletePeriod.isPending}
+        onConfirm={async () => {
+          if (pendingDeletePeriod) await deletePeriod.mutateAsync(pendingDeletePeriod.id);
+          setPendingDeletePeriod(null);
+        }}
+      />
+
       <LevelDialog
         key={levelDialog.level?.id ?? 'new-level'}
         state={levelDialog}
@@ -394,6 +582,7 @@ export function AcademicsSettingsPage() {
         key={subjectDialog.subject?.id ?? 'new-subject'}
         state={subjectDialog}
         levels={levels.data ?? []}
+        periods={periods.data ?? []}
         onClose={() => setSubjectDialog({ open: false })}
       />
       <HouseDialog
@@ -402,6 +591,401 @@ export function AcademicsSettingsPage() {
         onClose={() => setHouseDialog({ open: false })}
       />
     </PageContainer>
+  );
+}
+
+interface TermRow {
+  name: string;
+  startDate: string;
+  endDate: string;
+  teachingWeeks: string;
+}
+
+function SessionDialog({
+  state,
+  onClose,
+}: {
+  state: { open: boolean; session?: AcademicSession };
+  onClose: () => void;
+}) {
+  const save = useSaveSession();
+  const isNew = !state.session;
+  const [name, setName] = useState(state.session?.name ?? '');
+  const [startDate, setStartDate] = useState(state.session?.startDate ?? '');
+  const [endDate, setEndDate] = useState(state.session?.endDate ?? '');
+  const [termRows, setTermRows] = useState<TermRow[]>(
+    isNew
+      ? [
+          { name: 'First Term', startDate: '', endDate: '', teachingWeeks: '13' },
+          { name: 'Second Term', startDate: '', endDate: '', teachingWeeks: '13' },
+          { name: 'Third Term', startDate: '', endDate: '', teachingWeeks: '13' },
+        ]
+      : [],
+  );
+
+  const updateTerm = (index: number, patch: Partial<TermRow>) => {
+    setTermRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const termsValid = termRows.every((row) => row.name.trim() && row.startDate && row.endDate);
+  const valid = Boolean(name.trim() && startDate && endDate) && termsValid;
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{isNew ? 'New academic session' : 'Edit academic session'}</DialogTitle>
+          {isNew && (
+            <DialogDescription>
+              Every session here runs on three terms. Set the session&apos;s own dates, then each
+              term&apos;s — nothing is guessed for you, but every date can be changed later.
+            </DialogDescription>
+          )}
+        </DialogHeader>
+        <DialogBody className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="session-name" required>
+                Name
+              </Label>
+              <Input
+                id="session-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. 2027/2028"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="session-start" required>
+                Starts
+              </Label>
+              <Input
+                id="session-start"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="session-end" required>
+                Ends
+              </Label>
+              <Input
+                id="session-end"
+                type="date"
+                min={startDate}
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </div>
+          </div>
+
+          {isNew && (
+            <div className="space-y-3">
+              <Label>Terms</Label>
+              {termRows.map((row, index) => (
+                <div
+                  key={index}
+                  className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-4"
+                >
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`term-name-${index}`} required>
+                      Name
+                    </Label>
+                    <Input
+                      id={`term-name-${index}`}
+                      value={row.name}
+                      onChange={(event) => updateTerm(index, { name: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`term-start-${index}`} required>
+                      Starts
+                    </Label>
+                    <Input
+                      id={`term-start-${index}`}
+                      type="date"
+                      value={row.startDate}
+                      onChange={(event) => updateTerm(index, { startDate: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`term-end-${index}`} required>
+                      Ends
+                    </Label>
+                    <Input
+                      id={`term-end-${index}`}
+                      type="date"
+                      min={row.startDate}
+                      value={row.endDate}
+                      onChange={(event) => updateTerm(index, { endDate: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`term-weeks-${index}`}>Teaching weeks</Label>
+                    <Input
+                      id={`term-weeks-${index}`}
+                      type="number"
+                      min={1}
+                      value={row.teachingWeeks}
+                      onChange={(event) => updateTerm(index, { teachingWeeks: event.target.value })}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!valid}
+            onClick={() =>
+              void save
+                .mutateAsync({
+                  id: state.session?.id,
+                  values: {
+                    name: name.trim(),
+                    startDate,
+                    endDate,
+                    ...(isNew
+                      ? {
+                          terms: termRows.map((row) => ({
+                            name: row.name.trim(),
+                            startDate: row.startDate,
+                            endDate: row.endDate,
+                            teachingWeeks: Number(row.teachingWeeks) || 13,
+                          })),
+                        }
+                      : {}),
+                  },
+                })
+                .then(onClose)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TermDialog({
+  state,
+  onClose,
+}: {
+  state: { open: boolean; term?: Term; sessionId?: string; sessionName?: string };
+  onClose: () => void;
+}) {
+  const save = useSaveTerm();
+  const [name, setName] = useState(state.term?.name ?? '');
+  const [startDate, setStartDate] = useState(state.term?.startDate ?? '');
+  const [endDate, setEndDate] = useState(state.term?.endDate ?? '');
+  const [teachingWeeks, setTeachingWeeks] = useState(String(state.term?.teachingWeeks ?? 13));
+
+  const valid = Boolean(name.trim() && startDate && endDate);
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>{state.term ? 'Edit term' : 'New term'}</DialogTitle>
+          <DialogDescription>{state.term?.sessionName ?? state.sessionName}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="term-name" required>
+              Name
+            </Label>
+            <Input
+              id="term-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. First Term"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="term-start" required>
+                Starts
+              </Label>
+              <Input
+                id="term-start"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="term-end" required>
+                Ends
+              </Label>
+              <Input
+                id="term-end"
+                type="date"
+                min={startDate}
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="term-weeks">Teaching weeks</Label>
+            <Input
+              id="term-weeks"
+              type="number"
+              min={1}
+              value={teachingWeeks}
+              onChange={(event) => setTeachingWeeks(event.target.value)}
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!valid}
+            onClick={() =>
+              void save
+                .mutateAsync({
+                  id: state.term?.id,
+                  values: {
+                    name: name.trim(),
+                    startDate,
+                    endDate,
+                    teachingWeeks: Number(teachingWeeks) || 13,
+                    ...(state.term ? {} : { sessionId: state.sessionId }),
+                  },
+                })
+                .then(onClose)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PeriodDialog({
+  state,
+  nextSequence,
+  onClose,
+}: {
+  state: { open: boolean; period?: TimetablePeriod };
+  nextSequence: number;
+  onClose: () => void;
+}) {
+  const save = useSavePeriod();
+  const [name, setName] = useState(state.period?.name ?? '');
+  const [startTime, setStartTime] = useState(state.period?.startTime ?? '');
+  const [endTime, setEndTime] = useState(state.period?.endTime ?? '');
+  const [sequence, setSequence] = useState(String(state.period?.sequence ?? nextSequence));
+  const [isBreak, setIsBreak] = useState(state.period?.isBreak ?? false);
+
+  const valid = Boolean(name.trim() && startTime && endTime);
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>{state.period ? 'Edit period' : 'New period'}</DialogTitle>
+          <DialogDescription>
+            Sequence sets where this sits in the school day, top to bottom on the timetable.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="period-name" required>
+              Name
+            </Label>
+            <Input
+              id="period-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Period 1, or Break"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="period-start" required>
+                Starts
+              </Label>
+              <Input
+                id="period-start"
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="period-end" required>
+                Ends
+              </Label>
+              <Input
+                id="period-end"
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="period-sequence" required>
+              Sequence
+            </Label>
+            <Input
+              id="period-sequence"
+              type="number"
+              min={1}
+              value={sequence}
+              onChange={(event) => setSequence(event.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isBreak}
+              onChange={(event) => setIsBreak(event.target.checked)}
+              className="size-4 rounded border-input"
+            />
+            This is a break, not a teaching period
+          </label>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!valid}
+            onClick={() =>
+              void save
+                .mutateAsync({
+                  id: state.period?.id,
+                  values: {
+                    name: name.trim(),
+                    startTime,
+                    endTime,
+                    sequence: Number(sequence),
+                    isBreak,
+                  },
+                })
+                .then(onClose)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -610,10 +1194,12 @@ function ClassDialog({
 function SubjectDialog({
   state,
   levels,
+  periods,
   onClose,
 }: {
   state: { open: boolean; subject?: Subject };
   levels: SchoolLevel[];
+  periods: TimetablePeriod[];
   onClose: () => void;
 }) {
   const save = useSaveSubject();
@@ -622,10 +1208,25 @@ function SubjectDialog({
   const [category, setCategory] = useState(state.subject?.category ?? '');
   const [isCore, setIsCore] = useState(state.subject?.isCore ?? true);
   const [levelIds, setLevelIds] = useState<string[]>(state.subject?.levelIds ?? []);
+  const [schedule, setSchedule] = useState<Set<string>>(
+    () => new Set((state.subject?.schedule ?? []).map((slot) => `${slot.day}:${slot.periodId}`)),
+  );
+
+  const toggleSlot = (day: Weekday, periodId: string) => {
+    const key = `${day}:${periodId}`;
+    setSchedule((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const teachingPeriods = periods.filter((period) => !period.isBreak);
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent size="md">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{state.subject ? 'Edit subject' : 'New subject'}</DialogTitle>
         </DialogHeader>
@@ -694,6 +1295,55 @@ function SubjectDialog({
             />
             Core subject — every student at these levels takes it
           </label>
+
+          <fieldset className="space-y-1.5">
+            <legend className="text-sm font-medium">Weekly periods</legend>
+            <p className="text-xs text-muted-foreground">
+              Optional — mark which periods this subject is normally taught in.
+            </p>
+            {teachingPeriods.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+                No periods are set up yet — add them under the Periods tab first.
+              </p>
+            ) : (
+              <div className="scrollbar-thin max-h-56 overflow-auto rounded-md border border-input">
+                <table className="w-full min-w-[28rem] text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="sticky left-0 bg-muted/40 px-2 py-1.5 text-left font-medium">
+                        Period
+                      </th>
+                      {WEEKDAYS.map((day) => (
+                        <th key={day.value} className="px-2 py-1.5 text-center font-medium">
+                          {day.short}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {teachingPeriods.map((period) => (
+                      <tr key={period.id}>
+                        <td className="sticky left-0 bg-card px-2 py-1.5 font-medium">
+                          {period.name}
+                        </td>
+                        {WEEKDAYS.map((day) => (
+                          <td key={day.value} className="px-2 py-1.5 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`${period.name} on ${day.label}`}
+                              checked={schedule.has(`${day.value}:${period.id}`)}
+                              onChange={() => toggleSlot(day.value, period.id)}
+                              className="size-4 rounded border-input"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </fieldset>
         </DialogBody>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -712,6 +1362,10 @@ function SubjectDialog({
                     category: category.trim() || null,
                     isCore,
                     levelIds,
+                    schedule: Array.from(schedule).map((key) => {
+                      const [day, periodId] = key.split(':') as [Weekday, string];
+                      return { day, periodId };
+                    }),
                   },
                 })
                 .then(onClose)

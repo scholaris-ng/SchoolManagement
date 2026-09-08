@@ -392,6 +392,7 @@ function processSubjectRow(
           levelNames: levels.map((entry) => entry.name),
           teacherCount: 0,
           isActive: true,
+          schedule: [],
         };
         db.subjects.unshift(subject);
       };

@@ -4,16 +4,24 @@ import { AlarmClock, Plus, Printer, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
+import { toast } from '@/lib/toast-bus';
+import { WEEKDAYS as DAYS } from '@/lib/weekdays';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useRooms, useSubjects } from '@/features/academics/api';
 import { useTeacherOptions } from '@/features/staff/api';
-import { useCurrentTimetable, useDeleteTimetableEntry, useSaveTimetableEntry } from './api';
+import {
+  useClearTimetable,
+  useCurrentTimetable,
+  useDeleteTimetableEntry,
+  useSaveTimetableEntry,
+} from './api';
 import type { TimetableEntry, Weekday } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import {
+  ConfirmDialog,
   Dialog,
   DialogBody,
   DialogContent,
@@ -23,14 +31,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Alert, EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
-
-const DAYS: { value: Weekday; label: string; short: string }[] = [
-  { value: 'MONDAY', label: 'Monday', short: 'Mon' },
-  { value: 'TUESDAY', label: 'Tuesday', short: 'Tue' },
-  { value: 'WEDNESDAY', label: 'Wednesday', short: 'Wed' },
-  { value: 'THURSDAY', label: 'Thursday', short: 'Thu' },
-  { value: 'FRIDAY', label: 'Friday', short: 'Fri' },
-];
 
 interface SlotTarget {
   day: Weekday;
@@ -51,10 +51,12 @@ export function TimetablePage() {
 
   const classId = searchParams.get('classId') ?? '';
   const teacherId = searchParams.get('teacherId') ?? '';
+  const subjectId = searchParams.get('subjectId') ?? '';
 
   const timetable = useCurrentTimetable({
     classId: classId || undefined,
     teacherId: teacherId || undefined,
+    subjectId: subjectId || undefined,
   });
   const classes = useClasses();
   const subjects = useSubjects();
@@ -63,16 +65,32 @@ export function TimetablePage() {
 
   const saveEntry = useSaveTimetableEntry(timetable.data?.id ?? '');
   const deleteEntry = useDeleteTimetableEntry(timetable.data?.id ?? '');
+  const clearTimetable = useClearTimetable(timetable.data?.id ?? '');
 
   const [slot, setSlot] = useState<SlotTarget | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
+  const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [dragOverTrash, setDragOverTrash] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
-  const setParam = (key: string, value: string) => {
+  /**
+   * Updates one or more filters in a single history entry.
+   *
+   * `useSearchParams`'s setter closes over the params from the render that
+   * created it, so two separate calls in the same handler race: the second
+   * overwrites the first using params from before either call, silently
+   * discarding the change the first call made. Every filter change goes
+   * through here as one call so that never happens.
+   */
+  const setParams = (patch: Record<string, string>) => {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
-        if (value) next.set(key, value);
-        else next.delete(key);
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
         return next;
       },
       { replace: true },
@@ -89,6 +107,42 @@ export function TimetablePage() {
   }, [timetable.data]);
 
   const canManage = can('timetable.manage');
+
+  /**
+   * Dragging a lesson onto an empty cell moves it: same entry id, new
+   * day/period. The server re-runs clash detection exactly as it would for a
+   * fresh placement, so a drop that would double-book someone is refused with
+   * the same message a manual edit would get.
+   */
+  const moveEntry = async (entry: TimetableEntry, day: Weekday, periodId: string) => {
+    if (entry.day === day && entry.periodId === periodId) return;
+    try {
+      await saveEntry.mutateAsync({
+        entryId: entry.id,
+        classId: entry.classId,
+        subjectId: entry.subjectId,
+        teacherId: entry.teacherId,
+        roomId: entry.roomId,
+        periodId,
+        day,
+      });
+    } catch (error) {
+      toast.error('That move would clash', {
+        description: isApiError(error) ? error.message : 'That lesson could not be moved.',
+      });
+    }
+  };
+
+  /** Dragging a lesson onto the trash zone deletes it, same as the dialog's Remove button. */
+  const removeEntry = async (entry: TimetableEntry) => {
+    try {
+      await deleteEntry.mutateAsync(entry.id);
+    } catch (error) {
+      toast.error('Could not remove that lesson', {
+        description: isApiError(error) ? error.message : 'Try again in a moment.',
+      });
+    }
+  };
 
   if (timetable.isPending) {
     return (
@@ -116,13 +170,30 @@ export function TimetablePage() {
     <PageContainer width="wide">
       <PageHeader
         title="Timetable"
-        description="Who teaches what, where and when. Clashes are refused rather than warned about."
+        description={
+          canManage
+            ? 'Who teaches what, where and when. Drag a lesson onto an empty period to move it — clashes are refused rather than warned about.'
+            : 'Who teaches what, where and when. Clashes are refused rather than warned about.'
+        }
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Timetable' }]}
         actions={
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer />
-            Print
-          </Button>
+          <>
+            {canManage && (
+              <Button
+                variant="outline"
+                className="text-danger hover:text-danger"
+                disabled={(timetable.data?.entries.length ?? 0) === 0}
+                onClick={() => setConfirmClear(true)}
+              >
+                <Trash2 />
+                Clear timetable
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer />
+              Print
+            </Button>
+          </>
         }
       />
 
@@ -134,8 +205,8 @@ export function TimetablePage() {
               id="tt-class"
               value={classId}
               onChange={(event) => {
-                setParam('classId', event.target.value);
-                if (event.target.value) setParam('teacherId', '');
+                const value = event.target.value;
+                setParams(value ? { classId: value, teacherId: '' } : { classId: '' });
               }}
               className="w-auto"
             >
@@ -154,8 +225,8 @@ export function TimetablePage() {
               id="tt-teacher"
               value={teacherId}
               onChange={(event) => {
-                setParam('teacherId', event.target.value);
-                if (event.target.value) setParam('classId', '');
+                const value = event.target.value;
+                setParams(value ? { teacherId: value, classId: '' } : { teacherId: '' });
               }}
               className="w-auto"
             >
@@ -163,6 +234,23 @@ export function TimetablePage() {
               {teachers.map((teacher) => (
                 <option key={teacher.value} value={teacher.value}>
                   {teacher.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="tt-subject">Subject</Label>
+            <NativeSelect
+              id="tt-subject"
+              value={subjectId}
+              onChange={(event) => setParams({ subjectId: event.target.value })}
+              className="w-auto"
+            >
+              <option value="">All subjects</option>
+              {(subjects.data ?? []).map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.name}
                 </option>
               ))}
             </NativeSelect>
@@ -223,7 +311,8 @@ export function TimetablePage() {
                     </th>
 
                     {DAYS.map((day) => {
-                      const cellEntries = entriesBySlot.get(`${day.value}:${period.id}`) ?? [];
+                      const slotKey = `${day.value}:${period.id}`;
+                      const cellEntries = entriesBySlot.get(slotKey) ?? [];
 
                       if (period.isBreak) {
                         return (
@@ -236,8 +325,50 @@ export function TimetablePage() {
                         );
                       }
 
+                      // Any non-break period is a valid drop target, even one
+                      // that already holds lessons for other classes — in the
+                      // unfiltered view almost every period has something in
+                      // it, so restricting drops to empty cells would leave
+                      // nowhere to drop. The server's clash detection is the
+                      // real gate: it rejects a move only if the target slot
+                      // already has this same class, teacher, or room.
+                      const isDropTarget = canManage && draggingEntryId !== null;
+
                       return (
-                        <td key={day.value} className="p-1 align-top">
+                        <td
+                          key={day.value}
+                          className={cn(
+                            'p-1 align-top transition-colors',
+                            isDropTarget && dragOverKey === slotKey && 'bg-primary-subtle',
+                          )}
+                          onDragOver={
+                            isDropTarget
+                              ? (event) => {
+                                  event.preventDefault();
+                                  event.dataTransfer.dropEffect = 'move';
+                                  setDragOverKey(slotKey);
+                                }
+                              : undefined
+                          }
+                          onDragLeave={
+                            isDropTarget
+                              ? () => setDragOverKey((current) => (current === slotKey ? null : current))
+                              : undefined
+                          }
+                          onDrop={
+                            isDropTarget
+                              ? (event) => {
+                                  event.preventDefault();
+                                  setDragOverKey(null);
+                                  const entryId = event.dataTransfer.getData('text/plain');
+                                  const entry = (timetable.data?.entries ?? []).find(
+                                    (candidate) => candidate.id === entryId,
+                                  );
+                                  if (entry) void moveEntry(entry, day.value, period.id);
+                                }
+                              : undefined
+                          }
+                        >
                           {cellEntries.length === 0 ? (
                             canManage ? (
                               <button
@@ -261,11 +392,26 @@ export function TimetablePage() {
                                   key={entry.id}
                                   type="button"
                                   disabled={!canManage}
+                                  draggable={canManage}
+                                  onDragStart={(event) => {
+                                    event.dataTransfer.effectAllowed = 'move';
+                                    event.dataTransfer.setData('text/plain', entry.id);
+                                    setDraggingEntryId(entry.id);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingEntryId(null);
+                                    setDragOverKey(null);
+                                    setDragOverTrash(false);
+                                  }}
                                   onClick={() => {
                                     setConflict(null);
                                     setSlot({ day: day.value, periodId: period.id, entry });
                                   }}
-                                  className="w-full rounded-md border border-primary/30 bg-primary-subtle p-2 text-left transition-colors hover:border-primary disabled:cursor-default"
+                                  className={cn(
+                                    'w-full rounded-md border border-primary/30 bg-primary-subtle p-2 text-left transition-colors hover:border-primary disabled:cursor-default',
+                                    canManage && 'cursor-grab active:cursor-grabbing',
+                                    draggingEntryId === entry.id && 'opacity-40',
+                                  )}
                                 >
                                   <p className="truncate text-xs font-semibold text-primary">
                                     {entry.subjectName}
@@ -291,6 +437,37 @@ export function TimetablePage() {
             </table>
           </div>
         </Card>
+      )}
+
+      {draggingEntryId && (
+        <div className="no-print fixed inset-x-0 bottom-6 z-50 flex justify-center">
+          <div
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setDragOverTrash(true);
+            }}
+            onDragLeave={() => setDragOverTrash(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragOverTrash(false);
+              const entryId = event.dataTransfer.getData('text/plain');
+              const entry = (timetable.data?.entries ?? []).find(
+                (candidate) => candidate.id === entryId,
+              );
+              if (entry) void removeEntry(entry);
+            }}
+            className={cn(
+              'flex items-center gap-2 rounded-full border-2 border-dashed px-5 py-2.5 text-sm font-medium shadow-lg transition-colors',
+              dragOverTrash
+                ? 'border-danger bg-danger text-danger-foreground'
+                : 'border-border bg-card text-muted-foreground',
+            )}
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+            Drop here to remove
+          </div>
+        </div>
       )}
 
       <EntryDialog
@@ -319,6 +496,21 @@ export function TimetablePage() {
               isApiError(error) ? error.message : 'That lesson could not be placed.',
             );
           }
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Clear the entire timetable?"
+        description="Every lesson is removed for every class and teacher — not just the ones your current filters show. This cannot be undone."
+        confirmLabel="Clear timetable"
+        tone="danger"
+        confirmationPhrase="CLEAR"
+        loading={clearTimetable.isPending}
+        onConfirm={async () => {
+          await clearTimetable.mutateAsync();
+          setConfirmClear(false);
         }}
       />
     </PageContainer>

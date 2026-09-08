@@ -5,7 +5,9 @@ import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { Timetable, TimetableEntry, Weekday } from '@/types/curriculum';
 
-export function useCurrentTimetable(query: { classId?: string; teacherId?: string } = {}) {
+export function useCurrentTimetable(
+  query: { classId?: string; teacherId?: string; subjectId?: string } = {},
+) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: [...queryKeys.timetable.list(schoolId), query],
@@ -57,6 +59,25 @@ export function useDeleteTimetableEntry(timetableId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.timetable.list(schoolId) });
       toast.success('Lesson removed from the timetable');
+    },
+  });
+}
+
+/**
+ * Wipes every lesson from the timetable — every class, not just whatever the
+ * current filters happen to show. There is no undo, which is why the button
+ * that calls this sits behind a typed confirmation rather than a plain click.
+ */
+export function useClearTimetable(timetableId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => http.delete<{ removed: number }>(`/timetables/${timetableId}/entries`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.timetable.list(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
+      toast.success('Timetable cleared');
     },
   });
 }
