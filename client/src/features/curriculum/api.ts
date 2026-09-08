@@ -46,18 +46,20 @@ export function useCurriculumCoverage(query: { curriculumId?: string; classId?: 
 }
 
 /**
- * Marking objectives taught.
+ * Marking objective coverage — taught, assessed, or both.
  *
  * This is the entry point for the coverage analytics: a school can only find
- * the gap between "on the syllabus" and "actually taught" if teachers can
- * record the difference in a couple of clicks (spec section 13).
+ * the gap between "on the syllabus," "actually taught" and "actually tested"
+ * if a teacher can record each difference in a couple of clicks (spec section
+ * 13). The server enforces that an objective cannot be assessed without
+ * being taught, so unmarking "taught" clears "assessed" with it.
  */
-export function useMarkObjectivesTaught(curriculumId: string) {
+export function useMarkObjectiveCoverage(curriculumId: string) {
   const schoolId = useSchoolId();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { objectiveIds: string[]; taught: boolean }) =>
+    mutationFn: (input: { objectiveIds: string[]; taught?: boolean; assessed?: boolean }) =>
       http.post<{ updated: number }>(`/curricula/${curriculumId}/coverage`, input),
     onSuccess: (result, input) => {
       void queryClient.invalidateQueries({
@@ -65,11 +67,16 @@ export function useMarkObjectivesTaught(curriculumId: string) {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.coverage(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
-      toast.success(
-        input.taught
-          ? `${result.updated} objective${result.updated === 1 ? '' : 's'} marked as taught`
-          : `${result.updated} objective${result.updated === 1 ? '' : 's'} marked as not taught`,
-      );
+      const count = `${result.updated} objective${result.updated === 1 ? '' : 's'}`;
+      const label =
+        input.taught !== undefined
+          ? input.taught
+            ? 'taught'
+            : 'not taught'
+          : input.assessed
+            ? 'assessed'
+            : 'not assessed';
+      toast.success(`${count} marked as ${label}`);
     },
   });
 }

@@ -48,14 +48,28 @@ export const academicsExtraHandlers = [
     if (!context) return errors.unauthenticated();
     if (!context.can('curriculum.manage')) return errors.forbidden();
 
-    const body = (await request.json()) as { objectiveIds: string[]; taught: boolean };
+    const body = (await request.json()) as {
+      objectiveIds: string[];
+      taught?: boolean;
+      assessed?: boolean;
+    };
     const topics = db.topics.filter((topic) => topic.curriculumId === params.id);
 
     topics.forEach((topic) => {
       topic.objectives.forEach((objective) => {
-        if (body.objectiveIds.includes(objective.id)) {
+        if (!body.objectiveIds.includes(objective.id)) return;
+
+        if (body.taught !== undefined) {
           objective.taught = body.taught;
           objective.taughtOn = body.taught ? new Date().toISOString().slice(0, 10) : null;
+          // An objective that stops being taught cannot stay assessed — that
+          // is exactly the gap the coverage stats exist to surface, so it
+          // cannot be left in a state the stats treat as impossible.
+          if (!body.taught) objective.assessed = false;
+        }
+
+        if (body.assessed !== undefined) {
+          objective.assessed = body.assessed && objective.taught;
         }
       });
     });

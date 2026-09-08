@@ -1,11 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BookOpen, Check, ChevronDown, Target, X } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  ClipboardCheck,
+  ClipboardX,
+  Target,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, formatPercent } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses } from '@/features/academics/api';
-import { useCurricula, useCurriculumCoverage, useCurriculumTopics, useMarkObjectivesTaught } from './api';
+import { useCurricula, useCurriculumCoverage, useCurriculumTopics, useMarkObjectiveCoverage } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -40,7 +48,7 @@ export function CurriculumDetailPage() {
   const topics = useCurriculumTopics(id);
   const coverage = useCurriculumCoverage({ curriculumId: id, classId: classId || undefined });
   const classes = useClasses();
-  const markTaught = useMarkObjectivesTaught(id ?? '');
+  const markCoverage = useMarkObjectiveCoverage(id ?? '');
 
   const [selected, setSelected] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -52,6 +60,12 @@ export function CurriculumDetailPage() {
     () => (topics.data ?? []).flatMap((topic) => topic.objectives.map((o) => o.id)),
     [topics.data],
   );
+
+  const selectedObjectives = useMemo(() => {
+    const all = (topics.data ?? []).flatMap((topic) => topic.objectives);
+    return all.filter((objective) => selected.includes(objective.id));
+  }, [topics.data, selected]);
+  const canMarkAssessed = selectedObjectives.length > 0 && selectedObjectives.every((o) => o.taught);
 
   const toggleObjective = (objectiveId: string) =>
     setSelected((current) =>
@@ -68,9 +82,9 @@ export function CurriculumDetailPage() {
         : Array.from(new Set([...current, ...topicObjectiveIds]));
     });
 
-  const applyCoverage = async (taught: boolean) => {
+  const applyCoverage = async (patch: { taught?: boolean; assessed?: boolean }) => {
     if (selected.length === 0) return;
-    await markTaught.mutateAsync({ objectiveIds: selected, taught });
+    await markCoverage.mutateAsync({ objectiveIds: selected, ...patch });
     setSelected([]);
   };
 
@@ -172,8 +186,8 @@ export function CurriculumDetailPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              onClick={() => void applyCoverage(true)}
-              loading={markTaught.isPending}
+              onClick={() => void applyCoverage({ taught: true })}
+              loading={markCoverage.isPending}
             >
               <Check />
               Mark as taught
@@ -181,11 +195,34 @@ export function CurriculumDetailPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void applyCoverage(false)}
-              loading={markTaught.isPending}
+              onClick={() => void applyCoverage({ taught: false })}
+              loading={markCoverage.isPending}
             >
               <X />
               Mark as not taught
+            </Button>
+            <Button
+              size="sm"
+              disabled={!canMarkAssessed}
+              title={
+                canMarkAssessed
+                  ? undefined
+                  : 'Mark the selection as taught first — an objective cannot be assessed before it is taught.'
+              }
+              onClick={() => void applyCoverage({ assessed: true })}
+              loading={markCoverage.isPending}
+            >
+              <ClipboardCheck />
+              Mark as assessed
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void applyCoverage({ assessed: false })}
+              loading={markCoverage.isPending}
+            >
+              <ClipboardX />
+              Mark as not assessed
             </Button>
           </div>
           <Button
