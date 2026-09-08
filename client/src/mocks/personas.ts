@@ -93,7 +93,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'curriculum.read', 'curriculum.manage', 'scheme.read', 'scheme.manage', 'scheme.approve',
     'lessonnote.read', 'lessonnote.manage', 'lessonnote.approve',
     'timetable.read', 'timetable.manage', 'calendar.read', 'calendar.manage',
-    'cbt.read', 'cbt.manage', 'question.manage',
+    'cbt.read', 'cbt.manage', 'cbt.take', 'question.manage',
     'result.read', 'result.enter', 'result.approve', 'result.publish', 'result.amend',
     'reportcard.read', 'reportcard.generate', 'transcript.read', 'transcript.issue', 'grading.manage',
     'finance.read', 'fee.manage', 'invoice.manage', 'payment.manage', 'payment.reconcile', 'discount.manage',
