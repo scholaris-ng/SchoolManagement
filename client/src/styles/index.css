@@ -153,6 +153,58 @@
     white-space: nowrap;
     border-width: 0;
   }
+
+  /*
+   * Quill's "snow" theme ships light-mode colours baked into its own
+   * stylesheet, so it needs retheming with the app's own tokens rather than
+   * inheriting them — none of these properties fall back to `currentColor`.
+   */
+  .rich-text-editor .ql-toolbar.ql-snow {
+    @apply rounded-t-md border-input bg-muted/40;
+  }
+  .rich-text-editor .ql-container.ql-snow {
+    @apply rounded-md border-input bg-card;
+  }
+  .rich-text-editor .ql-toolbar.ql-snow + .ql-container.ql-snow {
+    @apply rounded-t-none;
+  }
+  .rich-text-editor .ql-editor {
+    @apply min-h-[10rem] text-sm leading-relaxed text-foreground;
+  }
+  .rich-text-editor .ql-editor.ql-blank::before {
+    @apply text-muted-foreground not-italic;
+  }
+  .rich-text-editor .ql-snow .ql-stroke {
+    stroke: hsl(var(--muted-foreground));
+  }
+  .rich-text-editor .ql-snow .ql-fill {
+    fill: hsl(var(--muted-foreground));
+  }
+  .rich-text-editor .ql-snow .ql-picker {
+    color: hsl(var(--muted-foreground));
+  }
+  .rich-text-editor .ql-snow .ql-picker-options {
+    @apply border-input bg-popover text-popover-foreground shadow-popover;
+  }
+  .rich-text-editor .ql-snow.ql-toolbar button:hover,
+  .rich-text-editor .ql-snow.ql-toolbar button.ql-active,
+  .rich-text-editor .ql-snow.ql-toolbar .ql-picker-label:hover,
+  .rich-text-editor .ql-snow.ql-toolbar .ql-picker-item:hover {
+    color: hsl(var(--primary));
+  }
+  .rich-text-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
+  .rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke,
+  .rich-text-editor .ql-snow.ql-toolbar .ql-picker-label:hover .ql-stroke {
+    stroke: hsl(var(--primary));
+  }
+  .rich-text-editor .ql-snow.ql-toolbar button:hover .ql-fill,
+  .rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-fill {
+    fill: hsl(var(--primary));
+  }
+  .rich-text-editor:focus-within .ql-toolbar.ql-snow,
+  .rich-text-editor:focus-within .ql-container.ql-snow {
+    @apply ring-2 ring-ring ring-offset-1 ring-offset-background;
+  }
 }
 
 @layer utilities {

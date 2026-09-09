@@ -12,6 +12,7 @@ import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, LoadingState } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
+import { RichTextEditor } from '@/components/forms/rich-text-editor';
 
 interface NoteDraft {
   classId: string;
@@ -64,6 +65,12 @@ export function LessonNoteFormPage() {
   const [draft, setDraft] = useState<NoteDraft>(emptyDraft);
   const [dirty, setDirty] = useState(false);
   const [reviewComment, setReviewComment] = useState('');
+  // RichTextEditor only reads its starting content once, on mount — see its
+  // own doc comment. Loading an existing note is an async fetch that
+  // resolves after that first mount, so the editor needs to be recreated
+  // once it does; bumping this remounts it (via `key`) with the note's real
+  // content instead of the empty draft it started with.
+  const [contentKey, setContentKey] = useState(0);
 
   useEffect(() => {
     if (!existing.data) return;
@@ -83,6 +90,7 @@ export function LessonNoteFormPage() {
     });
     setReviewComment(note.reviewComment ?? '');
     setDirty(false);
+    setContentKey((key) => key + 1);
   }, [existing.data]);
 
   useEffect(() => {
@@ -297,12 +305,12 @@ export function LessonNoteFormPage() {
             <Label htmlFor="note-content" required>
               What you taught
             </Label>
-            <Textarea
+            <RichTextEditor
+              key={contentKey}
               id="note-content"
-              rows={8}
-              value={draft.content}
-              disabled={!editable}
-              onChange={(event) => update({ content: event.target.value })}
+              defaultValue={draft.content}
+              readOnly={!editable}
+              onChange={(html) => update({ content: html })}
               placeholder="The lesson itself: explanation, examples, board work, experiments."
             />
           </div>
