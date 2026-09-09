@@ -9,9 +9,10 @@ import type { SchemeWeek } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Badge, Card, CardContent, CardHeader, CardTitle, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/data/status-badge';
-import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Alert, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
+import { RichTextEditor } from '@/components/forms/rich-text-editor';
 
 /**
  * A generated scheme, made editable.
@@ -169,25 +170,30 @@ export function SchemeDetailPage() {
                   </p>
                 </div>
                 {editable && (
-                  <div className="flex gap-1 no-print">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Move week ${week.weekNumber} earlier`}
-                      disabled={index === 0}
-                      onClick={() => moveWeek(index, -1)}
-                    >
-                      <ArrowUp />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Move week ${week.weekNumber} later`}
-                      disabled={index === weeks.length - 1}
-                      onClick={() => moveWeek(index, 1)}
-                    >
-                      <ArrowDown />
-                    </Button>
+                  <div className="flex items-center gap-1.5 no-print">
+                    <span className="text-xs text-muted-foreground">Reorder</span>
+                    <Tooltip content="Swap this week's topic with the one before it">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move week ${week.weekNumber} earlier`}
+                        disabled={index === 0}
+                        onClick={() => moveWeek(index, -1)}
+                      >
+                        <ArrowUp />
+                      </Button>
+                    </Tooltip>
+                    <Tooltip content="Swap this week's topic with the one after it">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move week ${week.weekNumber} later`}
+                        disabled={index === weeks.length - 1}
+                        onClick={() => moveWeek(index, 1)}
+                      >
+                        <ArrowDown />
+                      </Button>
+                    </Tooltip>
                   </div>
                 )}
               </div>
@@ -225,24 +231,20 @@ export function SchemeDetailPage() {
                   <>
                     <div className="space-y-1.5">
                       <Label htmlFor={`week-activities-${week.id}`}>Activities</Label>
-                      <Textarea
+                      <RichTextEditor
+                        key={`week-activities-${week.id}`}
                         id={`week-activities-${week.id}`}
-                        rows={2}
-                        value={week.activities ?? ''}
-                        onChange={(event) =>
-                          updateWeek(index, { activities: event.target.value || null })
-                        }
+                        defaultValue={week.activities ?? ''}
+                        onChange={(html) => updateWeek(index, { activities: html || null })}
                       />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor={`week-resources-${week.id}`}>Resources</Label>
-                      <Textarea
+                      <RichTextEditor
+                        key={`week-resources-${week.id}`}
                         id={`week-resources-${week.id}`}
-                        rows={2}
-                        value={week.resources ?? ''}
-                        onChange={(event) =>
-                          updateWeek(index, { resources: event.target.value || null })
-                        }
+                        defaultValue={week.resources ?? ''}
+                        onChange={(html) => updateWeek(index, { resources: html || null })}
                       />
                     </div>
                   </>
@@ -253,7 +255,7 @@ export function SchemeDetailPage() {
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">
                           Activities
                         </p>
-                        <p className="text-sm">{week.activities}</p>
+                        <RichTextEditor defaultValue={week.activities} onChange={() => {}} readOnly />
                       </div>
                     )}
                     {week.resources && (
@@ -261,7 +263,7 @@ export function SchemeDetailPage() {
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">
                           Resources
                         </p>
-                        <p className="text-sm">{week.resources}</p>
+                        <RichTextEditor defaultValue={week.resources} onChange={() => {}} readOnly />
                       </div>
                     )}
                   </>

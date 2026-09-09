@@ -194,3 +194,24 @@ export function scopeAllows(
   }
   return true;
 }
+
+/**
+ * Classes a caller may take the daily register for.
+ *
+ * Narrower than `academicScope`: teaching a subject to a class is enough to
+ * see its curriculum, but the daily register is the *form* teacher's
+ * responsibility, not every teacher who passes through the room over the
+ * week. `null` means unrestricted — administrators, principals and vice
+ * principals all need to see every class's attendance, so only the
+ * teaching-only roles are narrowed here.
+ */
+export function formTeacherClassIds(context: RequestContext): string[] | null {
+  const { staffId, roles } = context.membership;
+  if (!staffId) return null;
+  const teachingOnly = roles.length > 0 && roles.every((role) => TEACHING_ONLY_ROLES.has(role));
+  if (!teachingOnly) return null;
+
+  return scoped(db.classes, context.schoolId)
+    .filter((entry) => entry.formTeacherId === staffId)
+    .map((entry) => entry.id);
+}

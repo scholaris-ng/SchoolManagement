@@ -62,7 +62,9 @@ export function useLevels() {
   });
 }
 
-export function useClasses(query: { levelId?: string; includeInactive?: boolean } = {}) {
+export function useClasses(
+  query: { levelId?: string; includeInactive?: boolean; formTeacherOnly?: boolean } = {},
+) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.classes(schoolId, query),

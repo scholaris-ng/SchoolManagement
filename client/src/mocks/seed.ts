@@ -10,6 +10,7 @@ import {
   SURNAMES,
 } from './names';
 import { DEMO_PERSONAS, permissionsForRoles } from './personas';
+import { teachingWeeksBetween } from '@/lib/weekdays';
 import type {
   AcademicSession,
   House,
@@ -357,7 +358,7 @@ function seedAcademicStructure(
         sequence: index + 1,
         startDate: isoDate(start),
         endDate: isoDate(end),
-        teachingWeeks: 13,
+        teachingWeeks: teachingWeeksBetween(isoDate(start), isoDate(end)),
         isCurrent: isCurrentTerm,
         status: isCurrentTerm ? 'ACTIVE' : end < TODAY ? 'CLOSED' : 'PLANNED',
       });

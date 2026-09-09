@@ -106,21 +106,42 @@ describe('academic setup admin API', () => {
     const sessions = await get<{ id: string }[]>('/academics/sessions', as(ADMIN));
     const sessionId = sessions.data[0].id;
 
-    const addTerm = await send<{ id: string; sequence: number }>(
+    // Teaching weeks are ignored on the way in and worked out from the dates:
+    // 1 to 14 August 2031 is ten weekdays, so two weeks.
+    const addTerm = await send<{ id: string; sequence: number; teachingWeeks: number }>(
       'POST',
       '/academics/terms',
-      { sessionId, name: 'Holiday catch-up', startDate: '2031-08-01', endDate: '2031-08-14', teachingWeeks: 2 },
+      { sessionId, name: 'Holiday catch-up', startDate: '2031-08-01', endDate: '2031-08-14', teachingWeeks: 99 },
       as(ADMIN),
     );
     expect(addTerm.status).toBe(201);
+    expect(addTerm.data.teachingWeeks).toBe(2);
 
+    // Moving the end date moves the week count with it, unasked.
     const edit = await send<{ teachingWeeks: number }>(
       'PATCH',
       `/academics/terms/${addTerm.data.id}`,
-      { teachingWeeks: 3 },
+      { endDate: '2031-08-21' },
       as(ADMIN),
     );
     expect(edit.data.teachingWeeks).toBe(3);
+
+    // And a week count on its own changes nothing.
+    const forced = await send<{ teachingWeeks: number }>(
+      'PATCH',
+      `/academics/terms/${addTerm.data.id}`,
+      { teachingWeeks: 40 },
+      as(ADMIN),
+    );
+    expect(forced.data.teachingWeeks).toBe(3);
+
+    const backwards = await send(
+      'PATCH',
+      `/academics/terms/${addTerm.data.id}`,
+      { startDate: '2031-09-01', endDate: '2031-08-01' },
+      as(ADMIN),
+    );
+    expect(backwards.status).toBe(422);
   });
 
   it('adds a period and the current timetable picks it up without a separate step', async () => {

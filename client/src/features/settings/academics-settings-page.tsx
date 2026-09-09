@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTime } from '@/lib/format';
-import { WEEKDAYS } from '@/lib/weekdays';
+import { WEEKDAYS, teachingWeeksBetween } from '@/lib/weekdays';
 import {
   useAcademicSessions,
   useClasses,
@@ -594,11 +594,11 @@ export function AcademicsSettingsPage() {
   );
 }
 
+/** Teaching weeks are not held here — they are read off the dates on save. */
 interface TermRow {
   name: string;
   startDate: string;
   endDate: string;
-  teachingWeeks: string;
 }
 
 function SessionDialog({
@@ -616,9 +616,9 @@ function SessionDialog({
   const [termRows, setTermRows] = useState<TermRow[]>(
     isNew
       ? [
-          { name: 'First Term', startDate: '', endDate: '', teachingWeeks: '13' },
-          { name: 'Second Term', startDate: '', endDate: '', teachingWeeks: '13' },
-          { name: 'Third Term', startDate: '', endDate: '', teachingWeeks: '13' },
+          { name: 'First Term', startDate: '', endDate: '' },
+          { name: 'Second Term', startDate: '', endDate: '' },
+          { name: 'Third Term', startDate: '', endDate: '' },
         ]
       : [],
   );
@@ -627,8 +627,13 @@ function SessionDialog({
     setTermRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
-  const termsValid = termRows.every((row) => row.name.trim() && row.startDate && row.endDate);
-  const valid = Boolean(name.trim() && startDate && endDate) && termsValid;
+  // A backwards range would derive no teaching weeks at all, so it is caught
+  // here rather than saved and puzzled over later.
+  const termsValid = termRows.every(
+    (row) => row.name.trim() && row.startDate && row.endDate && row.endDate >= row.startDate,
+  );
+  const valid =
+    Boolean(name.trim() && startDate && endDate) && endDate >= startDate && termsValid;
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -725,10 +730,9 @@ function SessionDialog({
                     <Label htmlFor={`term-weeks-${index}`}>Teaching weeks</Label>
                     <Input
                       id={`term-weeks-${index}`}
-                      type="number"
-                      min={1}
-                      value={row.teachingWeeks}
-                      onChange={(event) => updateTerm(index, { teachingWeeks: event.target.value })}
+                      value={teachingWeeksBetween(row.startDate, row.endDate) || '—'}
+                      readOnly
+                      disabled
                     />
                   </div>
                 </div>
@@ -757,7 +761,7 @@ function SessionDialog({
                             name: row.name.trim(),
                             startDate: row.startDate,
                             endDate: row.endDate,
-                            teachingWeeks: Number(row.teachingWeeks) || 13,
+                            teachingWeeks: teachingWeeksBetween(row.startDate, row.endDate),
                           })),
                         }
                       : {}),
@@ -785,9 +789,14 @@ function TermDialog({
   const [name, setName] = useState(state.term?.name ?? '');
   const [startDate, setStartDate] = useState(state.term?.startDate ?? '');
   const [endDate, setEndDate] = useState(state.term?.endDate ?? '');
-  const [teachingWeeks, setTeachingWeeks] = useState(String(state.term?.teachingWeeks ?? 13));
 
-  const valid = Boolean(name.trim() && startDate && endDate);
+  // Read off the dates rather than typed in: a term whose dates move and whose
+  // week count does not is how a scheme of work ends up planned against weeks
+  // the term does not have.
+  const teachingWeeks = teachingWeeksBetween(startDate, endDate);
+  const datesOutOfOrder = Boolean(startDate && endDate && endDate < startDate);
+
+  const valid = Boolean(name.trim() && startDate && endDate && !datesOutOfOrder);
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -835,13 +844,14 @@ function TermDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="term-weeks">Teaching weeks</Label>
-            <Input
-              id="term-weeks"
-              type="number"
-              min={1}
-              value={teachingWeeks}
-              onChange={(event) => setTeachingWeeks(event.target.value)}
-            />
+            <Input id="term-weeks" value={teachingWeeks || '—'} readOnly disabled />
+            <p className="text-xs text-muted-foreground">
+              {datesOutOfOrder
+                ? 'The end date is before the start date.'
+                : teachingWeeks
+                  ? 'Counted from the dates above, Mondays to Fridays. Schemes of work are spread across these weeks.'
+                  : 'Set the start and end dates and this is worked out for you.'}
+            </p>
           </div>
         </DialogBody>
         <DialogFooter>
@@ -859,7 +869,7 @@ function TermDialog({
                     name: name.trim(),
                     startDate,
                     endDate,
-                    teachingWeeks: Number(teachingWeeks) || 13,
+                    teachingWeeks,
                     ...(state.term ? {} : { sessionId: state.sessionId }),
                   },
                 })

@@ -1,5 +1,5 @@
 import { http, delay } from 'msw';
-import { db, resolveContext, scoped, visibleStudentIds } from '../context';
+import { db, formTeacherClassIds, resolveContext, scoped, visibleStudentIds } from '../context';
 import { created, errors, latency, ok, paginate } from '../http-helpers';
 import type { AttendanceRecord, AttendanceStatus } from '@/types/attendance';
 import type { Broadsheet, BroadsheetRow, ReportCard, ScoreSheet, SubjectResultLine } from '@/types/results';
@@ -29,6 +29,11 @@ export const attendanceResultsHandlers = [
 
     const schoolClass = scoped(db.classes, context.schoolId).find((entry) => entry.id === classId);
     if (!schoolClass) return errors.notFound('Class');
+
+    // A class outside the caller's remit is "not found" rather than
+    // "forbidden": the register's existence is not theirs to learn either.
+    const allowedClassIds = formTeacherClassIds(context);
+    if (allowedClassIds && !allowedClassIds.includes(classId)) return errors.notFound('Class');
 
     const roster = scoped(db.students, context.schoolId).filter(
       (student) => student.currentClassId === classId && student.status === 'ACTIVE',
@@ -88,6 +93,9 @@ export const attendanceResultsHandlers = [
       date: string;
       marks: { studentId: string; status: AttendanceStatus; reason?: string | null; note?: string | null }[];
     };
+
+    const allowedClassIds = formTeacherClassIds(context);
+    if (allowedClassIds && !allowedClassIds.includes(body.classId)) return errors.notFound('Class');
 
     let notificationsSent = 0;
 
@@ -219,8 +227,15 @@ export const attendanceResultsHandlers = [
     const url = new URL(request.url);
     const classId = url.searchParams.get('classId');
 
+    const allowedClassIds = formTeacherClassIds(context);
+    if (classId && allowedClassIds && !allowedClassIds.includes(classId)) {
+      return errors.notFound('Class');
+    }
+
     const records = scoped(db.attendance, context.schoolId).filter(
-      (record) => !classId || record.classId === classId,
+      (record) =>
+        (!classId || record.classId === classId) &&
+        (!allowedClassIds || allowedClassIds.includes(record.classId)),
     );
 
     const byClass = new Map<string, { present: number; total: number }>();
@@ -251,8 +266,15 @@ export const attendanceResultsHandlers = [
     const classId = url.searchParams.get('classId');
     const days = Math.min(90, Math.max(7, Number(url.searchParams.get('days') ?? 14)));
 
+    const allowedClassIds = formTeacherClassIds(context);
+    if (classId && allowedClassIds && !allowedClassIds.includes(classId)) {
+      return errors.notFound('Class');
+    }
+
     const records = scoped(db.attendance, context.schoolId).filter(
-      (record) => !classId || record.classId === classId,
+      (record) =>
+        (!classId || record.classId === classId) &&
+        (!allowedClassIds || allowedClassIds.includes(record.classId)),
     );
 
     const byDate = new Map<string, { present: number; absent: number; total: number }>();

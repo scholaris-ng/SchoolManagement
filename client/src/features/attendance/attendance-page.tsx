@@ -82,7 +82,10 @@ export function AttendancePage() {
   const isOnline = useOnlineStatus();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const classes = useClasses();
+  // The register is the form teacher's job, not every teacher who passes
+  // through the room — the server narrows this to just the caller's own
+  // form class(es) unless their role gives them school-wide oversight.
+  const classes = useClasses({ formTeacherOnly: true });
   const today = toDateInputValue(new Date());
 
   const classId = searchParams.get('classId') ?? '';

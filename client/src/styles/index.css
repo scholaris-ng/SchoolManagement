@@ -239,6 +239,23 @@
   @page {
     margin: 12mm;
   }
+
+  /*
+   * A rich text editor left in its editable state (a draft scheme, say) can
+   * still end up on a printed page — the toolbar has no business on paper,
+   * and its dark-theme colours would otherwise survive the `body` override
+   * above, since a more specific rule wins over an inherited one regardless
+   * of `!important`.
+   */
+  .rich-text-editor .ql-toolbar {
+    display: none !important;
+  }
+  .rich-text-editor .ql-container.ql-snow,
+  .rich-text-editor .ql-editor {
+    border: none !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
 }
 
 .print-only {

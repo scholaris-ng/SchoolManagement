@@ -3,6 +3,7 @@ import {
   academicScope,
   db,
   findMembership,
+  formTeacherClassIds,
   resolveContext,
   scoped,
   staffBlockReason,
@@ -18,6 +19,7 @@ import type {
   Term,
 } from '@/types/academics';
 import type { TimetablePeriod } from '@/types/curriculum';
+import { teachingWeeksBetween } from '@/lib/weekdays';
 
 const base = '/api/v1';
 
@@ -227,6 +229,8 @@ export const coreHandlers = [
     db.sessions.push(session);
 
     (body.terms ?? []).forEach((term, index) => {
+      const startDate = term.startDate ?? session.startDate;
+      const endDate = term.endDate ?? session.endDate;
       db.terms.push({
         id: nextId('trm'),
         schoolId: context.schoolId,
@@ -234,9 +238,11 @@ export const coreHandlers = [
         sessionName: session.name,
         name: term.name?.trim() || `Term ${index + 1}`,
         sequence: index + 1,
-        startDate: term.startDate ?? session.startDate,
-        endDate: term.endDate ?? session.endDate,
-        teachingWeeks: term.teachingWeeks ?? 13,
+        startDate,
+        endDate,
+        // Read off the dates, never taken from the request: a term's length is
+        // a fact about when it runs.
+        teachingWeeks: teachingWeeksBetween(startDate, endDate),
         isCurrent: false,
         status: 'PLANNED',
       });
@@ -307,6 +313,9 @@ export const coreHandlers = [
     if (!body.name?.trim() || !body.startDate || !body.endDate) {
       return errors.validation('A term needs a name and a start and end date.');
     }
+    if (body.endDate < body.startDate) {
+      return errors.validation('A term cannot end before it starts.');
+    }
 
     const sequence =
       scoped(db.terms, context.schoolId).filter((term) => term.sessionId === session.id).length + 1;
@@ -320,7 +329,7 @@ export const coreHandlers = [
       sequence,
       startDate: body.startDate,
       endDate: body.endDate,
-      teachingWeeks: body.teachingWeeks ?? 13,
+      teachingWeeks: teachingWeeksBetween(body.startDate, body.endDate),
       isCurrent: false,
       status: 'PLANNED',
     };
@@ -340,7 +349,14 @@ export const coreHandlers = [
     if (!term) return errors.notFound('Term');
 
     const body = (await request.json()) as Partial<Term>;
+    if (body.startDate && body.endDate && body.endDate < body.startDate) {
+      return errors.validation('A term cannot end before it starts.');
+    }
     Object.assign(term, body);
+
+    // Recomputed rather than accepted, so moving a term's dates can never
+    // leave a week count behind that a scheme of work would then plan against.
+    term.teachingWeeks = teachingWeeksBetween(term.startDate, term.endDate);
 
     return ok(term, 'Term updated');
   }),
@@ -485,12 +501,17 @@ export const coreHandlers = [
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
-    const levelId = new URL(request.url).searchParams.get('levelId');
-    const scope = academicScope(context);
+    const url = new URL(request.url);
+    const levelId = url.searchParams.get('levelId');
+    // The register is the form teacher's job, not every teacher who passes
+    // through the room — a narrower scope than the general academic one, so
+    // the attendance page's class picker only offers classes worth picking.
+    const formTeacherOnly = url.searchParams.get('formTeacherOnly') === 'true';
+    const allowedIds = formTeacherOnly ? formTeacherClassIds(context) : academicScope(context).classIds;
     const rows = scoped(db.classes, context.schoolId).filter(
       (schoolClass) =>
         (!levelId || schoolClass.levelId === levelId) &&
-        (!scope.classIds || scope.classIds.includes(schoolClass.id)),
+        (!allowedIds || allowedIds.includes(schoolClass.id)),
     );
     return ok(rows);
   }),
