@@ -219,25 +219,28 @@ export function TimetablePage() {
             </NativeSelect>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="tt-teacher">Teacher</Label>
-            <NativeSelect
-              id="tt-teacher"
-              value={teacherId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setParams(value ? { teacherId: value, classId: '' } : { teacherId: '' });
-              }}
-              className="w-auto"
-            >
-              <option value="">All teachers</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.value} value={teacher.value}>
-                  {teacher.label}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
+          {/* Nothing to choose between unless this user may read the roster. */}
+          {teachers.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="tt-teacher">Teacher</Label>
+              <NativeSelect
+                id="tt-teacher"
+                value={teacherId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setParams(value ? { teacherId: value, classId: '' } : { teacherId: '' });
+                }}
+                className="w-auto"
+              >
+                <option value="">All teachers</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher.value} value={teacher.value}>
+                    {teacher.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="tt-subject">Subject</Label>

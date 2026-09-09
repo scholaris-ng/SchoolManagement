@@ -830,6 +830,24 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
   const currentTerm = db.terms.find((term) => term.schoolId === schoolId && term.isCurrent)!;
   const staff = db.staff.filter((member) => member.schoolId === schoolId);
 
+  // Authors are taken in a stable order rather than at random, so the demo
+  // form teacher reliably owns some of the curricula they can see. Staff
+  // records reserved for a non-teaching persona are skipped, or the bursar
+  // would end up credited with writing a syllabus.
+  const schoolIndex = db.schools.findIndex((school) => school.id === schoolId);
+  const reserved = new Set(
+    DEMO_PERSONAS.filter(
+      (persona) =>
+        persona.schoolIndex === schoolIndex &&
+        persona.link?.type === 'staff' &&
+        !persona.roles.some((role) => role === 'TEACHER' || role === 'FORM_TEACHER'),
+    ).map((persona) => persona.link!.index),
+  );
+  const authors = staff.filter(
+    (member, index) => member.status !== 'EXITED' && !reserved.has(index),
+  );
+  let authorIndex = 0;
+
   Object.entries(TOPIC_LIBRARY).forEach(([subjectCode, topics]) => {
     const subject = db.subjects.find(
       (entry) => entry.schoolId === schoolId && entry.code === subjectCode,
@@ -837,57 +855,85 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
     if (!subject) return;
 
     const level = levels[Math.min(levels.length - 1, 3)] ?? levels[levels.length - 1];
-    const curriculumId = id('cur');
+    const levelClasses = classes
+      .filter((schoolClass) => schoolClass.levelId === level.id)
+      .slice(0, 2);
 
-    db.curricula.push({
-      id: curriculumId,
-      schoolId,
-      name: `${subject.name} — ${level.name}`,
-      subjectId: subject.id,
-      subjectName: subject.name,
-      levelId: level.id,
-      levelName: level.name,
-      sessionId: null,
-      description: `Performance objectives for ${subject.name} at ${level.name} level.`,
-      topicCount: topics.length,
-      objectiveCount: topics.reduce((total, topic) => total + topic.objectives.length, 0),
-      isActive: true,
-    });
+    // A curriculum belongs to one class. Two classes at the same level get two
+    // plans, which is the whole point: they do not move at the same speed.
+    levelClasses.forEach((schoolClass) => {
+      const teacher = authors[authorIndex % authors.length];
+      authorIndex += 1;
 
-    topics.forEach((topic, topicIndex) => {
-      const topicId = id('top');
-      db.topics.push({
-        id: topicId,
-        curriculumId,
-        title: topic.title,
-        description: null,
-        sequence: topicIndex + 1,
-        suggestedWeeks: random.int(1, 3),
-        objectives: topic.objectives.map((statement, objectiveIndex) => {
-          // A realistic coverage picture: most objectives taught, fewer
-          // assessed — which is exactly the gap the analytics exist to surface.
-          const taught = random.bool(0.72);
-          return {
-            id: id('obj'),
-            topicId,
-            code: `${subject.code}.${topicIndex + 1}.${objectiveIndex + 1}`,
-            statement,
-            sequence: objectiveIndex + 1,
-            bloomLevel: random.pick(['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYSE'] as const),
-            taught,
-            assessed: taught && random.bool(0.55),
-            taughtOn: taught ? isoDate(addDays(TODAY, -random.int(1, 60))) : null,
-            questionCount: random.int(0, 6),
-          };
-        }),
+      // The author has to actually teach this, or the API would hide their own
+      // work from them.
+      if (!teacher.subjectIds.includes(subject.id)) {
+        teacher.subjectIds.push(subject.id);
+        teacher.subjectNames.push(subject.name);
+      }
+      if (!teacher.classIds.includes(schoolClass.id)) {
+        teacher.classIds.push(schoolClass.id);
+        teacher.classNames.push(schoolClass.name);
+      }
+
+      const curriculumId = id('cur');
+      const writtenOn = addDays(new Date(currentTerm.startDate), -random.int(3, 40));
+
+      db.curricula.push({
+        id: curriculumId,
+        schoolId,
+        name: `${subject.name} — ${schoolClass.name}`,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        classId: schoolClass.id,
+        className: schoolClass.name,
+        levelId: level.id,
+        levelName: level.name,
+        sessionId: currentTerm.sessionId,
+        sessionName: currentTerm.sessionName,
+        description: `Performance objectives for ${subject.name} in ${schoolClass.name}.`,
+        topicCount: topics.length,
+        objectiveCount: topics.reduce((total, topic) => total + topic.objectives.length, 0),
+        isActive: true,
+        // Rewritten to the persona's user id in `seedUsers` for staff who have
+        // a portal login.
+        createdById: teacher.id,
+        createdByName: teacher.fullName,
+        createdByRole: teacher.isFormTeacher ? 'Form teacher' : 'Teacher',
+        createdAt: writtenOn.toISOString(),
+        updatedAt: writtenOn.toISOString(),
       });
-    });
 
-    // One scheme of work per class taking this subject at that level.
-    const levelClasses = classes.filter((schoolClass) => schoolClass.levelId === level.id);
-    levelClasses.slice(0, 2).forEach((schoolClass) => {
+      topics.forEach((topic, topicIndex) => {
+        const topicId = id('top');
+        db.topics.push({
+          id: topicId,
+          curriculumId,
+          title: topic.title,
+          description: null,
+          sequence: topicIndex + 1,
+          suggestedWeeks: random.int(1, 3),
+          objectives: topic.objectives.map((statement, objectiveIndex) => {
+            // A realistic coverage picture: most objectives taught, fewer
+            // assessed — exactly the gap the analytics exist to surface.
+            const taught = random.bool(0.72);
+            return {
+              id: id('obj'),
+              topicId,
+              code: `${subject.code}.${topicIndex + 1}.${objectiveIndex + 1}`,
+              statement,
+              sequence: objectiveIndex + 1,
+              bloomLevel: random.pick(['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYSE'] as const),
+              taught,
+              assessed: taught && random.bool(0.55),
+              taughtOn: taught ? isoDate(addDays(TODAY, -random.int(1, 60))) : null,
+              questionCount: random.int(0, 6),
+            };
+          }),
+        });
+      });
+
       const curriculumTopics = db.topics.filter((topic) => topic.curriculumId === curriculumId);
-      const teacher = random.pick(staff);
 
       db.schemes.push({
         id: id('sow'),
@@ -2199,11 +2245,23 @@ function seedUsers(db: MockDb): void {
       studentId = student.id;
     }
 
+    const userId = `user_${persona.email}`;
+
     if (persona.link?.type === 'staff') {
       const member = schoolStaff[persona.link.index];
       staffId = member.id;
       member.fullName = persona.name;
       member.email = persona.email;
+      member.userId = userId;
+
+      // Anything seeded against the staff record before this login existed now
+      // belongs to the person, so "who wrote this" and "is this mine" agree.
+      db.curricula
+        .filter((curriculum) => curriculum.createdById === member.id)
+        .forEach((curriculum) => {
+          curriculum.createdById = userId;
+          curriculum.createdByName = persona.name;
+        });
     }
 
     const membership: SchoolMembership = {
@@ -2225,7 +2283,7 @@ function seedUsers(db: MockDb): void {
     };
 
     db.users.push({
-      id: `user_${persona.email}`,
+      id: userId,
       firebaseUid: `mock-${persona.email.split('@')[0]}`,
       email: persona.email,
       displayName: persona.name,

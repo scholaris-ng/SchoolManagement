@@ -1,5 +1,13 @@
 import { http, delay } from 'msw';
-import { db, resolveContext, scoped } from '../context';
+import {
+  academicScope,
+  currentSession,
+  db,
+  resolveContext,
+  scopeAllows,
+  scoped,
+  type RequestContext,
+} from '../context';
 import {
   created,
   errors,
@@ -32,6 +40,34 @@ function recalcCurriculumCounts(curriculumId: string): void {
   curriculum.objectiveCount = topics.reduce((total, topic) => total + topic.objectives.length, 0);
 }
 
+/** A readable label for whoever wrote a curriculum: "Form teacher", "Principal". */
+function roleLabel(context: RequestContext): string {
+  const name = context.membership.roles[0] ?? context.membership.customRoleNames[0];
+  if (!name) return 'Staff';
+  const words = name.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Whether this caller may change an existing curriculum.
+ *
+ * Coordinators (anyone who may edit the academic structure) own all of them.
+ * A teacher owns the ones they wrote, and may also maintain one written for a
+ * class and subject they are currently assigned — a colleague going on leave
+ * must not freeze that class's syllabus.
+ */
+function canEditCurriculum(context: RequestContext, curriculum: Curriculum): boolean {
+  if (context.can('academics.manage')) return true;
+  if (curriculum.createdById === context.user.id) return true;
+  return scopeAllows(academicScope(context), {
+    classId: curriculum.classId,
+    subjectId: curriculum.subjectId,
+  });
+}
+
+const NOT_YOURS =
+  'This curriculum belongs to another teacher. Ask a coordinator if it needs to change.';
+
 /** Curriculum, schemes of work, lesson notes, timetable, calendar and CBT. */
 export const academicsExtraHandlers = [
   http.get(`${base}/curricula`, async ({ request }) => {
@@ -43,12 +79,35 @@ export const academicsExtraHandlers = [
     const url = new URL(request.url);
     const subjectId = url.searchParams.get('subjectId');
     const levelId = url.searchParams.get('levelId');
+    const classId = url.searchParams.get('classId');
+    const createdById = url.searchParams.get('createdById');
+
+    // Session defaults to whichever one the school is currently in, so every
+    // caller follows the switch an administrator throws without having to know
+    // it exists. `sessionId=ALL` is the deliberate opt-out for looking back.
+    const requestedSession = url.searchParams.get('sessionId');
+    const sessionId =
+      requestedSession === 'ALL'
+        ? null
+        : (requestedSession ?? currentSession(context.schoolId)?.id ?? null);
+
+    // A teacher's list is the curricula for the classes and subjects they
+    // teach; everyone else's remit decides the rest.
+    const scope = academicScope(context);
 
     return ok(
       scoped(db.curricula, context.schoolId).filter(
         (curriculum) =>
           (!subjectId || curriculum.subjectId === subjectId) &&
-          (!levelId || curriculum.levelId === levelId),
+          (!levelId || curriculum.levelId === levelId) &&
+          (!classId || curriculum.classId === classId) &&
+          (!sessionId || curriculum.sessionId === sessionId) &&
+          (!createdById || curriculum.createdById === createdById) &&
+          (curriculum.createdById === context.user.id ||
+            scopeAllows(scope, {
+              classId: curriculum.classId,
+              subjectId: curriculum.subjectId,
+            })),
       ),
     );
   }),
@@ -60,34 +119,75 @@ export const academicsExtraHandlers = [
     if (!context.can('curriculum.manage')) return errors.forbidden();
 
     const body = (await request.json()) as Partial<Curriculum>;
-    if (!body.subjectId || !body.levelId) {
-      return errors.validation('A curriculum needs a subject and a level.');
+    if (!body.subjectId || !body.classId) {
+      return errors.validation('A curriculum needs a subject and a class.');
     }
-    const subject = db.subjects.find((entry) => entry.id === body.subjectId);
-    const level = db.levels.find((entry) => entry.id === body.levelId);
+    const subject = scoped(db.subjects, context.schoolId).find(
+      (entry) => entry.id === body.subjectId,
+    );
+    const schoolClass = scoped(db.classes, context.schoolId).find(
+      (entry) => entry.id === body.classId,
+    );
     if (!subject) return errors.notFound('Subject');
+    if (!schoolClass) return errors.notFound('Class');
+
+    // The level is the class's level, never a separate answer that could
+    // disagree with it.
+    const level = db.levels.find((entry) => entry.id === schoolClass.levelId);
     if (!level) return errors.notFound('Level');
 
-    const duplicate = scoped(db.curricula, context.schoolId).some(
-      (entry) => entry.subjectId === subject.id && entry.levelId === level.id,
-    );
-    if (duplicate) {
-      return errors.conflict(`A curriculum for ${subject.name} at ${level.name} already exists.`);
+    // A teacher may only write for what they teach. Admins and principals hold
+    // `academics.manage` and so are unrestricted here.
+    if (!scopeAllows(academicScope(context), { classId: schoolClass.id, subjectId: subject.id })) {
+      return errors.forbidden(
+        `You are not assigned to teach ${subject.name} in ${schoolClass.name}.`,
+      );
     }
 
+    // A new curriculum belongs to the session the school is working in. Last
+    // year's plan for the same class is left alone rather than blocking this
+    // year's, which is why the session is part of the uniqueness rule.
+    const session = currentSession(context.schoolId);
+    if (!session) {
+      return errors.validation(
+        'Set up an academic session, and make one of its terms current, before writing a curriculum.',
+      );
+    }
+
+    const duplicate = scoped(db.curricula, context.schoolId).some(
+      (entry) =>
+        entry.subjectId === subject.id &&
+        entry.classId === schoolClass.id &&
+        entry.sessionId === session.id,
+    );
+    if (duplicate) {
+      return errors.conflict(
+        `A ${subject.name} curriculum for ${schoolClass.name} already exists in ${session.name}.`,
+      );
+    }
+
+    const now = new Date().toISOString();
     const curriculum: Curriculum = {
       id: nextId('cur'),
       schoolId: context.schoolId,
-      name: body.name?.trim() || `${subject.name} — ${level.name}`,
+      name: body.name?.trim() || `${subject.name} — ${schoolClass.name}`,
       subjectId: subject.id,
       subjectName: subject.name,
+      classId: schoolClass.id,
+      className: schoolClass.name,
       levelId: level.id,
       levelName: level.name,
-      sessionId: null,
+      sessionId: session.id,
+      sessionName: session.name,
       description: body.description?.trim() || null,
       topicCount: 0,
       objectiveCount: 0,
       isActive: true,
+      createdById: context.user.id,
+      createdByName: context.user.displayName,
+      createdByRole: roleLabel(context),
+      createdAt: now,
+      updatedAt: now,
     };
     db.curricula.push(curriculum);
 
@@ -104,21 +204,68 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
 
     const body = (await request.json()) as Partial<Curriculum>;
     const subject = body.subjectId
-      ? db.subjects.find((entry) => entry.id === body.subjectId)
+      ? scoped(db.subjects, context.schoolId).find((entry) => entry.id === body.subjectId)
       : undefined;
-    const level = body.levelId ? db.levels.find((entry) => entry.id === body.levelId) : undefined;
+    const schoolClass = body.classId
+      ? scoped(db.classes, context.schoolId).find((entry) => entry.id === body.classId)
+      : undefined;
     if (body.subjectId && !subject) return errors.notFound('Subject');
-    if (body.levelId && !level) return errors.notFound('Level');
+    if (body.classId && !schoolClass) return errors.notFound('Class');
+
+    const nextSubjectId = subject?.id ?? curriculum.subjectId;
+    const nextClassId = schoolClass?.id ?? curriculum.classId;
+
+    if (
+      (subject || schoolClass) &&
+      !scopeAllows(academicScope(context), { classId: nextClassId, subjectId: nextSubjectId })
+    ) {
+      return errors.forbidden('You are not assigned to teach that subject in that class.');
+    }
+
+    const duplicate = scoped(db.curricula, context.schoolId).some(
+      (entry) =>
+        entry.id !== curriculum.id &&
+        entry.subjectId === nextSubjectId &&
+        entry.classId === nextClassId &&
+        entry.sessionId === curriculum.sessionId,
+    );
+    if (duplicate) {
+      return errors.conflict(
+        `A curriculum for that subject and class already exists in ${curriculum.sessionName}.`,
+      );
+    }
+
+    // The level always follows the class, so it is recomputed rather than
+    // taken from the request.
+    const level = schoolClass
+      ? db.levels.find((entry) => entry.id === schoolClass.levelId)
+      : undefined;
 
     Object.assign(curriculum, body, {
       name: body.name?.trim() || curriculum.name,
       description:
         body.description !== undefined ? body.description?.trim() || null : curriculum.description,
+      subjectId: nextSubjectId,
       subjectName: subject?.name ?? curriculum.subjectName,
+      classId: nextClassId,
+      className: schoolClass?.name ?? curriculum.className,
+      levelId: level?.id ?? curriculum.levelId,
       levelName: level?.name ?? curriculum.levelName,
+      // The session a plan was written for is fixed. Next year's plan is a new
+      // curriculum, not this one relabelled, or its coverage history would be
+      // silently reassigned to a year it does not describe.
+      sessionId: curriculum.sessionId,
+      sessionName: curriculum.sessionName,
+      // Authorship is a fact about the past; a later editor never overwrites it.
+      createdById: curriculum.createdById,
+      createdByName: curriculum.createdByName,
+      createdByRole: curriculum.createdByRole,
+      createdAt: curriculum.createdAt,
+      updatedAt: new Date().toISOString(),
     });
 
     return ok(curriculum, 'Curriculum updated');
@@ -134,6 +281,12 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    // Deleting is stricter than editing: only the author or a coordinator.
+    if (!context.can('academics.manage') && curriculum.createdById !== context.user.id) {
+      return errors.forbidden(
+        'Only the teacher who wrote this curriculum, or a coordinator, can delete it.',
+      );
+    }
 
     const hasSchemes = db.schemes.some((scheme) => scheme.curriculumId === curriculum.id);
     if (hasSchemes) {
@@ -172,6 +325,7 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
 
     const body = (await request.json()) as Partial<CurriculumTopic>;
     if (!body.title?.trim()) return errors.validation('A topic needs a title.');
@@ -202,6 +356,7 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
     const topic = db.topics.find(
       (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
     );
@@ -226,6 +381,7 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
     const topic = db.topics.find(
       (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
     );
@@ -247,6 +403,7 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
     const topic = db.topics.find(
       (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
     );
@@ -288,6 +445,7 @@ export const academicsExtraHandlers = [
         (entry) => entry.id === params.id,
       );
       if (!curriculum) return errors.notFound('Curriculum');
+      if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
       const topic = db.topics.find(
         (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
       );
@@ -321,6 +479,7 @@ export const academicsExtraHandlers = [
         (entry) => entry.id === params.id,
       );
       if (!curriculum) return errors.notFound('Curriculum');
+      if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
       const topic = db.topics.find(
         (entry) => entry.id === params.topicId && entry.curriculumId === curriculum.id,
       );
@@ -341,6 +500,10 @@ export const academicsExtraHandlers = [
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     if (!context.can('curriculum.manage')) return errors.forbidden();
+
+    const target = scoped(db.curricula, context.schoolId).find((entry) => entry.id === params.id);
+    if (!target) return errors.notFound('Curriculum');
+    if (!canEditCurriculum(context, target)) return errors.forbidden(NOT_YOURS);
 
     const body = (await request.json()) as {
       objectiveIds: string[];
@@ -379,12 +542,20 @@ export const academicsExtraHandlers = [
 
     const url = new URL(request.url);
     const curriculumId = url.searchParams.get('curriculumId');
-    const classId = url.searchParams.get('classId');
 
     const curriculum = curriculumId
-      ? db.curricula.find((entry) => entry.id === curriculumId)
+      ? scoped(db.curricula, context.schoolId).find((entry) => entry.id === curriculumId)
       : scoped(db.curricula, context.schoolId)[0];
     if (!curriculum) return errors.notFound('Curriculum');
+    if (
+      curriculum.createdById !== context.user.id &&
+      !scopeAllows(academicScope(context), {
+        classId: curriculum.classId,
+        subjectId: curriculum.subjectId,
+      })
+    ) {
+      return errors.notFound('Curriculum');
+    }
 
     const topics = db.topics.filter((topic) => topic.curriculumId === curriculum.id);
     const cells = topics.flatMap((topic) =>
@@ -401,14 +572,25 @@ export const academicsExtraHandlers = [
 
     const taughtCount = cells.filter((cell) => cell.taught).length;
     const assessedCount = cells.filter((cell) => cell.assessed).length;
-    const schoolClass = classId ? db.classes.find((entry) => entry.id === classId) : null;
-    const currentTerm = scoped(db.terms, context.schoolId).find((term) => term.isCurrent);
+    // The term reported is the current one when it falls inside this plan's
+    // session, and otherwise the plan's own last term — a 2024/2025 curriculum
+    // must not be labelled with a 2025/2026 term.
+    const terms = scoped(db.terms, context.schoolId);
+    const current = terms.find((term) => term.isCurrent);
+    const termName =
+      current?.sessionId === curriculum.sessionId
+        ? current.name
+        : (terms
+            .filter((term) => term.sessionId === curriculum.sessionId)
+            .sort((a, b) => b.sequence - a.sequence)[0]?.name ?? '');
 
     const coverage: CurriculumCoverage = {
       curriculumId: curriculum.id,
       subjectName: curriculum.subjectName,
-      className: schoolClass?.name ?? 'All classes',
-      termName: currentTerm?.name ?? '',
+      // The curriculum names its own class, so coverage can no longer be read
+      // against a class the plan was never written for.
+      className: curriculum.className,
+      termName,
       totalObjectives: cells.length,
       taughtCount,
       assessedCount,
@@ -462,15 +644,32 @@ export const academicsExtraHandlers = [
 
     const body = (await request.json()) as {
       curriculumId: string;
-      classId: string;
+      classId?: string;
       termId: string;
     };
 
-    const curriculum = db.curricula.find((entry) => entry.id === body.curriculumId);
-    const schoolClass = db.classes.find((entry) => entry.id === body.classId);
+    const curriculum = scoped(db.curricula, context.schoolId).find(
+      (entry) => entry.id === body.curriculumId,
+    );
     const term = db.terms.find((entry) => entry.id === body.termId);
-    if (!curriculum || !schoolClass || !term) {
-      return errors.validation('Choose a curriculum, class and term.');
+    if (!curriculum || !term) return errors.validation('Choose a curriculum and a term.');
+
+    // The class comes from the curriculum. A scheme for a class the plan was
+    // not written for is the bug this replaced.
+    const schoolClass = db.classes.find((entry) => entry.id === curriculum.classId);
+    if (!schoolClass) return errors.notFound('Class');
+    if (body.classId && body.classId !== schoolClass.id) {
+      return errors.validation(
+        `That curriculum is written for ${schoolClass.name}. Pick the curriculum for the class you mean.`,
+      );
+    }
+
+    // A plan written for one session cannot be spread across another session's
+    // weeks — the dates would not even be in the right year.
+    if (term.sessionId !== curriculum.sessionId) {
+      return errors.validation(
+        `That curriculum belongs to ${curriculum.sessionName}. Choose a term in that session.`,
+      );
     }
 
     // Objectives are spread across the term's actual teaching weeks rather than

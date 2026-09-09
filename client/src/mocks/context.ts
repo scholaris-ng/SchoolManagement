@@ -82,6 +82,24 @@ export function scoped<T extends { schoolId: string }>(rows: T[], schoolId: stri
 }
 
 /**
+ * The session the school is actually working in.
+ *
+ * The current *term* is the switch an administrator throws, so its session is
+ * the authoritative answer; the flag on the session itself is a mirror of that
+ * and only breaks the tie when no term is marked current at all.
+ */
+export function currentSession(schoolId: string) {
+  const term = scoped(db.terms, schoolId).find((entry) => entry.isCurrent);
+  const sessions = scoped(db.sessions, schoolId);
+  return (
+    (term && sessions.find((entry) => entry.id === term.sessionId)) ??
+    sessions.find((entry) => entry.isCurrent) ??
+    sessions[0] ??
+    null
+  );
+}
+
+/**
  * A parent or student sees only their own records. This mirrors the row-level
  * restriction the API applies on top of permission checks.
  */
@@ -93,4 +111,86 @@ export function visibleStudentIds(context: RequestContext): string[] | null {
   }
   if (context.membership.studentId) return [context.membership.studentId];
   return null; // Staff see the whole school.
+}
+
+/**
+ * Which classes and subjects a caller may be *offered*.
+ *
+ * Every picker in the app is built from `/academics/classes` and
+ * `/academics/subjects`, so narrowing them here narrows every dropdown at
+ * once. A subject teacher choosing a class to mark attendance for should see
+ * the three classes they teach, not the school's forty — an option a person
+ * cannot legitimately act on is a mistake waiting to be made.
+ *
+ * `null` on either field means "no restriction": administrators, principals,
+ * bursars and admissions officers all work across the whole school.
+ */
+export interface AcademicScope {
+  classIds: string[] | null;
+  subjectIds: string[] | null;
+}
+
+const UNRESTRICTED: AcademicScope = { classIds: null, subjectIds: null };
+
+/** Roles whose remit is their own timetable rather than the whole school. */
+const TEACHING_ONLY_ROLES = new Set(['TEACHER', 'FORM_TEACHER']);
+
+export function academicScope(context: RequestContext): AcademicScope {
+  // A student sees their own class; a parent, their children's.
+  const studentIds = visibleStudentIds(context);
+  if (studentIds) {
+    const classIds = Array.from(
+      new Set(
+        db.students
+          .filter((student) => studentIds.includes(student.id))
+          .map((student) => student.currentClassId)
+          .filter((classId): classId is string => Boolean(classId)),
+      ),
+    );
+    const levelIds = new Set(
+      db.classes.filter((entry) => classIds.includes(entry.id)).map((entry) => entry.levelId),
+    );
+    return {
+      classIds,
+      subjectIds: scoped(db.subjects, context.schoolId)
+        .filter((subject) => subject.levelIds.some((levelId) => levelIds.has(levelId)))
+        .map((subject) => subject.id),
+    };
+  }
+
+  // Anyone who may edit the academic structure necessarily works across all of
+  // it, so `academics.manage` is the line rather than the role name.
+  if (context.can('academics.manage')) return UNRESTRICTED;
+
+  const { staffId, roles } = context.membership;
+  if (!staffId) return UNRESTRICTED;
+  const teachingOnly =
+    roles.length > 0 && roles.every((role) => TEACHING_ONLY_ROLES.has(role));
+  if (!teachingOnly) return UNRESTRICTED; // Bursars, admissions officers, and so on.
+
+  const staff = db.staff.find((entry) => entry.id === staffId);
+  if (!staff) return UNRESTRICTED;
+
+  // A form teacher's own class counts even when nobody remembered to add it to
+  // the teaching list.
+  const formClassIds = scoped(db.classes, context.schoolId)
+    .filter((entry) => entry.formTeacherId === staff.id)
+    .map((entry) => entry.id);
+
+  return {
+    classIds: Array.from(new Set([...staff.classIds, ...formClassIds])),
+    subjectIds: Array.from(new Set(staff.subjectIds)),
+  };
+}
+
+/** True when `scope` permits the given class (and subject, when named). */
+export function scopeAllows(
+  scope: AcademicScope,
+  target: { classId?: string | null; subjectId?: string | null },
+): boolean {
+  if (target.classId && scope.classIds && !scope.classIds.includes(target.classId)) return false;
+  if (target.subjectId && scope.subjectIds && !scope.subjectIds.includes(target.subjectId)) {
+    return false;
+  }
+  return true;
 }

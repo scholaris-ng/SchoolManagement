@@ -59,7 +59,6 @@ export function LessonNoteFormPage() {
   const save = useSaveLessonNote(isEdit ? id : undefined);
 
   const classes = useClasses();
-  const subjects = useSubjects();
   const currentTerm = useCurrentTerm();
 
   const [draft, setDraft] = useState<NoteDraft>(emptyDraft);
@@ -103,6 +102,10 @@ export function LessonNoteFormPage() {
     setDraft((current) => ({ ...current, ...patch }));
     setDirty(true);
   };
+
+  // The subject list follows the class, so a note can never name a subject
+  // that class is not taught.
+  const subjects = useSubjects(draft.classId ? { classId: draft.classId } : {});
 
   const valid = Boolean(draft.classId && draft.subjectId && draft.topic.trim() && draft.content.trim());
 
@@ -251,10 +254,12 @@ export function LessonNoteFormPage() {
               <NativeSelect
                 id="note-subject"
                 value={draft.subjectId}
-                disabled={!editable}
+                disabled={!editable || !draft.classId}
                 onChange={(event) => update({ subjectId: event.target.value })}
               >
-                <option value="">Select a subject</option>
+                <option value="">
+                  {draft.classId ? 'Select a subject' : 'Pick a class first'}
+                </option>
                 {(subjects.data ?? []).map((subject) => (
                   <option key={subject.id} value={subject.id}>
                     {subject.name}

@@ -19,7 +19,20 @@ export interface SchemeSummary extends Omit<SchemeOfWork, 'weeks'> {
   weekCount: number;
 }
 
-export function useCurricula(query: { subjectId?: string; levelId?: string } = {}) {
+export function useCurricula(
+  query: {
+    subjectId?: string;
+    levelId?: string;
+    classId?: string;
+    /**
+     * Omit to get the school's current session, which is what almost every
+     * caller wants. Pass `'ALL'` to look across previous years.
+     */
+    sessionId?: string;
+    /** Narrows the list to one author — "written by me". */
+    createdById?: string;
+  } = {},
+) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.list(schoolId, query),
@@ -29,10 +42,13 @@ export function useCurricula(query: { subjectId?: string; levelId?: string } = {
 }
 
 /**
- * Creates or edits a curriculum — the subject-and-level shell that topics and
+ * Creates or edits a curriculum — the subject-and-class shell that topics and
  * objectives are built inside. Nothing is pre-loaded: a school defines its own
  * curricula from here before scheme generation or coverage tracking has
  * anything to work with.
+ *
+ * The server stamps the author and derives the level from the class, so
+ * neither is sent.
  */
 export function useSaveCurriculum() {
   const schoolId = useSchoolId();

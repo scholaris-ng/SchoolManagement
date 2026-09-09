@@ -1,5 +1,12 @@
 import { http, delay } from 'msw';
-import { db, findMembership, resolveContext, scoped, staffBlockReason } from '../context';
+import {
+  academicScope,
+  db,
+  findMembership,
+  resolveContext,
+  scoped,
+  staffBlockReason,
+} from '../context';
 import { created, errors, latency, noContent, ok } from '../http-helpers';
 import type {
   AcademicSession,
@@ -184,6 +191,15 @@ export const coreHandlers = [
       term.isCurrent = term.id === target.id;
       if (term.isCurrent) term.status = 'ACTIVE';
     });
+
+    // The session follows its term. Making a first-term-2026 term current
+    // moves the whole school into that session, which is what everything
+    // scoped by session — the curriculum above all — then reports on.
+    scoped(db.sessions, context.schoolId).forEach((session) => {
+      session.isCurrent = session.id === target.sessionId;
+      if (session.isCurrent && session.status === 'PLANNED') session.status = 'ACTIVE';
+    });
+
     return ok(target, 'Current term updated');
   }),
 
@@ -411,7 +427,19 @@ export const coreHandlers = [
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
-    return ok(scoped(db.levels, context.schoolId));
+
+    // Levels follow the classes the caller can see, so a JSS teacher is never
+    // offered "SSS 3" in a filter that would only ever come back empty.
+    const scope = academicScope(context);
+    const rows = scoped(db.levels, context.schoolId);
+    if (!scope.classIds) return ok(rows);
+
+    const visibleLevelIds = new Set(
+      scoped(db.classes, context.schoolId)
+        .filter((entry) => scope.classIds!.includes(entry.id))
+        .map((entry) => entry.levelId),
+    );
+    return ok(rows.filter((level) => visibleLevelIds.has(level.id)));
   }),
 
   http.post(`${base}/academics/levels`, async ({ request }) => {
@@ -458,8 +486,11 @@ export const coreHandlers = [
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     const levelId = new URL(request.url).searchParams.get('levelId');
+    const scope = academicScope(context);
     const rows = scoped(db.classes, context.schoolId).filter(
-      (schoolClass) => !levelId || schoolClass.levelId === levelId,
+      (schoolClass) =>
+        (!levelId || schoolClass.levelId === levelId) &&
+        (!scope.classIds || scope.classIds.includes(schoolClass.id)),
     );
     return ok(rows);
   }),
@@ -469,7 +500,12 @@ export const coreHandlers = [
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
     const record = scoped(db.classes, context.schoolId).find((entry) => entry.id === params.id);
-    return record ? ok(record) : errors.notFound('Class');
+    if (!record) return errors.notFound('Class');
+    // A class outside the caller's remit is "not found" rather than "forbidden":
+    // its existence is not theirs to learn.
+    const scope = academicScope(context);
+    if (scope.classIds && !scope.classIds.includes(record.id)) return errors.notFound('Class');
+    return ok(record);
   }),
 
   http.post(`${base}/academics/classes`, async ({ request }) => {
@@ -541,9 +577,19 @@ export const coreHandlers = [
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
-    const levelId = new URL(request.url).searchParams.get('levelId');
+    const url = new URL(request.url);
+    const classId = url.searchParams.get('classId');
+    // Asking for a class's subjects is asking for its level's subjects; doing
+    // the lookup here keeps every caller from having to know that.
+    const levelId =
+      url.searchParams.get('levelId') ??
+      (classId ? (db.classes.find((entry) => entry.id === classId)?.levelId ?? null) : null);
+
+    const scope = academicScope(context);
     const rows = scoped(db.subjects, context.schoolId).filter(
-      (subject) => !levelId || subject.levelIds.includes(levelId),
+      (subject) =>
+        (!levelId || subject.levelIds.includes(levelId)) &&
+        (!scope.subjectIds || scope.subjectIds.includes(subject.id)),
     );
     return ok(rows);
   }),

@@ -29,7 +29,10 @@ export function ScoreEntryPage() {
   const list = useListQuery({ filterKeys: ['classId', 'subjectId', 'termId', 'status'] });
   const sheets = useScoreSheets(list.query);
   const classes = useClasses();
-  const subjects = useSubjects();
+  // Once a class is chosen, only the subjects taught in it stay on offer.
+  const subjects = useSubjects(
+    list.filters.classId ? { classId: list.filters.classId } : {},
+  );
   const terms = useTerms();
 
   const columns = useMemo<Column<ScoreSheetSummary>[]>(

@@ -179,17 +179,18 @@ function GenerateSchemeDialog({
   generating: boolean;
 }) {
   const curricula = useCurricula();
-  const classes = useClasses();
   const terms = useTerms();
   const currentTerm = useCurrentTerm();
 
   const [curriculumId, setCurriculumId] = useState('');
-  const [classId, setClassId] = useState('');
   const [termId, setTermId] = useState('');
 
+  // The class is the curriculum's own; asking again could only produce a
+  // scheme for a class the plan was never written for.
+  const curriculum = curricula.data?.find((entry) => entry.id === curriculumId);
   const effectiveTermId = termId || currentTerm.data?.id || '';
   const term = terms.data?.find((entry) => entry.id === effectiveTermId);
-  const valid = Boolean(curriculumId && classId && effectiveTermId);
+  const valid = Boolean(curriculum && effectiveTermId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -213,31 +214,17 @@ function GenerateSchemeDialog({
               onChange={(event) => setCurriculumId(event.target.value)}
             >
               <option value="">Select a curriculum</option>
-              {(curricula.data ?? []).map((curriculum) => (
-                <option key={curriculum.id} value={curriculum.id}>
-                  {curriculum.subjectName} · {curriculum.levelName} ({curriculum.objectiveCount}{' '}
-                  objectives)
+              {(curricula.data ?? []).map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.subjectName} · {entry.className} ({entry.objectiveCount} objectives)
                 </option>
               ))}
             </NativeSelect>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="gen-class" required>
-              Class
-            </Label>
-            <NativeSelect
-              id="gen-class"
-              value={classId}
-              onChange={(event) => setClassId(event.target.value)}
-            >
-              <option value="">Select a class</option>
-              {(classes.data ?? []).map((schoolClass) => (
-                <option key={schoolClass.id} value={schoolClass.id}>
-                  {schoolClass.name}
-                </option>
-              ))}
-            </NativeSelect>
+            <p className="text-xs text-muted-foreground">
+              {curriculum
+                ? `Written by ${curriculum.createdByName} for ${curriculum.className}.`
+                : 'Each curriculum already names the class it was written for.'}
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -275,7 +262,11 @@ function GenerateSchemeDialog({
             loadingLabel="Generating…"
             disabled={!valid}
             onClick={() =>
-              void onGenerate({ curriculumId, classId, termId: effectiveTermId })
+              void onGenerate({
+                curriculumId,
+                classId: curriculum?.classId ?? '',
+                termId: effectiveTermId,
+              })
             }
           >
             Generate draft

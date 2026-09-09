@@ -8,13 +8,33 @@ export interface Curriculum {
   name: string;
   subjectId: string;
   subjectName: string;
+  /**
+   * The class this curriculum is written for. A curriculum is not an abstract
+   * syllabus here: JSS 1 Gold and JSS 1 Silver move at different speeds, so
+   * coverage only means anything once the plan belongs to one class.
+   */
+  classId: string;
+  className: string;
+  /** Derived from the class, kept denormalised so lists can group by level. */
   levelId: string;
   levelName: string;
-  sessionId?: string | null;
+  /**
+   * The academic session this plan was written for. A syllabus is rewritten
+   * year on year, so last year's plan must not keep answering for this one:
+   * the list follows whichever session the school has made current.
+   */
+  sessionId: string;
+  sessionName: string;
   description?: string | null;
   topicCount: number;
   objectiveCount: number;
   isActive: boolean;
+  /** Who wrote it — a head teacher needs this before approving anything. */
+  createdById: string;
+  createdByName: string;
+  createdByRole: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CurriculumTopic {

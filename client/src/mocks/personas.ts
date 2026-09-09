@@ -135,7 +135,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
   TEACHER: [
     'academics.read', 'student.read', 'guardian.read',
     'attendance.read', 'attendance.manage',
-    'curriculum.read', 'scheme.read', 'scheme.manage',
+    // A teacher writes the curriculum for the classes they actually teach; the
+    // API narrows that to their own assignment and their own authorship.
+    'curriculum.read', 'curriculum.manage', 'scheme.read', 'scheme.manage',
     'lessonnote.read', 'lessonnote.manage', 'timetable.read', 'calendar.read',
     'cbt.read', 'cbt.manage', 'question.manage',
     'result.read', 'result.enter', 'reportcard.read',
@@ -146,7 +148,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
   FORM_TEACHER: [
     'academics.read', 'student.read', 'guardian.read',
     'attendance.read', 'attendance.manage',
-    'curriculum.read', 'scheme.read', 'scheme.manage',
+    // A teacher writes the curriculum for the classes they actually teach; the
+    // API narrows that to their own assignment and their own authorship.
+    'curriculum.read', 'curriculum.manage', 'scheme.read', 'scheme.manage',
     'lessonnote.read', 'lessonnote.manage', 'timetable.read', 'calendar.read',
     'cbt.read', 'cbt.manage', 'question.manage',
     'result.read', 'result.enter', 'reportcard.read', 'reportcard.generate',

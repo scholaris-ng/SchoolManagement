@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   BookOpen,
+  CalendarRange,
   Check,
   ChevronDown,
   ClipboardCheck,
@@ -10,12 +11,13 @@ import {
   Plus,
   Target,
   Trash2,
+  UserRound,
+  Users,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, formatPercent } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useClasses } from '@/features/academics/api';
 import {
   useCurricula,
   useCurriculumCoverage,
@@ -71,14 +73,12 @@ const BLOOM_LEVELS = [
  */
 export function CurriculumDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { can } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const classId = searchParams.get('classId') ?? '';
+  const { can, user } = useAuth();
 
-  const curricula = useCurricula();
+  // Looked up by id, so this must not be narrowed to the current session — a
+  // link to last year's plan has to keep opening it.
+  const curricula = useCurricula({ sessionId: 'ALL' });
   const topics = useCurriculumTopics(id);
-  const coverage = useCurriculumCoverage({ curriculumId: id, classId: classId || undefined });
-  const classes = useClasses();
   const markCoverage = useMarkObjectiveCoverage(id ?? '');
   const saveTopic = useSaveTopic(id ?? '');
   const deleteTopic = useDeleteTopic(id ?? '');
@@ -102,6 +102,13 @@ export function CurriculumDetailPage() {
   } | null>(null);
 
   const curriculum = curricula.data?.find((entry) => entry.id === id);
+  // Coverage is read for the class the curriculum was written for; there is no
+  // longer a second, contradictable answer to "which class?".
+  const coverage = useCurriculumCoverage({ curriculumId: id });
+
+  const isMine = Boolean(curriculum && curriculum.createdById === user?.id);
+  // The list a teacher receives is already narrowed to what they teach or
+  // wrote, so anything reachable here is theirs to maintain.
   const canManage = can('curriculum.manage');
 
   const allObjectiveIds = useMemo(
@@ -155,46 +162,43 @@ export function CurriculumDetailPage() {
   return (
     <PageContainer>
       <PageHeader
-        title={curriculum ? `${curriculum.subjectName} · ${curriculum.levelName}` : 'Curriculum'}
+        title={curriculum ? `${curriculum.subjectName} · ${curriculum.className}` : 'Curriculum'}
         description={curriculum?.description ?? 'Topics and the objectives beneath them.'}
         breadcrumbs={[
           { label: 'Curriculum', to: '/curriculum' },
           { label: curriculum?.subjectName ?? 'Curriculum' },
         ]}
         actions={
-          <div className="flex items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="coverage-class" className="text-xs">
-                Coverage for
-              </Label>
-              <NativeSelect
-                id="coverage-class"
-                value={classId}
-                onChange={(event) =>
-                  setSearchParams(
-                    event.target.value ? { classId: event.target.value } : {},
-                    { replace: true },
-                  )
-                }
-                className="w-auto"
-              >
-                <option value="">All classes</option>
-                {(classes.data ?? []).map((schoolClass) => (
-                  <option key={schoolClass.id} value={schoolClass.id}>
-                    {schoolClass.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            {canManage && (
-              <Button onClick={() => setTopicDialog({ open: true })}>
-                <Plus />
-                Add topic
-              </Button>
-            )}
-          </div>
+          canManage && (
+            <Button onClick={() => setTopicDialog({ open: true })}>
+              <Plus />
+              Add topic
+            </Button>
+          )
         }
       />
+
+      {curriculum && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <span className="flex items-center gap-1.5">
+            <Users className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="font-medium">{curriculum.className}</span>
+            <span className="text-muted-foreground">({curriculum.levelName})</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <CalendarRange className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="font-medium">{curriculum.sessionName}</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <UserRound className="size-4" aria-hidden="true" />
+            Written by{' '}
+            <span className="font-medium text-foreground">{curriculum.createdByName}</span>
+            <span>· {curriculum.createdByRole}</span>
+            <span>· {formatDate(curriculum.createdAt)}</span>
+          </span>
+          {isMine && <Badge tone="success">Yours</Badge>}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

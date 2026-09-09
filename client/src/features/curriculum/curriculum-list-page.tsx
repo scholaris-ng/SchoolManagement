@@ -1,14 +1,21 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Pencil, Plus, Target, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Pencil, Plus, Target, Trash2, UserRound } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useLevels, useSubjects } from '@/features/academics/api';
+import {
+  useAcademicSessions,
+  useClasses,
+  useLevels,
+  useSubjects,
+} from '@/features/academics/api';
 import { useCurricula, useDeleteCurriculum, useSaveCurriculum } from './api';
 import type { Curriculum } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
+import { formatDate } from '@/lib/format';
 import { FilterBar } from '@/components/data/filter-bar';
 import {
+  Badge,
   Card,
   CardContent,
   CardDescription,
@@ -27,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Alert, EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 
 /**
  * Every curriculum the school has defined, one card each.
@@ -36,17 +43,41 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
  * been taught — so it is on the card rather than two clicks away.
  */
 export function CurriculumListPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const subjectId = searchParams.get('subjectId') ?? undefined;
   const levelId = searchParams.get('levelId') ?? undefined;
+  const classId = searchParams.get('classId') ?? undefined;
+  const mineOnly = searchParams.get('mine') === '1';
+  // No session in the URL means the school's current one, chosen by the server.
+  const sessionId = searchParams.get('sessionId') ?? undefined;
 
-  const curricula = useCurricula({ subjectId, levelId });
+  const curricula = useCurricula({
+    subjectId,
+    levelId,
+    classId,
+    sessionId,
+    createdById: mineOnly ? (user?.id ?? undefined) : undefined,
+  });
   const subjects = useSubjects();
   const levels = useLevels();
+  // Only the classes this user teaches, so the filter never offers a class
+  // whose curriculum they could not open anyway.
+  const classes = useClasses({ levelId });
+  const sessions = useAcademicSessions();
   const deleteCurriculum = useDeleteCurriculum();
 
+  const currentSession = sessions.data?.find((session) => session.isCurrent);
+  const shownSession = sessionId
+    ? sessions.data?.find((session) => session.id === sessionId)
+    : currentSession;
+  const viewingPastSession = Boolean(
+    sessionId && sessionId !== 'ALL' && sessionId !== currentSession?.id,
+  );
+
   const canManage = can('curriculum.manage');
+  const canManageAcademics = can('academics.manage');
+  const isFiltered = Boolean(subjectId || levelId || classId || mineOnly || sessionId);
   const [curriculumDialog, setCurriculumDialog] = useState<{
     open: boolean;
     curriculum?: Curriculum;
@@ -69,7 +100,11 @@ export function CurriculumListPage() {
     <PageContainer>
       <PageHeader
         title="Curriculum"
-        description="Subjects broken down into topics and the individual objectives a child is expected to master."
+        description={
+          sessionId === 'ALL'
+            ? 'Every session the school has planned, from the topics down to the individual objectives.'
+            : `Subjects broken down into topics and objectives, for ${shownSession?.name ?? 'the current session'}.`
+        }
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Curriculum' }]}
         actions={
           canManage && (
@@ -81,11 +116,29 @@ export function CurriculumListPage() {
         }
       />
 
+      {viewingPastSession && (
+        <Alert tone="info">
+          Showing {shownSession?.name ?? 'another session'}. A new curriculum is always written for{' '}
+          {currentSession?.name ?? 'the current session'}, the session the school is working in.
+        </Alert>
+      )}
+
       <FilterBar
-        values={{ subjectId, levelId }}
+        values={{ subjectId, levelId, classId, sessionId }}
         onFilterChange={setFilter}
-        onReset={subjectId || levelId ? () => setSearchParams({}, { replace: true }) : undefined}
+        onReset={isFiltered ? () => setSearchParams({}, { replace: true }) : undefined}
         filters={[
+          {
+            key: 'sessionId',
+            label: 'Session',
+            allLabel: currentSession ? `${currentSession.name} (current)` : 'Current session',
+            options: [
+              ...(sessions.data ?? [])
+                .filter((session) => !session.isCurrent)
+                .map((session) => ({ value: session.id, label: session.name })),
+              { value: 'ALL', label: 'Every session' },
+            ],
+          },
           {
             key: 'subjectId',
             label: 'Subject',
@@ -99,8 +152,27 @@ export function CurriculumListPage() {
             label: 'Level',
             options: (levels.data ?? []).map((level) => ({ value: level.id, label: level.name })),
           },
+          {
+            key: 'classId',
+            label: 'Class',
+            options: (classes.data ?? []).map((schoolClass) => ({
+              value: schoolClass.id,
+              label: schoolClass.name,
+            })),
+          },
         ]}
-      />
+      >
+        <Button
+          variant={mineOnly ? 'primary' : 'outline'}
+          size="sm"
+          className="h-9"
+          aria-pressed={mineOnly}
+          onClick={() => setFilter('mine', mineOnly ? undefined : '1')}
+        >
+          <UserRound />
+          Written by me
+        </Button>
+      </FilterBar>
 
       {curricula.isPending ? (
         <LoadingState label="Loading curricula…" />
@@ -110,8 +182,8 @@ export function CurriculumListPage() {
         <Card>
           <EmptyState
             icon={<Target />}
-            title="No curriculum defined yet"
-            description="A curriculum links a subject and a level to the topics and objectives it covers. It is what makes coverage reporting and scheme generation possible."
+            title={isFiltered ? 'No curriculum matches those filters' : 'No curriculum defined yet'}
+            description="A curriculum ties one subject, for one class, to the topics and objectives it covers. It is what makes coverage reporting and scheme generation possible."
             action={
               canManage ? (
                 <Button onClick={() => setCurriculumDialog({ open: true })}>
@@ -125,45 +197,58 @@ export function CurriculumListPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {curricula.data?.map((curriculum) => {
-            // Coverage is reported per class; the card shows the shape of the
-            // curriculum itself, and the detail page resolves it per class.
             const objectiveDensity =
               curriculum.topicCount === 0
                 ? 0
                 : curriculum.objectiveCount / curriculum.topicCount;
+            // The list is already narrowed to what this user teaches or wrote,
+            // so anything shown is theirs to maintain. Deleting is stricter:
+            // only the author, or a coordinator.
+            const isMine = curriculum.createdById === user?.id;
+            const canEdit = canManage;
+            const canDelete = canManageAcademics || isMine;
             return (
               <Card key={curriculum.id} className="flex flex-col">
                 <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
                   <div className="min-w-0">
                     <CardTitle className="truncate">{curriculum.subjectName}</CardTitle>
-                    <CardDescription>
-                      {curriculum.levelName}
-                      {curriculum.name !== curriculum.subjectName ? ` · ${curriculum.name}` : ''}
+                    <CardDescription className="truncate">
+                      {curriculum.className} · {curriculum.levelName}
                     </CardDescription>
                   </div>
-                  {canManage && (
+                  {canEdit && (
                     <div className="flex shrink-0 gap-1">
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Edit ${curriculum.subjectName}`}
+                        aria-label={`Edit ${curriculum.subjectName} for ${curriculum.className}`}
                         onClick={() => setCurriculumDialog({ open: true, curriculum })}
                       >
                         <Pencil />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-danger hover:text-danger"
-                        aria-label={`Delete ${curriculum.subjectName}`}
-                        onClick={() => setPendingDelete(curriculum)}
-                      >
-                        <Trash2 />
-                      </Button>
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-danger hover:text-danger"
+                          aria-label={`Delete ${curriculum.subjectName} for ${curriculum.className}`}
+                          onClick={() => setPendingDelete(curriculum)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone="primary">{curriculum.className}</Badge>
+                    <Badge tone={curriculum.sessionId === currentSession?.id ? 'neutral' : 'warning'}>
+                      {curriculum.sessionName}
+                    </Badge>
+                    {isMine && <Badge tone="success">Yours</Badge>}
+                  </div>
+
                   {curriculum.description && (
                     <p className="line-clamp-2 text-sm text-muted-foreground">
                       {curriculum.description}
@@ -189,6 +274,13 @@ export function CurriculumListPage() {
                     About {objectiveDensity.toFixed(1)} objectives per topic
                   </p>
 
+                  <p className="text-xs text-muted-foreground">
+                    Written by{' '}
+                    <span className="font-medium text-foreground">{curriculum.createdByName}</span>{' '}
+                    ({curriculum.createdByRole.toLowerCase()}) on{' '}
+                    {formatDate(curriculum.createdAt)}
+                  </p>
+
                   <div className="mt-auto pt-2">
                     <Button variant="outline" block asChild>
                       <Link to={`/curriculum/${curriculum.id}`}>
@@ -207,8 +299,6 @@ export function CurriculumListPage() {
       <CurriculumDialog
         key={curriculumDialog.curriculum?.id ?? 'new-curriculum'}
         state={curriculumDialog}
-        subjects={subjects.data ?? []}
-        levels={levels.data ?? []}
         onClose={() => setCurriculumDialog({ open: false })}
       />
 
@@ -216,7 +306,7 @@ export function CurriculumListPage() {
         open={Boolean(pendingDelete)}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title="Delete this curriculum?"
-        description={`"${pendingDelete?.subjectName} · ${pendingDelete?.levelName}" and all of its topics and objectives will be permanently removed. This cannot be undone if any coverage has been recorded against it.`}
+        description={`"${pendingDelete?.subjectName} · ${pendingDelete?.className}" and all of its topics and objectives will be permanently removed. This cannot be undone if any coverage has been recorded against it.`}
         confirmLabel="Delete"
         tone="danger"
         loading={deleteCurriculum.isPending}
@@ -231,22 +321,34 @@ export function CurriculumListPage() {
 
 function CurriculumDialog({
   state,
-  subjects,
-  levels,
   onClose,
 }: {
   state: { open: boolean; curriculum?: Curriculum };
-  subjects: { id: string; name: string }[];
-  levels: { id: string; name: string }[];
   onClose: () => void;
 }) {
   const save = useSaveCurriculum();
-  const [subjectId, setSubjectId] = useState(state.curriculum?.subjectId ?? subjects[0]?.id ?? '');
-  const [levelId, setLevelId] = useState(state.curriculum?.levelId ?? levels[0]?.id ?? '');
+  const [classId, setClassId] = useState(state.curriculum?.classId ?? '');
+  const [subjectId, setSubjectId] = useState(state.curriculum?.subjectId ?? '');
   const [name, setName] = useState(state.curriculum?.name ?? '');
   const [description, setDescription] = useState(state.curriculum?.description ?? '');
 
-  const valid = Boolean(subjectId && levelId);
+  // Only the classes this user teaches, and then only the subjects taught at
+  // that class's level — so the pair on offer is always a pair that exists.
+  const classes = useClasses();
+  const subjects = useSubjects(classId ? { classId } : {});
+  const sessions = useAcademicSessions();
+  const session = sessions.data?.find((entry) => entry.isCurrent);
+
+  const classOptions = classes.data ?? [];
+  const subjectOptions = subjects.data ?? [];
+  const selectedClass = classOptions.find((entry) => entry.id === classId);
+
+  // A class change can strand the chosen subject; drop it rather than submit a
+  // combination the server will reject.
+  const subjectStillOffered = subjectOptions.some((subject) => subject.id === subjectId);
+  const effectiveSubjectId = subjectStillOffered ? subjectId : '';
+
+  const valid = Boolean(classId && effectiveSubjectId);
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -257,36 +359,51 @@ function CurriculumDialog({
         <DialogBody className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
+              <Label htmlFor="curriculum-class" required>
+                Class
+              </Label>
+              <NativeSelect
+                id="curriculum-class"
+                value={classId}
+                onChange={(event) => setClassId(event.target.value)}
+              >
+                <option value="">Select a class</option>
+                {classOptions.map((schoolClass) => (
+                  <option key={schoolClass.id} value={schoolClass.id}>
+                    {schoolClass.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">
+                {selectedClass
+                  ? `Level: ${selectedClass.levelName}`
+                  : 'The level follows the class you pick.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="curriculum-subject" required>
                 Subject
               </Label>
               <NativeSelect
                 id="curriculum-subject"
-                value={subjectId}
+                value={effectiveSubjectId}
+                disabled={!classId || subjects.isPending}
                 onChange={(event) => setSubjectId(event.target.value)}
               >
-                {subjects.map((subject) => (
+                <option value="">
+                  {classId ? 'Select a subject' : 'Pick a class first'}
+                </option>
+                {subjectOptions.map((subject) => (
                   <option key={subject.id} value={subject.id}>
                     {subject.name}
                   </option>
                 ))}
               </NativeSelect>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="curriculum-level" required>
-                Level
-              </Label>
-              <NativeSelect
-                id="curriculum-level"
-                value={levelId}
-                onChange={(event) => setLevelId(event.target.value)}
-              >
-                {levels.map((level) => (
-                  <option key={level.id} value={level.id}>
-                    {level.name}
-                  </option>
-                ))}
-              </NativeSelect>
+              {classId && !subjects.isPending && subjectOptions.length === 0 && (
+                <p className="text-xs text-danger">
+                  You are not assigned any subject in this class.
+                </p>
+              )}
             </div>
           </div>
           <div className="space-y-1.5">
@@ -295,7 +412,7 @@ function CurriculumDialog({
               id="curriculum-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Defaults to the subject and level"
+              placeholder="Defaults to the subject and class"
             />
           </div>
           <div className="space-y-1.5">
@@ -307,6 +424,14 @@ function CurriculumDialog({
               placeholder="What this curriculum covers"
             />
           </div>
+
+          {/* The session is the school's current one, not a choice: writing
+              next year's plan starts by making next year current. */}
+          <Alert tone="info">
+            {state.curriculum
+              ? `This curriculum belongs to ${state.curriculum.sessionName}. Its session cannot be changed.`
+              : `It will be filed under ${session?.name ?? 'the current session'}, the session this school is working in.`}
+          </Alert>
         </DialogBody>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -320,8 +445,8 @@ function CurriculumDialog({
                 .mutateAsync({
                   id: state.curriculum?.id,
                   values: {
-                    subjectId,
-                    levelId,
+                    subjectId: effectiveSubjectId,
+                    classId,
                     name: name.trim() || undefined,
                     description: description.trim() || null,
                   },

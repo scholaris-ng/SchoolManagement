@@ -17,8 +17,10 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useTheme, type ThemeMode } from '@/app/providers/theme-provider';
 import { QUICK_ACTIONS } from '@/app/navigation';
+import { useCurrentTerm } from '@/features/academics/api';
 import { Avatar } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { CurrentTermBadge } from './current-term-badge';
 import { SyncIndicator } from './sync-indicator';
 import { NotificationBell } from '@/features/notifications/notification-bell';
 import { CommandPalette } from './command-palette';
@@ -31,6 +33,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
   const navigate = useNavigate();
   const { user, membership, signOut, can } = useAuth();
   const { mode, setMode } = useTheme();
+  const { data: currentTerm } = useCurrentTerm();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const quickActions = QUICK_ACTIONS.filter((action) => !action.require || can(action.require));
@@ -61,6 +64,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
         </button>
 
         <div className="ml-auto flex items-center gap-1">
+          <CurrentTermBadge />
           <SyncIndicator />
 
           {quickActions.length > 0 && (
@@ -116,6 +120,13 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   {membership && (
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {membership.schoolName}
+                    </p>
+                  )}
+                  {/* The top-bar badge is hidden on a phone; this is where a
+                      mobile user finds the same answer. */}
+                  {currentTerm && (
+                    <p className="mt-1 truncate text-xs text-muted-foreground sm:hidden">
+                      {currentTerm.name} · {currentTerm.sessionName}
                     </p>
                   )}
                 </div>

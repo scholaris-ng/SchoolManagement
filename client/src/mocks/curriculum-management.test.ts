@@ -3,9 +3,9 @@ import { setupServer } from 'msw/node';
 import { handlers } from './handlers';
 
 /**
- * CRUD for curricula, topics and objectives — the mock-API surface the admin
- * UI needs since none of this was previously anything but seeded, read-only
- * data.
+ * CRUD for curricula, topics and objectives, plus the two rules that make the
+ * screen safe to hand to a teacher: a curriculum belongs to one class, and it
+ * records who wrote it.
  */
 const BASE = `${location.origin}/api/v1`;
 
@@ -38,15 +38,35 @@ async function call<T>(
 
 const ADMIN = 'admin@brightfield.edu.ng';
 const TEACHER = 'teacher@brightfield.edu.ng';
+const BURSAR = 'bursar@brightfield.edu.ng';
 
 interface CurriculumRow {
   id: string;
   subjectId: string;
+  classId: string;
+  className: string;
   levelId: string;
-  subjectName: string;
   levelName: string;
+  subjectName: string;
   topicCount: number;
   objectiveCount: number;
+  createdById: string;
+  createdByName: string;
+  createdByRole: string;
+  createdAt: string;
+  sessionId: string;
+  sessionName: string;
+}
+interface SessionRow {
+  id: string;
+  name: string;
+  isCurrent: boolean;
+}
+interface TermRow {
+  id: string;
+  name: string;
+  sessionId: string;
+  isCurrent: boolean;
 }
 interface TopicRow {
   id: string;
@@ -57,39 +77,53 @@ interface TopicRow {
 }
 interface SubjectRow {
   id: string;
+  levelIds: string[];
 }
-interface LevelRow {
+interface ClassRow {
   id: string;
+  levelId: string;
 }
 
 describe('curriculum management', () => {
-  async function pickSubjectAndLevel(): Promise<{ subjectId: string; levelId: string }> {
-    const subjects = await call<SubjectRow[]>('GET', '/academics/subjects', as(ADMIN));
-    const levels = await call<LevelRow[]>('GET', '/academics/levels', as(ADMIN));
-    const existing = await call<CurriculumRow[]>('GET', '/curricula', as(ADMIN));
-    const taken = new Set(existing.data.map((c) => `${c.subjectId}:${c.levelId}`));
-    for (const subject of subjects.data) {
-      for (const level of levels.data) {
-        if (!taken.has(`${subject.id}:${level.id}`)) {
-          return { subjectId: subject.id, levelId: level.id };
+  /** A subject/class pair that has no curriculum yet, from the admin's full view. */
+  async function pickFreePair(
+    email = ADMIN,
+  ): Promise<{ subjectId: string; classId: string }> {
+    const [classes, subjects, existing] = await Promise.all([
+      call<ClassRow[]>('GET', '/academics/classes', as(email)),
+      call<SubjectRow[]>('GET', '/academics/subjects', as(email)),
+      call<CurriculumRow[]>('GET', '/curricula', as(email)),
+    ]);
+    const taken = new Set(existing.data.map((c) => `${c.subjectId}:${c.classId}`));
+
+    for (const schoolClass of classes.data) {
+      for (const subject of subjects.data) {
+        if (!subject.levelIds.includes(schoolClass.levelId)) continue;
+        if (!taken.has(`${subject.id}:${schoolClass.id}`)) {
+          return { subjectId: subject.id, classId: schoolClass.id };
         }
       }
     }
-    throw new Error('No free subject/level combination for a new curriculum');
+    throw new Error('No free subject/class combination for a new curriculum');
   }
 
-  it('creates, edits and deletes a curriculum', async () => {
-    const { subjectId, levelId } = await pickSubjectAndLevel();
+  it('creates, edits and deletes a curriculum for one class', async () => {
+    const { subjectId, classId } = await pickFreePair();
 
-    const createRes = await call<CurriculumRow>(
-      'POST',
-      '/curricula',
-      as(ADMIN),
-      { subjectId, levelId, description: 'A brand new curriculum' },
-    );
+    const createRes = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId,
+      classId,
+      description: 'A brand new curriculum',
+    });
     expect(createRes.status).toBe(201);
     expect(createRes.data.topicCount).toBe(0);
     expect(createRes.data.objectiveCount).toBe(0);
+    expect(createRes.data.classId).toBe(classId);
+
+    // The level is never sent — it is derived from the class.
+    const classes = await call<ClassRow[]>('GET', '/academics/classes', as(ADMIN));
+    const targetClass = classes.data.find((entry) => entry.id === classId)!;
+    expect(createRes.data.levelId).toBe(targetClass.levelId);
 
     const editRes = await call<CurriculumRow>(
       'PATCH',
@@ -109,27 +143,69 @@ describe('curriculum management', () => {
     expect(listAfter.data.some((c) => c.id === createRes.data.id)).toBe(false);
   });
 
-  it('refuses a duplicate curriculum for the same subject and level', async () => {
+  it('records who wrote a curriculum, and never lets an edit rewrite that', async () => {
+    const { subjectId, classId } = await pickFreePair();
+    const created = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId,
+      classId,
+    });
+
+    expect(created.data.createdById).toBe(`user_${ADMIN}`);
+    expect(created.data.createdByName).toBe('Adaeze Okonkwo');
+    expect(created.data.createdByRole).toBe('School admin');
+    expect(created.data.createdAt).toBeTruthy();
+
+    const edited = await call<CurriculumRow>(
+      'PATCH',
+      `/curricula/${created.data.id}`,
+      as(ADMIN),
+      { createdByName: 'Somebody Else', createdById: 'user_forged' },
+    );
+    expect(edited.data.createdByName).toBe('Adaeze Okonkwo');
+    expect(edited.data.createdById).toBe(`user_${ADMIN}`);
+
+    await call('DELETE', `/curricula/${created.data.id}`, as(ADMIN));
+  });
+
+  it('refuses a second curriculum for the same subject and class', async () => {
     const existing = await call<CurriculumRow[]>('GET', '/curricula', as(ADMIN));
     const first = existing.data[0];
 
-    const duplicate = await call(
-      'POST',
-      '/curricula',
-      as(ADMIN),
-      { subjectId: first.subjectId, levelId: first.levelId },
-    );
+    const duplicate = await call('POST', '/curricula', as(ADMIN), {
+      subjectId: first.subjectId,
+      classId: first.classId,
+    });
     expect(duplicate.status).toBe(409);
   });
 
-  it('manages topics and objectives, keeping the curriculum counts in sync', async () => {
-    const { subjectId, levelId } = await pickSubjectAndLevel();
-    const curriculum = await call<CurriculumRow>(
-      'POST',
-      '/curricula',
-      as(ADMIN),
-      { subjectId, levelId },
+  it('allows two curricula for the same subject at different classes', async () => {
+    const classes = await call<ClassRow[]>('GET', '/academics/classes', as(ADMIN));
+    const existing = await call<CurriculumRow[]>('GET', '/curricula', as(ADMIN));
+    const first = existing.data[0];
+
+    // Another class at the same level, so the subject is certainly taught there.
+    const sibling = classes.data.find(
+      (entry) => entry.levelId === first.levelId && entry.id !== first.classId,
     );
+    const taken = new Set(existing.data.map((c) => `${c.subjectId}:${c.classId}`));
+    if (!sibling || taken.has(`${first.subjectId}:${sibling.id}`)) return;
+
+    const second = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId: first.subjectId,
+      classId: sibling.id,
+    });
+    expect(second.status).toBe(201);
+    expect(second.data.classId).toBe(sibling.id);
+
+    await call('DELETE', `/curricula/${second.data.id}`, as(ADMIN));
+  });
+
+  it('manages topics and objectives, keeping the curriculum counts in sync', async () => {
+    const { subjectId, classId } = await pickFreePair();
+    const curriculum = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId,
+      classId,
+    });
     const curriculumId = curriculum.data.id;
 
     const topic = await call<TopicRow>(
@@ -200,7 +276,10 @@ describe('curriculum management', () => {
       (c) => c.id === curriculumId,
     )!;
     expect(curriculumRow.topicCount).toBe(0);
-  });
+
+    await call('DELETE', `/curricula/${curriculumId}`, as(ADMIN));
+    // A dozen round trips against a mock API that simulates latency on purpose.
+  }, 20_000);
 
   it('blocks deleting a curriculum that has schemes of work built from it', async () => {
     const schemes = await call<{ items: { curriculumId: string }[] }>(
@@ -215,9 +294,153 @@ describe('curriculum management', () => {
     expect(deleteRes.status).toBe(409);
   });
 
-  it('refuses a teacher without curriculum.manage from creating a curriculum', async () => {
-    const { subjectId, levelId } = await pickSubjectAndLevel();
-    const res = await call('POST', '/curricula', as(TEACHER), { subjectId, levelId });
+  it('lets a teacher write a curriculum for a class they teach', async () => {
+    const { subjectId, classId } = await pickFreePair(TEACHER);
+
+    const res = await call<CurriculumRow>('POST', '/curricula', as(TEACHER), {
+      subjectId,
+      classId,
+    });
+    expect(res.status).toBe(201);
+    expect(res.data.createdById).toBe(`user_${TEACHER}`);
+    expect(res.data.createdByName).toBe('Funmilayo Adeyemi');
+
+    // Their own work comes back in their own list.
+    const mine = await call<CurriculumRow[]>(
+      'GET',
+      `/curricula?createdById=user_${TEACHER}`,
+      as(TEACHER),
+    );
+    expect(mine.data.some((c) => c.id === res.data.id)).toBe(true);
+
+    await call('DELETE', `/curricula/${res.data.id}`, as(TEACHER));
+  });
+
+  it('refuses a teacher a class they are not assigned to', async () => {
+    const allClasses = await call<ClassRow[]>('GET', '/academics/classes', as(ADMIN));
+    const mineClasses = await call<ClassRow[]>('GET', '/academics/classes', as(TEACHER));
+    const mineIds = new Set(mineClasses.data.map((entry) => entry.id));
+
+    // The teacher's own picker never offered this class in the first place.
+    const foreign = allClasses.data.find((entry) => !mineIds.has(entry.id));
+    expect(foreign).toBeTruthy();
+
+    const subjects = await call<SubjectRow[]>('GET', '/academics/subjects', as(TEACHER));
+    const res = await call('POST', '/curricula', as(TEACHER), {
+      subjectId: subjects.data[0].id,
+      classId: foreign!.id,
+    });
     expect(res.status).toBe(403);
+  });
+
+  it('refuses a bursar, who has no curriculum permission at all', async () => {
+    const { subjectId, classId } = await pickFreePair();
+    const res = await call('POST', '/curricula', as(BURSAR), { subjectId, classId });
+    expect(res.status).toBe(403);
+  });
+
+  it('files a new curriculum under the session the school is currently in', async () => {
+    const sessions = await call<SessionRow[]>('GET', '/academics/sessions', as(ADMIN));
+    const current = sessions.data.find((session) => session.isCurrent)!;
+
+    const { subjectId, classId } = await pickFreePair();
+    const res = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId,
+      classId,
+    });
+    expect(res.data.sessionId).toBe(current.id);
+    expect(res.data.sessionName).toBe(current.name);
+
+    // An edit cannot move it into another year.
+    const other = sessions.data.find((session) => !session.isCurrent);
+    if (other) {
+      const edited = await call<CurriculumRow>(
+        'PATCH',
+        `/curricula/${res.data.id}`,
+        as(ADMIN),
+        { sessionId: other.id, sessionName: other.name },
+      );
+      expect(edited.data.sessionId).toBe(current.id);
+    }
+
+    await call('DELETE', `/curricula/${res.data.id}`, as(ADMIN));
+  }, 20_000);
+
+  it('follows the session when the admin makes another term current', async () => {
+    const [sessionsBefore, terms] = await Promise.all([
+      call<SessionRow[]>('GET', '/academics/sessions', as(ADMIN)),
+      call<TermRow[]>('GET', '/academics/terms', as(ADMIN)),
+    ]);
+    const startingSession = sessionsBefore.data.find((session) => session.isCurrent)!;
+    const startingTerm = terms.data.find((term) => term.isCurrent)!;
+
+    const otherTerm = terms.data.find((term) => term.sessionId !== startingSession.id);
+    expect(otherTerm).toBeTruthy();
+
+    // Everything the school has planned so far sits in the starting session.
+    const before = await call<CurriculumRow[]>('GET', '/curricula', as(ADMIN));
+    expect(before.data.length).toBeGreaterThan(0);
+    for (const row of before.data) expect(row.sessionId).toBe(startingSession.id);
+
+    await call('POST', `/academics/terms/${otherTerm!.id}/set-current`, as(ADMIN));
+
+    // The session flag moved with the term.
+    const sessionsAfter = await call<SessionRow[]>('GET', '/academics/sessions', as(ADMIN));
+    expect(sessionsAfter.data.find((session) => session.isCurrent)?.id).toBe(
+      otherTerm!.sessionId,
+    );
+
+    // And the default curriculum list is now that session's, which is empty.
+    const after = await call<CurriculumRow[]>('GET', '/curricula', as(ADMIN));
+    expect(after.data).toHaveLength(0);
+
+    // The earlier year is still reachable on purpose.
+    const everything = await call<CurriculumRow[]>('GET', '/curricula?sessionId=ALL', as(ADMIN));
+    expect(everything.data.length).toBe(before.data.length);
+
+    // A curriculum written now belongs to the new session, even for a subject
+    // and class that already had one last year.
+    const previous = before.data[0];
+    const fresh = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId: previous.subjectId,
+      classId: previous.classId,
+    });
+    expect(fresh.status).toBe(201);
+    expect(fresh.data.sessionId).toBe(otherTerm!.sessionId);
+
+    await call('DELETE', `/curricula/${fresh.data.id}`, as(ADMIN));
+    await call('POST', `/academics/terms/${startingTerm.id}/set-current`, as(ADMIN));
+  }, 30_000);
+
+  it('refuses to spread a curriculum across another session’s weeks', async () => {
+    const [curricula, terms] = await Promise.all([
+      call<CurriculumRow[]>('GET', '/curricula', as(ADMIN)),
+      call<TermRow[]>('GET', '/academics/terms', as(ADMIN)),
+    ]);
+    const curriculum = curricula.data[0];
+    const foreignTerm = terms.data.find((term) => term.sessionId !== curriculum.sessionId);
+    if (!foreignTerm) return;
+
+    const res = await call('POST', '/schemes/generate', as(ADMIN), {
+      curriculumId: curriculum.id,
+      termId: foreignTerm.id,
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it('lets a coordinator delete a curriculum a teacher wrote', async () => {
+    const { subjectId, classId } = await pickFreePair(TEACHER);
+    const mine = await call<CurriculumRow>('POST', '/curricula', as(TEACHER), {
+      subjectId,
+      classId,
+    });
+
+    // The principal wrote none of these, but coordinates all of them.
+    const asPrincipal = await call(
+      'DELETE',
+      `/curricula/${mine.data.id}`,
+      as('principal@brightfield.edu.ng'),
+    );
+    expect(asPrincipal.status).toBe(204);
   });
 });
