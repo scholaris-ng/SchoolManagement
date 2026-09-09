@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Save, Send, ShieldCheck, Trash2, Undo2 } from 'lucide-react';
 import { formatDateTime, toDateInputValue } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useClasses, useCurrentTerm, useSubjects } from '@/features/academics/api';
-import { useDeleteLessonNote, useLessonNote, useSaveLessonNote } from './api';
+import { useDeleteLessonNote, useLessonNote, useSaveLessonNote, useScheme, useSchemes } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, CardHeader, CardTitle, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -15,40 +14,51 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { RichTextEditor } from '@/components/forms/rich-text-editor';
 
+const SCHEME_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Draft',
+  SUBMITTED: 'Submitted',
+  APPROVED: 'Approved',
+};
+
 interface NoteDraft {
-  classId: string;
-  subjectId: string;
-  termId: string;
-  weekNumber: number;
+  schemeId: string;
+  schemeWeekId: string;
   date: string;
-  topic: string;
   content: string;
-  resources: string;
   assignment: string;
   challenges: string;
   studentDifficulties: string;
 }
 
 const emptyDraft: NoteDraft = {
-  classId: '',
-  subjectId: '',
-  termId: '',
-  weekNumber: 1,
+  schemeId: '',
+  schemeWeekId: '',
   date: toDateInputValue(new Date()),
-  topic: '',
   content: '',
-  resources: '',
   assignment: '',
   challenges: '',
   studentDifficulties: '',
 };
 
+function SummaryField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-sm">{value || '—'}</p>
+    </div>
+  );
+}
+
 /**
  * Writing and reviewing a lesson note.
  *
- * The two fields that make this worth anything to a head of department are
- * "what did not work" and "what students found hard" — so they are given the
- * same prominence as the lesson content itself, not buried at the bottom.
+ * A note documents one week of a scheme of work someone already wrote — class,
+ * subject, topic and teaching resources all come from that week rather than
+ * being typed again, so a note can never drift from the plan it claims to
+ * follow. The two fields that make a note worth anything to a head of
+ * department are "what did not work" and "what students found hard" — so they
+ * are given the same prominence as the lesson content itself, not buried at
+ * the bottom.
  */
 export function LessonNoteFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -61,9 +71,6 @@ export function LessonNoteFormPage() {
   const deleteNote = useDeleteLessonNote();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const classes = useClasses();
-  const currentTerm = useCurrentTerm();
-
   const [draft, setDraft] = useState<NoteDraft>(emptyDraft);
   const [dirty, setDirty] = useState(false);
   const [reviewComment, setReviewComment] = useState('');
@@ -74,18 +81,21 @@ export function LessonNoteFormPage() {
   // content instead of the empty draft it started with.
   const [contentKey, setContentKey] = useState(0);
 
+  // Only a new note needs the scheme picker — an existing one already carries
+  // its own class, subject, topic and resources, snapshotted at creation.
+  const schemes = useSchemes({ pageSize: 100 });
+  const scheme = useScheme(!isEdit ? draft.schemeId || undefined : undefined);
+  const weekOptions = (scheme.data?.weeks ?? []).filter((week) => !week.isBreak);
+  const selectedWeek = weekOptions.find((week) => week.id === draft.schemeWeekId);
+
   useEffect(() => {
     if (!existing.data) return;
     const note = existing.data;
     setDraft({
-      classId: note.classId,
-      subjectId: note.subjectId,
-      termId: note.termId,
-      weekNumber: note.weekNumber,
+      schemeId: note.schemeId,
+      schemeWeekId: note.schemeWeekId,
       date: toDateInputValue(note.date),
-      topic: note.topic,
       content: note.content,
-      resources: note.resources ?? '',
       assignment: note.assignment ?? '',
       challenges: note.challenges ?? '',
       studentDifficulties: note.studentDifficulties ?? '',
@@ -95,34 +105,20 @@ export function LessonNoteFormPage() {
     setContentKey((key) => key + 1);
   }, [existing.data]);
 
-  useEffect(() => {
-    if (!isEdit && currentTerm.data && !draft.termId) {
-      setDraft((current) => ({ ...current, termId: currentTerm.data!.id }));
-    }
-  }, [currentTerm.data, isEdit, draft.termId]);
-
   const update = (patch: Partial<NoteDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setDirty(true);
   };
 
-  // The subject list follows the class, so a note can never name a subject
-  // that class is not taught.
-  const subjects = useSubjects(draft.classId ? { classId: draft.classId } : {});
-
-  const valid = Boolean(draft.classId && draft.subjectId && draft.topic.trim() && draft.content.trim());
+  const valid = Boolean(draft.schemeId && draft.schemeWeekId && draft.content.trim());
 
   const submit = async (status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'RETURNED') => {
     const note = await save.mutateAsync({
       values: {
-        classId: draft.classId,
-        subjectId: draft.subjectId,
-        termId: draft.termId,
-        weekNumber: draft.weekNumber,
+        schemeId: draft.schemeId,
+        schemeWeekId: draft.schemeWeekId,
         date: draft.date,
-        topic: draft.topic.trim(),
         content: draft.content.trim(),
-        resources: draft.resources.trim() || null,
         assignment: draft.assignment.trim() || null,
         challenges: draft.challenges.trim() || null,
         studentDifficulties: draft.studentDifficulties.trim() || null,
@@ -248,45 +244,89 @@ export function LessonNoteFormPage() {
         <CardContent className="space-y-4">
           <FormError error={save.error} />
 
+          {isEdit ? (
+            <div className="grid gap-4 rounded-md border border-border bg-muted/30 p-4 sm:grid-cols-2">
+              <SummaryField label="Class" value={note?.className} />
+              <SummaryField label="Subject" value={note?.subjectName} />
+              <SummaryField label="Topic" value={note?.topic} />
+              <SummaryField label="Week" value={note ? `Week ${note.weekNumber}` : undefined} />
+              {note?.resources && (
+                <div className="sm:col-span-2">
+                  <SummaryField label="Teaching resources" value={note.resources} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="note-scheme" required>
+                    Scheme of work
+                  </Label>
+                  <NativeSelect
+                    id="note-scheme"
+                    value={draft.schemeId}
+                    onChange={(event) => update({ schemeId: event.target.value, schemeWeekId: '' })}
+                  >
+                    <option value="">Select a scheme</option>
+                    {(schemes.data?.items ?? []).map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.className} · {entry.subjectName} · {entry.termName} (
+                        {SCHEME_STATUS_LABEL[entry.status] ?? entry.status})
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="note-week" required>
+                    Week
+                  </Label>
+                  <NativeSelect
+                    id="note-week"
+                    value={draft.schemeWeekId}
+                    disabled={!draft.schemeId || scheme.isPending}
+                    onChange={(event) => update({ schemeWeekId: event.target.value })}
+                  >
+                    <option value="">{draft.schemeId ? 'Select a week' : 'Pick a scheme first'}</option>
+                    {weekOptions.map((week) => (
+                      <option key={week.id} value={week.id}>
+                        Week {week.weekNumber} — {week.topicTitle}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              </div>
+
+              {!schemes.isPending && (schemes.data?.items.length ?? 0) === 0 && (
+                <Alert
+                  tone="warning"
+                  title="No schemes of work yet"
+                  action={
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/schemes">View schemes</Link>
+                    </Button>
+                  }
+                >
+                  A lesson note documents a week from a scheme of work. Generate or open one first.
+                </Alert>
+              )}
+
+              {selectedWeek && (
+                <div className="grid gap-4 rounded-md border border-border bg-muted/30 p-4 sm:grid-cols-2">
+                  <SummaryField label="Class" value={scheme.data?.className} />
+                  <SummaryField label="Subject" value={scheme.data?.subjectName} />
+                  <SummaryField label="Topic" value={selectedWeek.topicTitle} />
+                  {selectedWeek.resources && (
+                    <div className="sm:col-span-2">
+                      <SummaryField label="Teaching resources" value={selectedWeek.resources} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="note-class" required>
-                Class
-              </Label>
-              <NativeSelect
-                id="note-class"
-                value={draft.classId}
-                disabled={!editable}
-                onChange={(event) => update({ classId: event.target.value })}
-              >
-                <option value="">Select a class</option>
-                {(classes.data ?? []).map((schoolClass) => (
-                  <option key={schoolClass.id} value={schoolClass.id}>
-                    {schoolClass.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="note-subject" required>
-                Subject
-              </Label>
-              <NativeSelect
-                id="note-subject"
-                value={draft.subjectId}
-                disabled={!editable || !draft.classId}
-                onChange={(event) => update({ subjectId: event.target.value })}
-              >
-                <option value="">
-                  {draft.classId ? 'Select a subject' : 'Pick a class first'}
-                </option>
-                {(subjects.data ?? []).map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
             <div className="space-y-1.5">
               <Label htmlFor="note-date" required>
                 Date taught
@@ -300,30 +340,15 @@ export function LessonNoteFormPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="note-week">Week</Label>
-              <Input
-                id="note-week"
-                type="number"
-                min={1}
-                max={20}
-                value={draft.weekNumber}
+              <Label htmlFor="note-assignment">Assignment set</Label>
+              <Textarea
+                id="note-assignment"
+                rows={1}
+                value={draft.assignment}
                 disabled={!editable}
-                onChange={(event) => update({ weekNumber: Number(event.target.value) })}
+                onChange={(event) => update({ assignment: event.target.value })}
               />
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="note-topic" required>
-              Topic
-            </Label>
-            <Input
-              id="note-topic"
-              value={draft.topic}
-              disabled={!editable}
-              onChange={(event) => update({ topic: event.target.value })}
-              placeholder="e.g. Photosynthesis — raw materials and word equation"
-            />
           </div>
 
           <div className="space-y-1.5">
@@ -338,30 +363,6 @@ export function LessonNoteFormPage() {
               onChange={(html) => update({ content: html })}
               placeholder="The lesson itself: explanation, examples, board work, experiments."
             />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="note-resources">Teaching resources</Label>
-              <Textarea
-                id="note-resources"
-                rows={3}
-                value={draft.resources}
-                disabled={!editable}
-                onChange={(event) => update({ resources: event.target.value })}
-                placeholder="Textbook pages, charts, apparatus."
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="note-assignment">Assignment set</Label>
-              <Textarea
-                id="note-assignment"
-                rows={3}
-                value={draft.assignment}
-                disabled={!editable}
-                onChange={(event) => update({ assignment: event.target.value })}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>

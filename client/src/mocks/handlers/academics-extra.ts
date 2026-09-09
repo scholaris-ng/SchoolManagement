@@ -863,28 +863,38 @@ export const academicsExtraHandlers = [
     if (!context) return errors.unauthenticated();
     if (!context.can('lessonnote.manage')) return errors.forbidden();
 
-    const body = (await request.json()) as Record<string, string | number | string[]>;
-    const schoolClass = db.classes.find((entry) => entry.id === body.classId);
-    const subject = db.subjects.find((entry) => entry.id === body.subjectId);
-    const term = scoped(db.terms, context.schoolId).find((entry) => entry.isCurrent);
+    const body = (await request.json()) as Record<string, string>;
+    const scheme = scoped(db.schemes, context.schoolId).find((entry) => entry.id === body.schemeId);
+    if (!scheme) return errors.validation('Choose a scheme of work.');
+    // Writing a note against a scheme is a form of using it, same rule as
+    // editing one: your own, or a class and subject you are assigned to.
+    if (!canEditScheme(context, scheme)) return errors.forbidden(SCHEME_NOT_YOURS);
+    const week = scheme.weeks.find((entry) => entry.id === body.schemeWeekId);
+    if (!week) return errors.validation('Choose a week from that scheme.');
+    if (week.isBreak) return errors.validation('That week is a break — there is nothing to log.');
 
+    // Class, subject, topic and objectives all come from the scheme week —
+    // duplicating them as separate free-text fields is exactly what let a
+    // note drift from the plan it was supposedly following.
     const note = {
       id: nextId('lsn'),
       schoolId: context.schoolId,
       teacherId: context.membership.staffId ?? 'staff_unknown',
       teacherName: context.user.displayName,
-      classId: String(body.classId),
-      className: schoolClass?.name ?? '',
-      subjectId: String(body.subjectId),
-      subjectName: subject?.name ?? '',
-      termId: term?.id ?? '',
-      weekNumber: Number(body.weekNumber),
+      schemeId: scheme.id,
+      schemeWeekId: week.id,
+      classId: scheme.classId,
+      className: scheme.className,
+      subjectId: scheme.subjectId,
+      subjectName: scheme.subjectName,
+      termId: scheme.termId,
+      weekNumber: week.weekNumber,
       date: String(body.date),
-      topic: String(body.topic),
-      objectiveIds: (body.objectiveIds as string[]) ?? [],
-      objectiveStatements: [],
+      topic: week.topicTitle,
+      objectiveIds: week.objectiveIds,
+      objectiveStatements: week.objectiveStatements,
       content: String(body.content),
-      resources: (body.resources as string) || null,
+      resources: week.resources ?? null,
       assignment: (body.assignment as string) || null,
       challenges: (body.challenges as string) || null,
       studentDifficulties: (body.studentDifficulties as string) || null,

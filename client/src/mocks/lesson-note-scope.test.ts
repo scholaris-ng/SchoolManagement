@@ -146,18 +146,23 @@ describe("a lesson note is visible only to the teacher who wrote it, or a review
 
 describe('deleting a lesson note', () => {
   async function createNote(email: string): Promise<string> {
-    const classes = await call<{ id: string }[]>('GET', '/academics/classes', as(email));
-    const subjects = await call<{ id: string }[]>(
+    const schemes = await call<{ items: { id: string }[] }>(
       'GET',
-      `/academics/subjects?classId=${classes.data[0].id}`,
+      '/schemes?pageSize=50',
       as(email),
     );
+    const schemeId = schemes.data.items[0].id;
+    const scheme = await call<{ weeks: { id: string; isBreak: boolean }[] }>(
+      'GET',
+      `/schemes/${schemeId}`,
+      as(email),
+    );
+    const week = scheme.data.weeks.find((entry) => !entry.isBreak)!;
+
     const created = await call<{ id: string }>('POST', '/lesson-notes', as(email), {
-      classId: classes.data[0].id,
-      subjectId: subjects.data[0].id,
-      weekNumber: 1,
+      schemeId,
+      schemeWeekId: week.id,
       date: '2026-09-08',
-      topic: 'Deletable note',
       content: 'Test content.',
     });
     expect(created.status).toBe(201);

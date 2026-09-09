@@ -131,6 +131,9 @@ export interface LessonNote {
   schoolId: string;
   teacherId: string;
   teacherName: string;
+  /** The scheme week this note documents — where class, subject and topic come from. */
+  schemeId: string;
+  schemeWeekId: string;
   classId: string;
   className: string;
   subjectId: string;

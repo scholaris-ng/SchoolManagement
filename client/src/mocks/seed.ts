@@ -976,7 +976,7 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
 
       const curriculumTopics = db.topics.filter((topic) => topic.curriculumId === curriculumId);
 
-      db.schemes.push({
+      const scheme = {
         id: id('sow'),
         schoolId,
         subjectId: subject.id,
@@ -1014,28 +1014,33 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
             isBreak,
           };
         }),
-      });
+      };
+      db.schemes.push(scheme);
 
+      // Weeks 1–4 are always before the mid-term break (index 6), so each has
+      // a real topic to log a note against.
       for (let week = 1; week <= 4; week += 1) {
-        const topic = curriculumTopics[(week - 1) % curriculumTopics.length];
+        const schemeWeek = scheme.weeks[week - 1];
         db.lessonNotes.push({
           id: id('lsn'),
           schoolId,
           teacherId: teacher.id,
           teacherName: teacher.fullName,
+          schemeId: scheme.id,
+          schemeWeekId: schemeWeek.id,
           classId: schoolClass.id,
           className: schoolClass.name,
           subjectId: subject.id,
           subjectName: subject.name,
           termId: currentTerm.id,
-          weekNumber: week,
+          weekNumber: schemeWeek.weekNumber,
           date: isoDate(addDays(new Date(currentTerm.startDate), (week - 1) * 7 + 1)),
-          topic: topic?.title ?? 'Revision',
-          objectiveIds: topic?.objectives.slice(0, 2).map((o) => o.id) ?? [],
-          objectiveStatements: topic?.objectives.slice(0, 2).map((o) => o.statement) ?? [],
+          topic: schemeWeek.topicTitle,
+          objectiveIds: schemeWeek.objectiveIds,
+          objectiveStatements: schemeWeek.objectiveStatements,
           content:
             'Introduced the topic with a familiar example, worked through three problems on the board, then set a class exercise in pairs.',
-          resources: 'Textbook, wall chart, worksheets.',
+          resources: schemeWeek.resources,
           assignment: 'Exercise 4, questions 1–8.',
           challenges: random.bool(0.6)
             ? random.pick([
