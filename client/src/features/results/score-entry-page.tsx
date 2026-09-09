@@ -144,6 +144,8 @@ export function ScoreEntryPage() {
       />
 
       <DataTable
+
+        data-cy="results-score-entry-table"
         caption="Score sheets by class and subject, with entry progress and workflow status"
         data={sheets.data?.items}
         meta={sheets.data?.meta}

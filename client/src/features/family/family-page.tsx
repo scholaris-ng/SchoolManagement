@@ -115,7 +115,7 @@ export function FamilyPage() {
         }
         breadcrumbs={[{ label: 'Overview' }, { label: 'My children' }]}
         actions={
-          <Button variant="outline" asChild>
+          <Button data-cy="family-message-the-school" variant="outline" asChild>
             <Link to="/messages">
               <MessageSquare />
               Message the school
@@ -153,7 +153,7 @@ export function FamilyPage() {
                 )}
               </div>
               {activeChild.outstandingBalance > 0 && (
-                <Button asChild>
+                <Button data-cy="family-pay-formatcurrency-activechild-outstandingbalance" asChild>
                   <Link to="/family/finance">
                     <Wallet />
                     Pay {formatCurrency(activeChild.outstandingBalance, currency, {

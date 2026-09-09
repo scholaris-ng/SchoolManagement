@@ -62,7 +62,7 @@ export function AdminDashboard() {
         title={`Good day, ${firstName}`}
         description={`How ${membership?.schoolShortName ?? 'the school'} is running today.`}
         actions={
-          <Button variant="outline" asChild>
+          <Button data-cy="admin-dashboard-view-full-analytics" variant="outline" asChild>
             <Link to="/analytics">View full analytics</Link>
           </Button>
         }

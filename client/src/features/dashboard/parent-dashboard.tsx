@@ -66,7 +66,7 @@ export function ParentDashboard() {
             : `You are following ${children.length} ${children.length === 1 ? 'child' : 'children'} at this school.`
         }
         actions={
-          <Button variant="outline" asChild>
+          <Button data-cy="parent-dashboard-message-the-school" variant="outline" asChild>
             <Link to="/messages">
               <MessageSquare />
               Message the school
@@ -110,13 +110,13 @@ export function ParentDashboard() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" asChild>
+                    <Button data-cy="parent-dashboard-full-profile" variant="outline" asChild>
                       <Link to={`/family/${activeChild.studentId}`}>
                         <ScrollText />
                         Full profile
                       </Link>
                     </Button>
-                    <Button asChild>
+                    <Button data-cy="parent-dashboard-fees" asChild>
                       <Link to="/family/finance">
                         <Wallet />
                         Fees
@@ -220,7 +220,7 @@ export function ParentDashboard() {
                     <p className="text-sm font-medium text-foreground">
                       {formatCurrency(totalOutstanding, currency)} outstanding across your children
                     </p>
-                    <Button size="sm" asChild>
+                    <Button data-cy="parent-dashboard-pay-school-fees" size="sm" asChild>
                       <Link to="/family/finance">
                         <CreditCard />
                         Pay school fees

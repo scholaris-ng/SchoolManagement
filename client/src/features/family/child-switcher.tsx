@@ -33,6 +33,7 @@ export function ChildSwitcher({
         const active = child.studentId === activeChildId;
         return (
           <button
+            data-cy="family-child-switcher-present-child-outstandingbalance-0"
             key={child.studentId}
             type="button"
             role="tab"

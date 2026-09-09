@@ -131,10 +131,10 @@ export function StudentStatusDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button data-cy="students-student-status-dialog-cancel" type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={changeStatus.isPending}>
+            <Button data-cy="students-student-status-dialog-update-status" type="submit" loading={changeStatus.isPending}>
               Update status
             </Button>
           </DialogFooter>

@@ -121,7 +121,7 @@ export function CollectionPage() {
         breadcrumbs={[{ label: 'Behaviour & safety' }, { label: 'Child collection' }]}
         actions={
           <PermissionGate require="collection.manage">
-            <Button onClick={() => setReleaseOpen(true)}>
+            <Button data-cy="collection-release-a-child" onClick={() => setReleaseOpen(true)}>
               <UserCheck />
               Release a child
             </Button>
@@ -135,6 +135,8 @@ export function CollectionPage() {
       </Alert>
 
       <DataTable
+
+        data-cy="collection-table"
         caption="Collection log: child, collector, time and releasing staff member"
         data={events.data?.items}
         meta={events.data?.meta}
@@ -225,6 +227,7 @@ function ReleaseDialog({
               <div className="flex items-center gap-3 rounded-md border border-border p-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{student.name}</span>
                 <Button
+                  data-cy="collection-change"
                   variant="ghost"
                   size="sm"
                   onClick={() => {
@@ -238,6 +241,7 @@ function ReleaseDialog({
             ) : (
               <>
                 <SearchInput
+                  data-cy="collection-query"
                   value={query}
                   onValueChange={setQuery}
                   placeholder="Search by name or admission number…"
@@ -248,6 +252,7 @@ function ReleaseDialog({
                       <li key={match.id}>
                         <button
                           type="button"
+                          data-cy={`collection-student-result-${match.id}`}
                           onClick={() => setStudent({ id: match.id, name: match.fullName })}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                         >
@@ -285,6 +290,7 @@ function ReleaseDialog({
                       className="flex cursor-pointer items-center gap-3 rounded-md border border-border p-2.5 text-sm hover:bg-accent/40"
                     >
                       <input
+                        data-cy="collection-id"
                         type="radio"
                         name="collector"
                         checked={pickupPersonId === person.id}
@@ -304,6 +310,7 @@ function ReleaseDialog({
 
                   <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border p-2.5 text-sm hover:bg-accent/40">
                     <input
+                      data-cy="collection-is-override"
                       type="radio"
                       name="collector"
                       checked={isOverride}
@@ -328,6 +335,7 @@ function ReleaseDialog({
                         Their name
                       </Label>
                       <SearchInput
+                        data-cy="collection-override-name"
                         value={overrideName}
                         onValueChange={setOverrideName}
                         placeholder="Full name"
@@ -338,6 +346,7 @@ function ReleaseDialog({
                         Relationship
                       </Label>
                       <SearchInput
+                        data-cy="collection-override-relationship"
                         value={overrideRelationship}
                         onValueChange={setOverrideRelationship}
                         placeholder="e.g. Aunt"
@@ -350,6 +359,7 @@ function ReleaseDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="release-method">How they left</Label>
                 <NativeSelect
+                  data-cy="release-method"
                   id="release-method"
                   value={method}
                   onChange={(event) => setMethod(event.target.value as CollectionEvent['method'])}
@@ -366,6 +376,7 @@ function ReleaseDialog({
                   Note
                 </Label>
                 <Textarea
+                  data-cy="release-note"
                   id="release-note"
                   rows={2}
                   value={note}
@@ -382,10 +393,10 @@ function ReleaseDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="collection-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button loading={release.isPending} disabled={!valid} onClick={() => void submit()}>
+          <Button data-cy="collection-record-release" loading={release.isPending} disabled={!valid} onClick={() => void submit()}>
             Record release
           </Button>
         </DialogFooter>

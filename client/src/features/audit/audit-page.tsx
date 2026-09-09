@@ -101,6 +101,7 @@ export function AuditPage() {
         breadcrumbs={[{ label: 'Administration' }, { label: 'Audit trail' }]}
         actions={
           <Button
+            data-cy="audit-export-page"
             variant="outline"
             disabled={rows.length === 0}
             onClick={() =>
@@ -166,6 +167,8 @@ export function AuditPage() {
       />
 
       <DataTable
+
+        data-cy="audit-table"
         caption="Audited changes to sensitive records"
         data={rows}
         meta={audit.data?.meta}
@@ -234,7 +237,7 @@ function AuditDetailDialog({
             </DialogBody>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button data-cy="audit-close" variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
             </DialogFooter>

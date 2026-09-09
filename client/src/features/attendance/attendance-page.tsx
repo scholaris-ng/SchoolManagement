@@ -207,6 +207,7 @@ export function AttendancePage() {
           canMark &&
           !locked && (
             <Button
+              data-cy="attendance-save-register"
               onClick={() => void save()}
               loading={saveRegister.isPending}
               loadingLabel="Saving…"
@@ -224,6 +225,7 @@ export function AttendancePage() {
           <div className="min-w-[12rem] flex-1 space-y-1.5">
             <Label htmlFor="attendance-class">Class</Label>
             <NativeSelect
+              data-cy="attendance-class"
               id="attendance-class"
               value={classId}
               onChange={(event) => setParam('classId', event.target.value)}
@@ -240,6 +242,7 @@ export function AttendancePage() {
           <div className="space-y-1.5">
             <Label htmlFor="attendance-date">Date</Label>
             <Input
+              data-cy="attendance-date"
               id="attendance-date"
               type="date"
               value={date}
@@ -305,10 +308,10 @@ export function AttendancePage() {
                   </div>
                   {canMark && !locked && (
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" onClick={() => markAll('PRESENT')}>
+                      <Button data-cy="attendance-mark-all-present" variant="outline" size="sm" onClick={() => markAll('PRESENT')}>
                         Mark all present
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => markAll('ABSENT')}>
+                      <Button data-cy="attendance-mark-all-absent" variant="outline" size="sm" onClick={() => markAll('ABSENT')}>
                         Mark all absent
                       </Button>
                     </div>
@@ -355,6 +358,7 @@ export function AttendancePage() {
                                 <button
                                   key={status}
                                   type="button"
+                                  data-cy={`attendance-mark-${record.studentId}-${status.toLowerCase()}`}
                                   role="radio"
                                   aria-checked={mark.status === status}
                                   disabled={!canMark || locked}
@@ -380,6 +384,7 @@ export function AttendancePage() {
                           {mark.status === 'ABSENT' && (
                             <div className="flex flex-wrap gap-2 pl-11">
                               <NativeSelect
+                                data-cy="attendance-reason"
                                 aria-label={`Reason ${record.studentName} was absent`}
                                 value={mark.reason ?? ''}
                                 disabled={!canMark || locked}
@@ -398,6 +403,7 @@ export function AttendancePage() {
                                 ))}
                               </NativeSelect>
                               <Input
+                                data-cy="attendance-note"
                                 aria-label={`Note about ${record.studentName}`}
                                 value={mark.note ?? ''}
                                 disabled={!canMark || locked}
@@ -513,6 +519,7 @@ export function AttendancePage() {
                 <li key={row.classId} className="flex items-center gap-4 px-5 py-2.5 text-sm">
                   <button
                     type="button"
+                    data-cy={`attendance-summary-class-${row.classId}`}
                     onClick={() => setParam('classId', row.classId)}
                     className="min-w-0 flex-1 truncate text-left font-medium hover:text-primary hover:underline"
                   >

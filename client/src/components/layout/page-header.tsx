@@ -119,6 +119,7 @@ export function PageTabs({
             key={item.to}
             to={item.to}
             end={item.end}
+            data-cy={`page-tab-${item.to.replace(/^\//, '').replace(/\//g, '-')}`}
             className={({ isActive }) =>
               cn(
                 'relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',

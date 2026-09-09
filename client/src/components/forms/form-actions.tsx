@@ -20,6 +20,7 @@ export function FormActions({
   dirty,
   extra,
   className,
+  'data-cy': dataCy = 'form',
 }: {
   onCancel?: () => void;
   submitLabel?: string;
@@ -29,6 +30,8 @@ export function FormActions({
   dirty?: boolean;
   extra?: React.ReactNode;
   className?: string;
+  /** Cypress hook. Yields `<cy>-submit` and `<cy>-cancel`; defaults to `form`. */
+  'data-cy'?: string;
 }) {
   return (
     <div
@@ -44,11 +47,23 @@ export function FormActions({
         </p>
       )}
       {onCancel && (
-        <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+        <Button
+          type="button"
+          variant="outline"
+          data-cy={`${dataCy}-cancel`}
+          onClick={onCancel}
+          disabled={loading}
+        >
           {cancelLabel}
         </Button>
       )}
-      <Button type="submit" loading={loading} disabled={disabled} loadingLabel="Saving…">
+      <Button
+        type="submit"
+        data-cy={`${dataCy}-submit`}
+        loading={loading}
+        disabled={disabled}
+        loadingLabel="Saving…"
+      >
         {submitLabel}
       </Button>
     </div>
@@ -79,12 +94,18 @@ export function UnsavedChangesGuard({ when }: { when: boolean }) {
  * Surfaces a submission failure at the top of the form. Field-level messages
  * are rendered by the fields themselves; this covers everything else.
  */
-export function FormError({ error }: { error: unknown }) {
+export function FormError({
+  error,
+  'data-cy': dataCy = 'form-error',
+}: {
+  error: unknown;
+  'data-cy'?: string;
+}) {
   if (!error) return null;
 
   if (isApiError(error) && error.isVersionConflict) {
     return (
-      <Alert tone="warning" title="Someone else edited this record">
+      <Alert tone="warning" title="Someone else edited this record" data-cy={dataCy}>
         Your copy is out of date. Reload the page to see their changes, then apply yours again —
         saving now would overwrite their work.
       </Alert>
@@ -100,7 +121,7 @@ export function FormError({ error }: { error: unknown }) {
   const details = isApiError(error) ? error.details : [];
 
   return (
-    <Alert tone="danger" title="Could not save">
+    <Alert tone="danger" title="Could not save" data-cy={dataCy}>
       <p>{message}</p>
       {details.length > 0 && (
         <ul className="mt-1.5 list-disc space-y-0.5 pl-4">

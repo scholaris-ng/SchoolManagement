@@ -139,13 +139,14 @@ export function InvoiceFormPage() {
                   <p className="truncate font-medium">{student.name}</p>
                   <p className="truncate text-xs text-muted-foreground">{student.admissionNo}</p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>
+                <Button data-cy="finance-invoice-form-change" variant="ghost" size="sm" onClick={() => setStudent(null)}>
                   Change
                 </Button>
               </div>
             ) : (
               <>
                 <SearchInput
+                  data-cy="finance-invoice-form-student-query"
                   value={studentQuery}
                   onValueChange={setStudentQuery}
                   placeholder="Search by name or admission number…"
@@ -155,6 +156,7 @@ export function InvoiceFormPage() {
                     {results.data.map((match) => (
                       <li key={match.id}>
                         <button
+                          data-cy="finance-invoice-form-match-classname"
                           type="button"
                           onClick={() =>
                             setStudent({
@@ -185,6 +187,7 @@ export function InvoiceFormPage() {
                 Term
               </Label>
               <NativeSelect
+                data-cy="invoice-term"
                 id="invoice-term"
                 value={effectiveTermId}
                 onChange={(event) => setTermId(event.target.value)}
@@ -202,6 +205,7 @@ export function InvoiceFormPage() {
                 Due date
               </Label>
               <Input
+                data-cy="invoice-due"
                 id="invoice-due"
                 type="date"
                 value={dueDate}
@@ -222,10 +226,10 @@ export function InvoiceFormPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={addMandatoryItems}>
+              <Button data-cy="finance-invoice-form-add-all-standard-fees" variant="outline" size="sm" onClick={addMandatoryItems}>
                 Add all standard fees
               </Button>
-              <Button variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
+              <Button data-cy="finance-invoice-form-add-a-line" variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
                 <Plus />
                 Add a line
               </Button>
@@ -250,6 +254,7 @@ export function InvoiceFormPage() {
                     <div className="space-y-1.5">
                       <Label htmlFor={`line-item-${index}`}>Fee item</Label>
                       <NativeSelect
+                        data-cy="finance-invoice-form-fee-item-id"
                         id={`line-item-${index}`}
                         value={line.feeItemId}
                         onChange={(event) =>
@@ -271,6 +276,7 @@ export function InvoiceFormPage() {
                     <div className="space-y-1.5">
                       <Label htmlFor={`line-qty-${index}`}>Qty</Label>
                       <Input
+                        data-cy="finance-invoice-form-quantity"
                         id={`line-qty-${index}`}
                         type="number"
                         min={1}
@@ -289,6 +295,7 @@ export function InvoiceFormPage() {
                     <div className="space-y-1.5">
                       <Label htmlFor={`line-discount-${index}`}>Discount</Label>
                       <Input
+                        data-cy="finance-invoice-form-discount-amount"
                         id={`line-discount-${index}`}
                         type="number"
                         min={0}
@@ -311,6 +318,7 @@ export function InvoiceFormPage() {
                       </p>
                     </div>
                     <Button
+                      data-cy="finance-invoice-form-remove-line"
                       variant="ghost"
                       size="icon-sm"
                       aria-label="Remove line"
@@ -327,6 +335,7 @@ export function InvoiceFormPage() {
           <div className="space-y-1.5">
             <Label htmlFor="invoice-note">Note</Label>
             <Textarea
+              data-cy="invoice-note"
               id="invoice-note"
               rows={2}
               value={note}
@@ -356,10 +365,10 @@ export function InvoiceFormPage() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" onClick={() => navigate('/finance/invoices')}>
+        <Button data-cy="finance-invoice-form-cancel" variant="outline" onClick={() => navigate('/finance/invoices')}>
           Cancel
         </Button>
-        <Button onClick={() => void submit()} loading={createInvoice.isPending} disabled={!valid}>
+        <Button data-cy="finance-invoice-form-create-invoice" onClick={() => void submit()} loading={createInvoice.isPending} disabled={!valid}>
           Create invoice
         </Button>
       </div>

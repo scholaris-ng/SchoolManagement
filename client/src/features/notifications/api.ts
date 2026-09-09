@@ -1,25 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
+import type { ListQuery } from '@/types/api';
+import { NotificationEndpoints } from './notifications.endpoints';
 import type {
-  AppNotification,
-  NotificationChannel,
-  NotificationCategory,
-  NotificationPreference,
-} from '@/types/engagement';
+  UnreadCounts,
+  UpdateNotificationPreferenceInput,
+} from './notifications.endpoints';
 
-export interface UnreadCounts {
-  notifications: number;
-  messages: number;
-}
+export type { UnreadCounts, UpdateNotificationPreferenceInput };
 
 export function useUnreadCounts() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.notifications.unreadCount(schoolId),
-    queryFn: () => http.get<UnreadCounts>('/notifications/unread-count'),
+    queryFn: () => NotificationEndpoints.fetchUnreadCounts(),
     enabled: Boolean(schoolId),
     // Cheap poll so a parent sees a new message without reloading. Realtime
     // message content itself arrives over Firestore, not this endpoint.
@@ -32,7 +27,7 @@ export function useNotifications(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.notifications.inbox(schoolId, query),
-    queryFn: () => http.get<Paginated<AppNotification>>('/notifications', { query }),
+    queryFn: () => NotificationEndpoints.fetchAll(query),
     enabled: Boolean(schoolId),
   });
 }
@@ -42,7 +37,7 @@ export function useMarkNotificationRead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => http.patch<AppNotification>(`/notifications/${id}/read`),
+    mutationFn: (id: string) => NotificationEndpoints.markRead(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.inbox(schoolId) });
       void queryClient.invalidateQueries({
@@ -57,7 +52,7 @@ export function useMarkAllNotificationsRead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => http.post<{ updated: number }>('/notifications/read-all'),
+    mutationFn: () => NotificationEndpoints.markAllRead(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.inbox(schoolId) });
       void queryClient.invalidateQueries({
@@ -71,7 +66,7 @@ export function useNotificationPreferences() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.notifications.preferences(schoolId),
-    queryFn: () => http.get<NotificationPreference[]>('/notifications/preferences'),
+    queryFn: () => NotificationEndpoints.fetchPreferences(),
     enabled: Boolean(schoolId),
   });
 }
@@ -81,11 +76,8 @@ export function useUpdateNotificationPreference() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
-      category: NotificationCategory;
-      channel: NotificationChannel;
-      enabled: boolean;
-    }) => http.patch<NotificationPreference[]>('/notifications/preferences', input),
+    mutationFn: (input: UpdateNotificationPreferenceInput) =>
+      NotificationEndpoints.updatePreference(input),
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.notifications.preferences(schoolId), data);
     },
@@ -96,10 +88,6 @@ export function useUpdateNotificationPreference() {
 export function useRegisterPushToken() {
   return useMutation({
     mutationFn: (token: string) =>
-      http.post<{ registered: boolean }>('/notifications/push-tokens', {
-        token,
-        platform: 'WEB',
-        userAgent: navigator.userAgent,
-      }),
+      NotificationEndpoints.registerPushToken(token, navigator.userAgent),
   });
 }

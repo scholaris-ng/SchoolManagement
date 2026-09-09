@@ -94,13 +94,14 @@ export function GuardianDetailPage() {
           <PermissionGate require="guardian.manage">
             <Button
               variant="outline"
+              data-cy="guardian-detail-invite"
               loading={invite.isPending}
               onClick={() => invite.mutate(record.id)}
             >
               <Send />
               {record.hasPortalAccess ? 'Resend invitation' : 'Invite to portal'}
             </Button>
-            <Button onClick={() => navigate(`/guardians/${record.id}/edit`)}>
+            <Button data-cy="guardians-guardian-detail-edit" onClick={() => navigate(`/guardians/${record.id}/edit`)}>
               <Pencil />
               Edit
             </Button>

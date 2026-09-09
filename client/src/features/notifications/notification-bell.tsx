@@ -56,6 +56,7 @@ export function NotificationBell() {
       <Popover.Trigger asChild>
         <button
           type="button"
+          data-cy="notification-bell"
           className="relative grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
         >
@@ -80,6 +81,7 @@ export function NotificationBell() {
               <Button
                 variant="ghost"
                 size="sm"
+                data-cy="notifications-mark-all-read"
                 className="h-7 text-xs"
                 onClick={() => markAllRead.mutate()}
                 loading={markAllRead.isPending}
@@ -118,6 +120,7 @@ export function NotificationBell() {
                     <li key={notification.id}>
                       <button
                         type="button"
+                        data-cy={`notification-${notification.id}`}
                         onClick={() => openNotification(notification)}
                         className={cn(
                           'flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-accent',
@@ -157,7 +160,14 @@ export function NotificationBell() {
           </div>
 
           <div className="border-t border-border p-2">
-            <Button variant="ghost" size="sm" block asChild onClick={() => setOpen(false)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              block
+              asChild
+              data-cy="notifications-view-all"
+              onClick={() => setOpen(false)}
+            >
               <Link to="/notifications">View all notifications</Link>
             </Button>
           </div>

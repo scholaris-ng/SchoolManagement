@@ -74,7 +74,7 @@ export function MessagesPage() {
         description="Conversations between staff and the families of the children they teach."
         breadcrumbs={[{ label: 'Communication' }, { label: 'Messages' }]}
         actions={
-          <Button onClick={() => setComposeOpen(true)}>
+          <Button data-cy="messaging-messages-new-message" onClick={() => setComposeOpen(true)}>
             <Plus />
             New message
           </Button>
@@ -86,6 +86,7 @@ export function MessagesPage() {
           <Card className="flex max-h-[70vh] flex-col overflow-hidden">
             <div className="border-b border-border p-3">
               <SearchInput
+                data-cy="messaging-messages-search"
                 value={list.search}
                 onValueChange={list.setSearch}
                 placeholder="Search conversations…"
@@ -106,6 +107,7 @@ export function MessagesPage() {
                   {conversations.data?.items.map((conversation) => (
                     <li key={conversation.id}>
                       <button
+                        data-cy="messaging-messages-conversation-unreadcount-0-conversation"
                         type="button"
                         onClick={() => navigate(`/messages/${conversation.id}`)}
                         aria-current={conversation.id === id}
@@ -152,7 +154,7 @@ export function MessagesPage() {
               <>
                 <div className="flex items-center gap-3 border-b border-border p-3">
                   {!isDesktop && (
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/messages')}>
+                    <Button data-cy="messaging-messages-back" variant="ghost" size="sm" onClick={() => navigate('/messages')}>
                       Back
                     </Button>
                   )}
@@ -228,6 +230,7 @@ export function MessagesPage() {
                     Your message
                   </label>
                   <Textarea
+                    data-cy="message-draft"
                     id="message-draft"
                     rows={2}
                     value={draft}
@@ -242,6 +245,7 @@ export function MessagesPage() {
                     className="min-h-0 resize-none"
                   />
                   <Button
+                    data-cy="messaging-messages-send-message"
                     type="submit"
                     size="icon"
                     aria-label="Send message"
@@ -308,6 +312,7 @@ function ComposeDialog({
                     className="flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-accent"
                   >
                     <input
+                      data-cy="messaging-messages-id"
                       type="radio"
                       name="recipient"
                       checked={recipientId === contact.id}
@@ -333,6 +338,7 @@ function ComposeDialog({
               Subject
             </Label>
             <Input
+              data-cy="compose-subject"
               id="compose-subject"
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
@@ -345,6 +351,7 @@ function ComposeDialog({
               Message
             </Label>
             <Textarea
+              data-cy="compose-body"
               id="compose-body"
               rows={5}
               value={body}
@@ -354,10 +361,11 @@ function ComposeDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="messaging-messages-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="messaging-messages-send"
             loading={start.isPending}
             disabled={!valid}
             onClick={() =>

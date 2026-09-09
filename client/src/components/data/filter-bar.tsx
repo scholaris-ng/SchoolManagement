@@ -64,6 +64,7 @@ export function FilterBar({
         <div className="flex flex-1 flex-wrap items-center gap-2">
           {onSearchChange && (
             <SearchInput
+              data-cy="filter-search"
               value={search ?? ''}
               onValueChange={onSearchChange}
               placeholder={searchPlaceholder}
@@ -74,6 +75,7 @@ export function FilterBar({
             <label key={filter.key} className="sr-only-focusable contents">
               <span className="sr-only">{filter.label}</span>
               <NativeSelect
+                data-cy={`filter-${filter.key}`}
                 value={values[filter.key] ?? ''}
                 onChange={(event) => onFilterChange?.(filter.key, event.target.value || undefined)}
                 aria-label={filter.label}
@@ -102,6 +104,7 @@ export function FilterBar({
               {filter.value}
               <button
                 type="button"
+                data-cy={`filter-chip-remove-${filter.key}`}
                 onClick={() => onFilterChange?.(filter.key, undefined)}
                 className="grid size-4 place-items-center rounded-full hover:bg-primary/20"
                 aria-label={`Remove ${filter.label} filter`}
@@ -111,7 +114,13 @@ export function FilterBar({
             </Badge>
           ))}
           {onReset && (
-            <Button variant="ghost" size="sm" onClick={onReset} className="h-6 px-2 text-xs">
+            <Button
+              variant="ghost"
+              size="sm"
+              data-cy="filter-reset"
+              onClick={onReset}
+              className="h-6 px-2 text-xs"
+            >
               Clear all
             </Button>
           )}
@@ -133,12 +142,21 @@ export function SelectionBar({
 }) {
   if (count === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary-subtle px-3 py-2">
-      <p className="text-sm font-medium text-primary">
+    <div
+      data-cy="selection-bar"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary-subtle px-3 py-2"
+    >
+      <p className="text-sm font-medium text-primary" data-cy="selection-count">
         {count} selected
       </p>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
-      <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto h-7 text-xs">
+      <Button
+        variant="ghost"
+        size="sm"
+        data-cy="selection-clear"
+        onClick={onClear}
+        className="ml-auto h-7 text-xs"
+      >
         Clear selection
       </Button>
     </div>

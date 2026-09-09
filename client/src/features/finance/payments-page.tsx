@@ -143,6 +143,7 @@ export function PaymentsPage() {
         cell: (payment) =>
           !payment.isReconciled && can('payment.reconcile') ? (
             <Button
+              data-cy="finance-payments-reconcile"
               variant="ghost"
               size="sm"
               onClick={(event) => {
@@ -186,12 +187,12 @@ export function PaymentsPage() {
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }]}
         actions={
           <>
-            <Button variant="outline" onClick={exportPayments}>
+            <Button data-cy="finance-payments-export" variant="outline" onClick={exportPayments}>
               <Download />
               Export
             </Button>
             <PermissionGate require="payment.manage">
-              <Button asChild>
+              <Button data-cy="finance-payments-record-payment" asChild>
                 <Link to="/finance/payments/new">
                   <Plus />
                   Record payment
@@ -221,6 +222,8 @@ export function PaymentsPage() {
       />
 
       <DataTable
+
+        data-cy="finance-payments-table"
         caption="Payments with student, amount, method, allocation and reconciliation status"
         data={payments.data?.items}
         meta={payments.data?.meta}
@@ -243,7 +246,7 @@ export function PaymentsPage() {
         }
         emptyAction={
           <PermissionGate require="payment.manage">
-            <Button asChild>
+            <Button data-cy="finance-payments-record-the-first-payment" asChild>
               <Link to="/finance/payments/new">
                 <Receipt />
                 Record the first payment

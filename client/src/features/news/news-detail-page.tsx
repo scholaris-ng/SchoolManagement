@@ -51,12 +51,13 @@ export function NewsDetailPage() {
         }
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/news')}>
+            <Button data-cy="news-detail-back" variant="outline" onClick={() => navigate('/news')}>
               <ArrowLeft />
               Back
             </Button>
             {canManage && record.status === 'DRAFT' && (
               <Button
+                data-cy="news-detail-publish"
                 loading={save.isPending}
                 onClick={() =>
                   void save.mutateAsync({

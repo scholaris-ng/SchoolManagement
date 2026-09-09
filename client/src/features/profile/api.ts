@@ -1,14 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
-import type { AuthenticatedUser } from '@/types/tenant';
+import { ProfileEndpoints } from './profile.endpoints';
+import type { UpdateProfileInput } from './profile.endpoints';
 
-export interface UpdateProfileInput {
-  displayName?: string;
-  phone?: string | null;
-  photoUrl?: string | null;
-}
+export type { UpdateProfileInput };
 
 /**
  * The signed-in user's own record.
@@ -21,7 +17,7 @@ export function useUpdateProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: UpdateProfileInput) => http.patch<AuthenticatedUser>('/users/me', values),
+    mutationFn: (values: UpdateProfileInput) => ProfileEndpoints.update(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.session() });
       toast.success('Profile updated');

@@ -136,7 +136,7 @@ export function AdmissionsListPage() {
         breadcrumbs={[{ label: 'People' }, { label: 'Admissions' }]}
         actions={
           <PermissionGate require="admission.manage">
-            <Button asChild>
+            <Button data-cy="admissions-list-new-application" asChild>
               <Link to="/admissions/new">
                 <Plus />
                 New application
@@ -242,6 +242,8 @@ export function AdmissionsListPage() {
       />
 
       <DataTable
+
+        data-cy="admissions-table"
         caption="Admission applications with applicant, level, guardian and current status"
         data={applications.data?.items}
         meta={applications.data?.meta}

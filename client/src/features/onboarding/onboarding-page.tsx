@@ -59,11 +59,11 @@ export function OnboardingPage() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={() => void refreshSession()} block>
+              <Button data-cy="onboarding-check-again" onClick={() => void refreshSession()} block>
                 <RefreshCw />
                 Check again
               </Button>
-              <Button variant="outline" onClick={() => void signOut()} block>
+              <Button data-cy="onboarding-sign-out" variant="outline" onClick={() => void signOut()} block>
                 <LogOut />
                 Sign out
               </Button>

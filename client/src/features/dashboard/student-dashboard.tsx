@@ -45,7 +45,7 @@ export function StudentDashboard() {
         title={`Hello, ${firstName}`}
         description={data?.className ? `${data.className} · today's lessons and your progress.` : undefined}
         actions={
-          <Button variant="outline" asChild>
+          <Button data-cy="student-dashboard-practice-amp-tests" variant="outline" asChild>
             <Link to="/cbt">
               <BookOpen />
               Practice &amp; tests
@@ -198,7 +198,7 @@ export function StudentDashboard() {
                             {assessment.endsAt ? ` · closes ${formatDateTime(assessment.endsAt)}` : ''}
                           </p>
                         </div>
-                        <Button size="sm" asChild>
+                        <Button data-cy="student-dashboard-start" size="sm" asChild>
                           <Link to={`/cbt/${assessment.id}`}>Start</Link>
                         </Button>
                       </li>

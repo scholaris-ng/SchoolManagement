@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
-import type { RetentionRiskRow } from '@/types/analytics';
+import type { ListQuery } from '@/types/api';
+import { AnalyticsEndpoints } from './analytics.endpoints';
 
 /**
  * Withdrawal-risk analytics.
@@ -16,7 +15,7 @@ export function useRetentionRisk(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.dashboard.retention(schoolId, query),
-    queryFn: () => http.get<Paginated<RetentionRiskRow>>('/analytics/retention', { query }),
+    queryFn: () => AnalyticsEndpoints.fetchRetentionRisk(query),
     enabled: Boolean(schoolId),
     // The signals move daily at most; refetching on every focus is wasted data
     // on a metered connection.

@@ -47,13 +47,13 @@ export function BursarDashboard() {
         description="What has been billed, what has come in, and what still has to be chased."
         actions={
           <>
-            <Button variant="outline" asChild>
+            <Button data-cy="bursar-dashboard-new-invoice" variant="outline" asChild>
               <Link to="/finance/invoices/new">
                 <Receipt />
                 New invoice
               </Link>
             </Button>
-            <Button asChild>
+            <Button data-cy="bursar-dashboard-record-payment" asChild>
               <Link to="/finance/payments/new">
                 <CreditCard />
                 Record payment

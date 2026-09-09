@@ -102,13 +102,14 @@ export function IncidentFormPage() {
             {student ? (
               <div className="flex items-center gap-3 rounded-md border border-border p-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{student.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>
+                <Button data-cy="discipline-incident-form-change" variant="ghost" size="sm" onClick={() => setStudent(null)}>
                   Change
                 </Button>
               </div>
             ) : (
               <>
                 <SearchInput
+                  data-cy="discipline-incident-form-query"
                   value={query}
                   onValueChange={setQuery}
                   placeholder="Search by name or admission number…"
@@ -119,6 +120,7 @@ export function IncidentFormPage() {
                       <li key={match.id}>
                         <button
                           type="button"
+                          data-cy={`incident-student-result-${match.id}`}
                           onClick={() => setStudent({ id: match.id, name: match.fullName })}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                         >
@@ -141,6 +143,7 @@ export function IncidentFormPage() {
                 Category
               </Label>
               <NativeSelect
+                data-cy="incident-category"
                 id="incident-category"
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
@@ -157,6 +160,7 @@ export function IncidentFormPage() {
                 Severity
               </Label>
               <NativeSelect
+                data-cy="incident-severity"
                 id="incident-severity"
                 value={severity}
                 onChange={(event) =>
@@ -175,6 +179,7 @@ export function IncidentFormPage() {
                 When it happened
               </Label>
               <Input
+                data-cy="incident-when"
                 id="incident-when"
                 type="datetime-local"
                 value={occurredAt}
@@ -184,6 +189,7 @@ export function IncidentFormPage() {
             <div className="space-y-1.5">
               <Label htmlFor="incident-where">Where</Label>
               <Input
+                data-cy="incident-where"
                 id="incident-where"
                 value={location}
                 onChange={(event) => setLocation(event.target.value)}
@@ -197,6 +203,7 @@ export function IncidentFormPage() {
               What happened
             </Label>
             <Textarea
+              data-cy="incident-description"
               id="incident-description"
               rows={6}
               value={description}
@@ -249,6 +256,7 @@ export function IncidentFormPage() {
                 >
                   <span className="min-w-0 truncate">{file.name}</span>
                   <Button
+                    data-cy="discipline-incident-form-remove"
                     variant="ghost"
                     size="sm"
                     onClick={() =>
@@ -265,10 +273,10 @@ export function IncidentFormPage() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" onClick={() => navigate('/discipline')}>
+        <Button data-cy="discipline-incident-form-cancel" variant="outline" onClick={() => navigate('/discipline')}>
           Cancel
         </Button>
-        <Button onClick={() => void submit()} loading={report.isPending} disabled={!valid}>
+        <Button data-cy="discipline-incident-form-submit-report" onClick={() => void submit()} loading={report.isPending} disabled={!valid}>
           Submit report
         </Button>
       </div>

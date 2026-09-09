@@ -114,10 +114,10 @@ export function ConvertApplicantDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button data-cy="admissions-convert-applicant-dialog-cancel" type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={convert.isPending} loadingLabel="Enrolling…">
+            <Button data-cy="admissions-convert-applicant-dialog-enrol-as-a-student" type="submit" loading={convert.isPending} loadingLabel="Enrolling…">
               Enrol as a student
             </Button>
           </DialogFooter>

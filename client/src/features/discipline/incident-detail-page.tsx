@@ -135,7 +135,7 @@ export function IncidentDetailPage() {
         }
         actions={
           <>
-            <Button variant="outline" asChild>
+            <Button data-cy="discipline-incident-detail-student-record" variant="outline" asChild>
               <Link to={`/students/${record.studentId}`}>
                 <User />
                 Student record
@@ -144,6 +144,7 @@ export function IncidentDetailPage() {
             {nextStatuses.map((status) => (
               <Button
                 key={status}
+                data-cy={`incident-transition-${status.toLowerCase()}`}
                 variant={status === 'DISMISSED' ? 'outline' : 'primary'}
                 onClick={() => {
                   setPending(status);
@@ -224,7 +225,12 @@ export function IncidentDetailPage() {
                       />
                       <span className="min-w-0 flex-1 truncate">{file.name}</span>
                       {file.downloadUrl && (
-                        <Button variant="ghost" size="icon-sm" asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          asChild
+                          data-cy={`incident-evidence-download-${file.name}`}
+                        >
                           <a
                             href={file.downloadUrl}
                             target="_blank"
@@ -308,6 +314,7 @@ export function IncidentDetailPage() {
                     Action
                   </Label>
                   <NativeSelect
+                    data-cy="action-type"
                     id="action-type"
                     value={actionType}
                     onChange={(event) => setActionType(event.target.value)}
@@ -324,6 +331,7 @@ export function IncidentDetailPage() {
                     Details
                   </Label>
                   <Textarea
+                    data-cy="action-description"
                     id="action-description"
                     rows={3}
                     value={actionDescription}
@@ -334,6 +342,7 @@ export function IncidentDetailPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor="action-start">From</Label>
                     <Input
+                      data-cy="action-start"
                       id="action-start"
                       type="date"
                       value={actionStart}
@@ -343,6 +352,7 @@ export function IncidentDetailPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor="action-end">Until</Label>
                     <Input
+                      data-cy="action-end"
                       id="action-end"
                       type="date"
                       value={actionEnd}
@@ -359,6 +369,7 @@ export function IncidentDetailPage() {
                   How it was resolved
                 </Label>
                 <Textarea
+                  data-cy="incident-resolution"
                   id="incident-resolution"
                   rows={3}
                   value={resolution}
@@ -370,6 +381,7 @@ export function IncidentDetailPage() {
             <div className="space-y-1.5">
               <Label htmlFor="incident-note">Note</Label>
               <Textarea
+                data-cy="incident-note"
                 id="incident-note"
                 rows={3}
                 value={note}
@@ -379,6 +391,7 @@ export function IncidentDetailPage() {
 
             <label className="flex items-start gap-2.5 text-sm">
               <input
+                data-cy="discipline-incident-detail-notify-guardian"
                 type="checkbox"
                 checked={notifyGuardian}
                 onChange={(event) => setNotifyGuardian(event.target.checked)}
@@ -395,10 +408,11 @@ export function IncidentDetailPage() {
           </DialogBody>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)}>
+            <Button data-cy="discipline-incident-detail-cancel" variant="outline" onClick={() => setPending(null)}>
               Cancel
             </Button>
             <Button
+              data-cy="discipline-incident-detail-confirm"
               loading={transition.isPending}
               disabled={
                 (pending === 'ACTION_TAKEN' && !actionDescription.trim()) ||

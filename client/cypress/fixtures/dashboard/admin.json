@@ -1,0 +1,43 @@
+{
+  "currency": "NGN",
+  "studentCount": 412,
+  "studentDelta": { "value": 8, "direction": "up", "periodLabel": "this term" },
+  "staffCount": 38,
+  "attendanceRateToday": 94.2,
+  "attendanceMarkedClasses": 11,
+  "totalClasses": 14,
+  "feesBilled": 48200000,
+  "feesCollected": 39100000,
+  "feesOutstanding": 9100000,
+  "collectionRate": 81.1,
+  "admissionsInProgress": 17,
+  "admissionsAccepted": 6,
+  "attendanceTrend": [
+    { "date": "2026-09-01", "label": "Mon", "rate": 93.1, "present": 384, "absent": 28 },
+    { "date": "2026-09-02", "label": "Tue", "rate": 95.4, "present": 393, "absent": 19 },
+    { "date": "2026-09-03", "label": "Wed", "rate": 94.2, "present": 388, "absent": 24 }
+  ],
+  "enrolmentByLevel": [
+    { "levelName": "JSS 1", "students": 96 },
+    { "levelName": "JSS 2", "students": 88 },
+    { "levelName": "JSS 3", "students": 91 }
+  ],
+  "recentActivity": [
+    {
+      "id": "e2e-activity-1",
+      "actorName": "Adaeze Okonkwo",
+      "action": "published results for",
+      "entityLabel": "JSS 1 Gold",
+      "occurredAt": "2026-09-08T14:02:00.000Z"
+    }
+  ],
+  "upcomingEvents": [
+    {
+      "id": "e2e-event-1",
+      "title": "Mid-term break",
+      "startDate": "2026-10-19",
+      "category": "HOLIDAY"
+    }
+  ],
+  "atRiskCount": 5
+}

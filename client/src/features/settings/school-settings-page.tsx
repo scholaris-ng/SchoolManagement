@@ -108,7 +108,7 @@ export function SchoolSettingsPage() {
         description="Your school's identity, branding and the policies that shape how the product behaves."
         breadcrumbs={[{ label: 'Administration' }, { label: 'School settings' }]}
         actions={
-          <Button onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
+          <Button data-cy="settings-school-settings-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
             <Save />
             Save changes
           </Button>
@@ -126,24 +126,28 @@ export function SchoolSettingsPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field label="School name" required>
             <Input
+              data-cy="school-settings-name"
               value={draft.name ?? ''}
               onChange={(event) => set({ name: event.target.value })}
             />
           </Field>
           <Field label="Short name" hint="Used in the sidebar and on documents.">
             <Input
+              data-cy="school-settings-short-name"
               value={draft.shortName ?? ''}
               onChange={(event) => set({ shortName: event.target.value })}
             />
           </Field>
           <Field label="School code" hint="Prefixes verification codes.">
             <Input
+              data-cy="school-settings-code"
               value={draft.code ?? ''}
               onChange={(event) => set({ code: event.target.value.toUpperCase() })}
             />
           </Field>
           <Field label="Website">
             <Input
+              data-cy="school-settings-website"
               type="url"
               value={draft.website ?? ''}
               onChange={(event) => set({ website: event.target.value })}
@@ -152,6 +156,7 @@ export function SchoolSettingsPage() {
           </Field>
           <Field label="Email" required>
             <Input
+              data-cy="school-settings-email"
               type="email"
               value={draft.email ?? ''}
               onChange={(event) => set({ email: event.target.value })}
@@ -159,6 +164,7 @@ export function SchoolSettingsPage() {
           </Field>
           <Field label="Phone" required>
             <Input
+              data-cy="school-settings-phone"
               type="tel"
               value={draft.phone ?? ''}
               onChange={(event) => set({ phone: event.target.value })}
@@ -166,18 +172,21 @@ export function SchoolSettingsPage() {
           </Field>
           <Field label="Address" className="sm:col-span-2">
             <Input
+              data-cy="school-settings-address-line1"
               value={draft.addressLine1 ?? ''}
               onChange={(event) => set({ addressLine1: event.target.value })}
             />
           </Field>
           <Field label="City">
             <Input
+              data-cy="school-settings-city"
               value={draft.city ?? ''}
               onChange={(event) => set({ city: event.target.value })}
             />
           </Field>
           <Field label="State">
             <Input
+              data-cy="school-settings-state"
               value={draft.state ?? ''}
               onChange={(event) => set({ state: event.target.value })}
             />
@@ -208,6 +217,7 @@ export function SchoolSettingsPage() {
             <Field label="Primary colour">
               <div className="flex items-center gap-2">
                 <input
+                  data-cy="school-settings-primary-color"
                   type="color"
                   aria-label="Primary colour"
                   value={draft.branding?.primaryColor ?? '#4f46e5'}
@@ -215,6 +225,7 @@ export function SchoolSettingsPage() {
                   className="size-9 shrink-0 cursor-pointer rounded border border-input"
                 />
                 <Input
+                  data-cy="school-settings-primary-color-2"
                   value={draft.branding?.primaryColor ?? ''}
                   onChange={(event) => setBranding({ primaryColor: event.target.value })}
                 />
@@ -223,6 +234,7 @@ export function SchoolSettingsPage() {
             <Field label="Accent colour">
               <div className="flex items-center gap-2">
                 <input
+                  data-cy="school-settings-accent-color"
                   type="color"
                   aria-label="Accent colour"
                   value={draft.branding?.accentColor ?? '#0ea5e9'}
@@ -230,6 +242,7 @@ export function SchoolSettingsPage() {
                   className="size-9 shrink-0 cursor-pointer rounded border border-input"
                 />
                 <Input
+                  data-cy="school-settings-accent-color-2"
                   value={draft.branding?.accentColor ?? ''}
                   onChange={(event) => setBranding({ accentColor: event.target.value })}
                 />
@@ -237,6 +250,7 @@ export function SchoolSettingsPage() {
             </Field>
             <Field label="Motto" className="sm:col-span-2">
               <Input
+                data-cy="school-settings-motto"
                 value={draft.branding?.motto ?? ''}
                 onChange={(event) => setBranding({ motto: event.target.value })}
               />
@@ -252,6 +266,7 @@ export function SchoolSettingsPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field label="Currency">
             <NativeSelect
+              data-cy="school-settings-currency"
               value={draft.settings?.currency ?? 'NGN'}
               onChange={(event) => {
                 const currency = CURRENCIES.find((entry) => entry.code === event.target.value);
@@ -270,6 +285,7 @@ export function SchoolSettingsPage() {
           </Field>
           <Field label="Timezone">
             <NativeSelect
+              data-cy="school-settings-timezone"
               value={draft.settings?.timezone ?? 'Africa/Lagos'}
               onChange={(event) => setSettings({ timezone: event.target.value })}
             >
@@ -282,6 +298,7 @@ export function SchoolSettingsPage() {
           </Field>
           <Field label="Country">
             <Input
+              data-cy="school-settings-country"
               value={draft.settings?.country ?? ''}
               onChange={(event) => setSettings({ country: event.target.value })}
             />
@@ -313,6 +330,7 @@ export function SchoolSettingsPage() {
             <div className="pl-1 pt-2">
               <Field label="Send alerts after" hint="Registers taken later still send once.">
                 <Input
+                  data-cy="school-settings-absence-alert-cutoff"
                   type="time"
                   value={draft.settings?.absenceAlertCutoff ?? '10:00'}
                   onChange={(event) => setSettings({ absenceAlertCutoff: event.target.value })}
@@ -390,7 +408,12 @@ function Toggle({
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+      <Switch
+        data-cy={`toggle-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label={label}
+      />
     </div>
   );
 }

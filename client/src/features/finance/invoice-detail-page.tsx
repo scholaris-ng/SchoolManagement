@@ -53,7 +53,7 @@ export function InvoiceDetailPage() {
           }
           actions={
             <>
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-invoice-detail-student-record" variant="outline" asChild>
                 <Link to={`/students/${record.studentId}`}>
                   <User />
                   Student record
@@ -61,7 +61,7 @@ export function InvoiceDetailPage() {
               </Button>
               {record.balance > 0 && (
                 <PermissionGate require="payment.manage">
-                  <Button asChild>
+                  <Button data-cy="finance-invoice-detail-record-a-payment" asChild>
                     <Link to={`/finance/payments/new?studentId=${record.studentId}`}>
                       <CreditCard />
                       Record a payment
@@ -69,7 +69,7 @@ export function InvoiceDetailPage() {
                   </Button>
                 </PermissionGate>
               )}
-              <Button variant="outline" onClick={() => window.print()}>
+              <Button data-cy="finance-invoice-detail-print" variant="outline" onClick={() => window.print()}>
                 <Printer />
                 Print
               </Button>

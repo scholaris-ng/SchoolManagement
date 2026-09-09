@@ -43,7 +43,7 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
     <div className="space-y-4">
       <div className="flex justify-end">
         <PermissionGate require="guardian.manage">
-          <Button onClick={() => setLinkOpen(true)}>
+          <Button data-cy="tabs-guardians-tab-link-a-guardian" onClick={() => setLinkOpen(true)}>
             <Plus />
             Link a guardian
           </Button>
@@ -58,7 +58,7 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
             description="Link a parent or guardian so they can see this child in their portal, receive alerts and be billed."
             action={
               <PermissionGate require="guardian.manage">
-                <Button onClick={() => setLinkOpen(true)}>
+                <Button data-cy="tabs-guardians-tab-link-a-guardian-2" onClick={() => setLinkOpen(true)}>
                   <Plus />
                   Link a guardian
                 </Button>
@@ -112,6 +112,7 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      data-cy={`student-guardian-unlink-${link.id}`}
                       onClick={() => setPendingUnlink(link.id)}
                       aria-label={`Unlink ${link.guardianName}`}
                     >
@@ -191,10 +192,10 @@ function LinkGuardianSheet({
       description="Pick an existing guardian, or create one first from the Guardians page."
       footer={
         <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="tabs-guardians-tab-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onSubmit} loading={link.isPending}>
+          <Button data-cy="tabs-guardians-tab-link-guardian" onClick={onSubmit} loading={link.isPending}>
             Link guardian
           </Button>
         </>

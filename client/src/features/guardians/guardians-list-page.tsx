@@ -96,6 +96,7 @@ export function GuardiansListPage() {
             <Button
               variant="ghost"
               size="sm"
+              data-cy={`guardians-list-invite-${guardian.id}`}
               loading={invite.isPending && invite.variables === guardian.id}
               onClick={(event) => {
                 event.stopPropagation();
@@ -121,7 +122,7 @@ export function GuardiansListPage() {
         actions={
           <>
             <PermissionGate require="import.run">
-              <Button variant="outline" asChild>
+              <Button data-cy="guardians-list-import" variant="outline" asChild>
                 <Link to="/import?entity=GUARDIANS">
                   <UploadCloud />
                   Import
@@ -129,7 +130,7 @@ export function GuardiansListPage() {
               </Button>
             </PermissionGate>
             <PermissionGate require="guardian.manage">
-              <Button asChild>
+              <Button data-cy="guardians-list-add-guardian" asChild>
                 <Link to="/guardians/new">
                   <Plus />
                   Add guardian
@@ -158,6 +159,8 @@ export function GuardiansListPage() {
       />
 
       <DataTable
+
+        data-cy="guardians-table"
         caption="Guardians with contact details, linked children and parent-portal status"
         data={guardians.data?.items}
         meta={guardians.data?.meta}
@@ -182,7 +185,7 @@ export function GuardiansListPage() {
         }
         emptyAction={
           <PermissionGate require="guardian.manage">
-            <Button asChild>
+            <Button data-cy="guardians-list-add-a-guardian" asChild>
               <Link to="/guardians/new">
                 <Plus />
                 Add a guardian

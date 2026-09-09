@@ -139,6 +139,7 @@ export function PaymentFormPage() {
                 )}
               </div>
               <Button
+                data-cy="finance-payment-form-change"
                 variant="ghost"
                 size="sm"
                 onClick={() => {
@@ -156,6 +157,7 @@ export function PaymentFormPage() {
                 Student
               </Label>
               <SearchInput
+                data-cy="finance-payment-form-student-query"
                 value={studentQuery}
                 onValueChange={setStudentQuery}
                 placeholder="Search by name or admission number…"
@@ -166,6 +168,7 @@ export function PaymentFormPage() {
                     <li key={match.id}>
                       <button
                         type="button"
+                        data-cy={`payment-student-result-${match.id}`}
                         onClick={() => {
                           setStudentId(match.id);
                           setStudentLabel(`${match.fullName} · ${match.admissionNo}`);
@@ -190,6 +193,7 @@ export function PaymentFormPage() {
                 Amount
               </Label>
               <Input
+                data-cy="payment-amount"
                 id="payment-amount"
                 type="number"
                 min={0}
@@ -204,6 +208,7 @@ export function PaymentFormPage() {
                 Method
               </Label>
               <NativeSelect
+                data-cy="payment-method"
                 id="payment-method"
                 value={method}
                 onChange={(event) => setMethod(event.target.value as PaymentMethod)}
@@ -220,6 +225,7 @@ export function PaymentFormPage() {
                 Date received
               </Label>
               <Input
+                data-cy="payment-date"
                 id="payment-date"
                 type="date"
                 value={paidAt}
@@ -230,6 +236,7 @@ export function PaymentFormPage() {
             <div className="space-y-1.5">
               <Label htmlFor="payment-reference">Bank or teller reference</Label>
               <Input
+                data-cy="payment-reference"
                 id="payment-reference"
                 value={reference}
                 onChange={(event) => setReference(event.target.value)}
@@ -241,6 +248,7 @@ export function PaymentFormPage() {
           <div className="space-y-1.5">
             <Label htmlFor="payment-note">Note</Label>
             <Textarea
+              data-cy="payment-note"
               id="payment-note"
               rows={2}
               value={note}
@@ -283,6 +291,7 @@ export function PaymentFormPage() {
                         Apply
                       </Label>
                       <Input
+                        data-cy="finance-payment-form-id"
                         id={`alloc-${invoice.id}`}
                         type="number"
                         min={0}
@@ -327,10 +336,10 @@ export function PaymentFormPage() {
       )}
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" onClick={() => navigate('/finance/payments')}>
+        <Button data-cy="finance-payment-form-cancel" variant="outline" onClick={() => navigate('/finance/payments')}>
           Cancel
         </Button>
-        <Button onClick={() => void submit()} loading={recordPayment.isPending} disabled={!valid}>
+        <Button data-cy="finance-payment-form-record-payment" onClick={() => void submit()} loading={recordPayment.isPending} disabled={!valid}>
           Record payment
         </Button>
       </div>

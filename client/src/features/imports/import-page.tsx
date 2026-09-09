@@ -189,6 +189,7 @@ export function ImportPage() {
         actions={
           entity && (
             <Button
+              data-cy="import-download-template"
               variant="outline"
               onClick={() => {
                 const template = templateSheetFor(entity);
@@ -219,6 +220,7 @@ export function ImportPage() {
               <button
                 key={option}
                 type="button"
+                data-cy={`import-entity-${option.toLowerCase()}`}
                 onClick={() => chooseEntity(option)}
                 aria-pressed={entity === option}
                 className={cn(
@@ -263,7 +265,7 @@ export function ImportPage() {
                     {formatFileSize(file.sizeBytes)}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={resetFile}>
+                <Button data-cy="import-choose-another-file" variant="outline" size="sm" onClick={resetFile}>
                   <RotateCcw />
                   Choose another file
                 </Button>
@@ -273,6 +275,7 @@ export function ImportPage() {
                 <input
                   ref={inputRef}
                   type="file"
+                  data-cy="import-file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="sr-only"
                   onChange={(event) => {
@@ -282,6 +285,7 @@ export function ImportPage() {
                   }}
                 />
                 <button
+                  data-cy="import-choose-an-excel-file"
                   type="button"
                   onClick={() => inputRef.current?.click()}
                   className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 text-center transition-colors hover:border-primary/50 hover:bg-accent/40"
@@ -318,6 +322,7 @@ export function ImportPage() {
                     <p className="text-xs text-muted-foreground">{target.description}</p>
                   )}
                   <NativeSelect
+                    data-cy="import-key"
                     id={`map-${target.key}`}
                     value={mapping[target.key] ?? ''}
                     invalid={target.required && !mapping[target.key]}
@@ -352,6 +357,7 @@ export function ImportPage() {
 
             <div className="flex justify-end">
               <Button
+                data-cy="import-check-the-file"
                 onClick={() => void runValidation()}
                 loading={validate.isPending}
                 loadingLabel="Checking your file…"
@@ -389,7 +395,7 @@ export function ImportPage() {
                     <AlertTriangle className="size-4 text-warning" aria-hidden="true" />
                     {preview.issues.length} problem{preview.issues.length === 1 ? '' : 's'} found
                   </p>
-                  <Button variant="outline" size="sm" onClick={downloadErrorReport}>
+                  <Button data-cy="import-download-report" variant="outline" size="sm" onClick={downloadErrorReport}>
                     <Download />
                     Download report
                   </Button>
@@ -465,6 +471,7 @@ export function ImportPage() {
             {preview.errorRows > 0 && (
               <label className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm">
                 <input
+                  data-cy="import-skip-invalid-rows"
                   type="checkbox"
                   checked={skipInvalidRows}
                   onChange={(event) => setSkipInvalidRows(event.target.checked)}
@@ -480,11 +487,12 @@ export function ImportPage() {
             )}
 
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => setPreview(null)}>
+              <Button data-cy="import-back-to-mapping" variant="outline" onClick={() => setPreview(null)}>
                 <ArrowLeft />
                 Back to mapping
               </Button>
               <Button
+                data-cy="import-import-row"
                 onClick={() => void runCommit()}
                 loading={commit.isPending}
                 loadingLabel="Importing…"
@@ -527,12 +535,12 @@ export function ImportPage() {
 
             <div className="flex flex-wrap gap-2">
               {result.issues.length > 0 && (
-                <Button variant="outline" onClick={downloadErrorReport}>
+                <Button data-cy="import-download-error-report" variant="outline" onClick={downloadErrorReport}>
                   <Download />
                   Download error report
                 </Button>
               )}
-              <Button variant="outline" onClick={resetFile}>
+              <Button data-cy="import-import-another-file" variant="outline" onClick={resetFile}>
                 <RotateCcw />
                 Import another file
               </Button>

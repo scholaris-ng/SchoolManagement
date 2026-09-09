@@ -120,7 +120,7 @@ export function CalendarPage() {
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Calendar' }]}
         actions={
           canManage && (
-            <Button onClick={() => setEditing({ open: true })}>
+            <Button data-cy="calendar-add-an-event" onClick={() => setEditing({ open: true })}>
               <Plus />
               Add an event
             </Button>
@@ -135,6 +135,7 @@ export function CalendarPage() {
               <CardTitle>{format(month, 'MMMM yyyy')}</CardTitle>
               <div className="flex items-center gap-1">
                 <Button
+                  data-cy="calendar-previous-month"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Previous month"
@@ -143,6 +144,7 @@ export function CalendarPage() {
                   <ChevronLeft />
                 </Button>
                 <Button
+                  data-cy="calendar-today"
                   variant="outline"
                   size="sm"
                   onClick={() => {
@@ -153,6 +155,7 @@ export function CalendarPage() {
                   Today
                 </Button>
                 <Button
+                  data-cy="calendar-next-month"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Next month"
@@ -190,6 +193,7 @@ export function CalendarPage() {
 
                     return (
                       <button
+                        data-cy="calendar-dayevents-length-3"
                         key={key}
                         type="button"
                         role="gridcell"
@@ -265,6 +269,7 @@ export function CalendarPage() {
                       </div>
                       {canManage && (
                         <Button
+                          data-cy="calendar-edit"
                           variant="ghost"
                           size="sm"
                           onClick={() => setEditing({ open: true, event })}
@@ -355,6 +360,7 @@ function EventDialog({
               Title
             </Label>
             <Input
+              data-cy="event-title"
               id="event-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -368,6 +374,7 @@ function EventDialog({
                 Starts
               </Label>
               <Input
+                data-cy="event-start"
                 id="event-start"
                 type="date"
                 value={startDate}
@@ -382,6 +389,7 @@ function EventDialog({
                 Ends
               </Label>
               <Input
+                data-cy="event-end"
                 id="event-end"
                 type="date"
                 min={startDate}
@@ -392,6 +400,7 @@ function EventDialog({
             <div className="space-y-1.5">
               <Label htmlFor="event-category">Category</Label>
               <NativeSelect
+                data-cy="event-category"
                 id="event-category"
                 value={category}
                 onChange={(event) =>
@@ -408,6 +417,7 @@ function EventDialog({
             <div className="space-y-1.5">
               <Label htmlFor="event-audience">Who sees it</Label>
               <NativeSelect
+                data-cy="event-audience"
                 id="event-audience"
                 value={audience}
                 onChange={(event) =>
@@ -430,6 +440,7 @@ function EventDialog({
                 {(classes.data ?? []).map((schoolClass) => (
                   <label key={schoolClass.id} className="flex items-center gap-2 text-sm">
                     <input
+                      data-cy="calendar-id"
                       type="checkbox"
                       checked={classIds.includes(schoolClass.id)}
                       onChange={() =>
@@ -454,6 +465,7 @@ function EventDialog({
           <div className="space-y-1.5">
             <Label htmlFor="event-location">Location</Label>
             <Input
+              data-cy="event-location"
               id="event-location"
               value={location}
               onChange={(event) => setLocation(event.target.value)}
@@ -463,6 +475,7 @@ function EventDialog({
           <div className="space-y-1.5">
             <Label htmlFor="event-description">Description</Label>
             <Textarea
+              data-cy="event-description"
               id="event-description"
               rows={3}
               value={description}
@@ -474,6 +487,7 @@ function EventDialog({
         <DialogFooter>
           {state.event && (
             <Button
+              data-cy="calendar-delete"
               variant="danger"
               className="mr-auto"
               loading={remove.isPending}
@@ -483,10 +497,11 @@ function EventDialog({
               Delete
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="calendar-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="calendar-save-event"
             loading={save.isPending}
             disabled={!valid || (audience === 'CLASSES' && classIds.length === 0)}
             onClick={() => void submit()}

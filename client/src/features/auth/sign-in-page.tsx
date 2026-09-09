@@ -118,9 +118,13 @@ export function SignInPage() {
             </p>
           </div>
 
-          {error && <Alert tone="danger">{error}</Alert>}
+          {error && (
+            <Alert tone="danger" data-cy="sign-in-error">
+              {error}
+            </Alert>
+          )}
 
-          <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          <form onSubmit={onSubmit} data-cy="sign-in-form" className="space-y-4" noValidate>
             <TextField
               control={form.control}
               name="email"
@@ -144,13 +148,20 @@ export function SignInPage() {
             <div className="flex justify-end">
               <Link
                 to="/forgot-password"
+                data-cy="sign-in-forgot-password"
                 className="text-sm text-primary hover:underline"
               >
                 Forgot your password?
               </Link>
             </div>
 
-            <Button type="submit" block loading={form.formState.isSubmitting} loadingLabel="Signing in…">
+            <Button
+              data-cy="sign-in-submit"
+              type="submit"
+              block
+              loading={form.formState.isSubmitting}
+              loadingLabel="Signing in…"
+            >
               Sign in
             </Button>
           </form>

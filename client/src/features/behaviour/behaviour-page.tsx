@@ -70,13 +70,13 @@ export function BehaviourPage() {
         actions={
           <>
             {canConfigure && (
-              <Button variant="outline" onClick={() => setTraitDialog({ open: true })}>
+              <Button data-cy="behaviour-new-trait" variant="outline" onClick={() => setTraitDialog({ open: true })}>
                 <Plus />
                 New trait
               </Button>
             )}
             {canRecord && (
-              <Button onClick={() => setObserveOpen(true)}>
+              <Button data-cy="behaviour-record-an-observation" onClick={() => setObserveOpen(true)}>
                 <Star />
                 Record an observation
               </Button>
@@ -117,6 +117,7 @@ export function BehaviourPage() {
                     {!trait.isActive && <Badge tone="warning">Inactive</Badge>}
                     {canConfigure && (
                       <Button
+                        data-cy="behaviour-edit"
                         variant="ghost"
                         size="sm"
                         onClick={() => setTraitDialog({ open: true, trait })}
@@ -142,6 +143,7 @@ export function BehaviourPage() {
                 </CardDescription>
               </div>
               <NativeSelect
+                data-cy="behaviour-trait-id"
                 aria-label="Filter by trait"
                 value={list.filters.traitId ?? ''}
                 onChange={(event) => list.setFilter('traitId', event.target.value || undefined)}
@@ -261,13 +263,14 @@ function ObservationDialog({
             {student ? (
               <div className="flex items-center gap-3 rounded-md border border-border p-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{student.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>
+                <Button data-cy="behaviour-change" variant="ghost" size="sm" onClick={() => setStudent(null)}>
                   Change
                 </Button>
               </div>
             ) : (
               <>
                 <SearchInput
+                  data-cy="behaviour-query"
                   value={query}
                   onValueChange={setQuery}
                   placeholder="Search by name or admission number…"
@@ -278,6 +281,7 @@ function ObservationDialog({
                       <li key={match.id}>
                         <button
                           type="button"
+                          data-cy={`behaviour-student-result-${match.id}`}
                           onClick={() => setStudent({ id: match.id, name: match.fullName })}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                         >
@@ -299,6 +303,7 @@ function ObservationDialog({
               Trait
             </Label>
             <NativeSelect
+              data-cy="obs-trait"
               id="obs-trait"
               value={traitId}
               onChange={(event) => setTraitId(event.target.value)}
@@ -319,6 +324,7 @@ function ObservationDialog({
                 <button
                   key={value}
                   type="button"
+                  data-cy={`behaviour-rating-${value}`}
                   onClick={() => setRating(value)}
                   aria-pressed={rating === value}
                   className={cn(
@@ -337,6 +343,7 @@ function ObservationDialog({
           <div className="space-y-1.5">
             <Label htmlFor="obs-note">Note</Label>
             <Textarea
+              data-cy="obs-note"
               id="obs-note"
               rows={3}
               value={note}
@@ -347,10 +354,11 @@ function ObservationDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="behaviour-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="behaviour-record"
             loading={record.isPending}
             disabled={!valid}
             onClick={() =>
@@ -415,6 +423,7 @@ function TraitDialog({
               Name
             </Label>
             <Input
+              data-cy="trait-name"
               id="trait-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -426,6 +435,7 @@ function TraitDialog({
             <div className="space-y-1.5">
               <Label htmlFor="trait-category">Category</Label>
               <NativeSelect
+                data-cy="trait-category"
                 id="trait-category"
                 value={category}
                 onChange={(event) =>
@@ -444,6 +454,7 @@ function TraitDialog({
                 Rating scale
               </Label>
               <NativeSelect
+                data-cy="trait-scale"
                 id="trait-scale"
                 value={scaleId}
                 onChange={(event) => setScaleId(event.target.value)}
@@ -460,6 +471,7 @@ function TraitDialog({
           <div className="space-y-1.5">
             <Label htmlFor="trait-description">Description</Label>
             <Textarea
+              data-cy="trait-description"
               id="trait-description"
               rows={2}
               value={description}
@@ -470,6 +482,7 @@ function TraitDialog({
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
               <input
+                data-cy="behaviour-appears-on-report-card"
                 type="checkbox"
                 checked={appearsOnReportCard}
                 onChange={(event) => setAppears(event.target.checked)}
@@ -479,6 +492,7 @@ function TraitDialog({
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
+                data-cy="behaviour-is-active"
                 type="checkbox"
                 checked={isActive}
                 onChange={(event) => setIsActive(event.target.checked)}
@@ -490,10 +504,11 @@ function TraitDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="behaviour-cancel-2" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="behaviour-save-trait"
             loading={save.isPending}
             disabled={!valid}
             onClick={() =>

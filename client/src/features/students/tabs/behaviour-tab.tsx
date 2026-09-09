@@ -77,6 +77,7 @@ export function StudentBehaviourTab({ studentId }: { studentId: string }) {
     <div className="space-y-6">
       <div className="flex justify-end">
         <NativeSelect
+          data-cy="tabs-behaviour-effective-term-id"
           value={effectiveTermId}
           onChange={(event) => setTermId(event.target.value)}
           aria-label="Term"

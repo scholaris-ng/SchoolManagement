@@ -13,7 +13,7 @@ export function NotFoundPage() {
         title="We could not find that page"
         description={`Nothing lives at ${location.pathname}. It may have been moved, or the link that brought you here may be out of date.`}
         action={
-          <Button asChild>
+          <Button data-cy="errors-not-found-back-to-the-dashboard" asChild>
             <Link to="/">
               <Home />
               Back to the dashboard

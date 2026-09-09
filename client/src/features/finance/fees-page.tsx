@@ -69,6 +69,7 @@ export function FeesPage() {
         actions={
           canManage && (
             <Button
+              data-cy="fees-new-item"
               onClick={() =>
                 tab === 'discounts'
                   ? setDiscountDialog({ open: true })
@@ -94,6 +95,7 @@ export function FeesPage() {
             key={option.id}
             type="button"
             role="tab"
+            data-cy={`fees-tab-${option.id}`}
             aria-selected={tab === option.id}
             onClick={() => setTab(option.id)}
             className={cn(
@@ -152,6 +154,7 @@ export function FeesPage() {
                     </span>
                     {canManage && (
                       <Button
+                        data-cy="finance-fees-edit"
                         variant="ghost"
                         size="sm"
                         onClick={() => setItemDialog({ open: true, item })}
@@ -256,6 +259,7 @@ export function FeesPage() {
                     </span>
                     {canManage && (
                       <Button
+                        data-cy="finance-fees-edit-2"
                         variant="ghost"
                         size="sm"
                         onClick={() => setDiscountDialog({ open: true, discount })}
@@ -337,6 +341,7 @@ function FeeItemDialog({
               Name
             </Label>
             <Input
+              data-cy="fee-name"
               id="fee-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -347,13 +352,14 @@ function FeeItemDialog({
             <Label htmlFor="fee-code" required>
               Code
             </Label>
-            <Input id="fee-code" value={code} onChange={(event) => setCode(event.target.value)} />
+            <Input data-cy="fee-code" id="fee-code" value={code} onChange={(event) => setCode(event.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fee-amount" required>
               Amount
             </Label>
             <Input
+              data-cy="fee-amount"
               id="fee-amount"
               type="number"
               min={0}
@@ -364,6 +370,7 @@ function FeeItemDialog({
           <div className="space-y-1.5">
             <Label htmlFor="fee-category">Category</Label>
             <NativeSelect
+              data-cy="fee-category"
               id="fee-category"
               value={category}
               onChange={(event) => setCategory(event.target.value as FeeItem['category'])}
@@ -378,6 +385,7 @@ function FeeItemDialog({
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="fee-description">Description</Label>
             <Textarea
+              data-cy="fee-description"
               id="fee-description"
               rows={2}
               value={description}
@@ -402,10 +410,11 @@ function FeeItemDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="finance-fees-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="finance-fees-save"
             loading={saving}
             disabled={!valid}
             onClick={() =>
@@ -462,6 +471,7 @@ function DiscountDialog({
               Name
             </Label>
             <Input
+              data-cy="discount-name"
               id="discount-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -471,6 +481,7 @@ function DiscountDialog({
           <div className="space-y-1.5">
             <Label htmlFor="discount-type">Type</Label>
             <NativeSelect
+              data-cy="discount-type"
               id="discount-type"
               value={type}
               onChange={(event) => setType(event.target.value as Discount['type'])}
@@ -485,6 +496,7 @@ function DiscountDialog({
           <div className="space-y-1.5">
             <Label htmlFor="discount-mode">Applied as</Label>
             <NativeSelect
+              data-cy="discount-mode"
               id="discount-mode"
               value={mode}
               onChange={(event) => setMode(event.target.value as Discount['mode'])}
@@ -498,6 +510,7 @@ function DiscountDialog({
               {mode === 'PERCENTAGE' ? 'Percentage' : 'Amount'}
             </Label>
             <Input
+              data-cy="discount-value"
               id="discount-value"
               type="number"
               min={0}
@@ -509,6 +522,7 @@ function DiscountDialog({
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="discount-description">Description</Label>
             <Textarea
+              data-cy="discount-description"
               id="discount-description"
               rows={2}
               value={description}
@@ -521,10 +535,11 @@ function DiscountDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="finance-fees-cancel-2" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="finance-fees-save-2"
             loading={saving}
             disabled={!valid}
             onClick={() =>
@@ -560,6 +575,7 @@ function Toggle({
   return (
     <label className="flex items-start gap-2.5 text-sm">
       <input
+        data-cy="finance-fees-checked"
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}

@@ -1,19 +1,17 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { usePermission, useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
-import type { StaffMember } from '@/types/people';
-import type { StaffPerformanceRow } from '@/types/analytics';
+import type { ListQuery } from '@/types/api';
 import type { SelectOption } from '@/components/ui/input';
 import type { StaffFormValues } from './schema';
+import { StaffEndpoints } from './staff.endpoints';
 
 export function useStaffList(query: ListQuery, options: { enabled?: boolean } = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.staff.list(schoolId, query),
-    queryFn: () => http.get<Paginated<StaffMember>>('/staff', { query }),
+    queryFn: () => StaffEndpoints.fetchAll(query),
     enabled: Boolean(schoolId) && (options.enabled ?? true),
     placeholderData: keepPreviousData,
   });
@@ -23,7 +21,7 @@ export function useStaffMember(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.staff.detail(schoolId, id ?? ''),
-    queryFn: () => http.get<StaffMember>(`/staff/${id}`),
+    queryFn: () => StaffEndpoints.fetchById(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
 }
@@ -33,7 +31,7 @@ export function useCreateStaff() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: StaffFormValues) => http.post<StaffMember>('/staff', values),
+    mutationFn: (values: StaffFormValues) => StaffEndpoints.create(values),
     onSuccess: (member) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.staff.list(schoolId) });
       toast.success('Staff member added', {
@@ -49,7 +47,7 @@ export function useUpdateStaff(id: string) {
 
   return useMutation({
     mutationFn: ({ values, version }: { values: Partial<StaffFormValues>; version: number }) =>
-      http.patch<StaffMember>(`/staff/${id}`, values, { version }),
+      StaffEndpoints.update(id, values, version),
     onSuccess: (member) => {
       queryClient.setQueryData(queryKeys.staff.detail(schoolId, id), member);
       void queryClient.invalidateQueries({ queryKey: queryKeys.staff.list(schoolId) });
@@ -61,12 +59,11 @@ export function useUpdateStaff(id: string) {
   });
 }
 
-/** Compliance and coverage per teacher — how management spots who needs help. */
 export function useStaffPerformance(termId?: string) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.staff.performance(schoolId, termId),
-    queryFn: () => http.get<StaffPerformanceRow[]>('/analytics/staff', { query: { termId } }),
+    queryFn: () => StaffEndpoints.fetchPerformance(termId),
     enabled: Boolean(schoolId),
   });
 }

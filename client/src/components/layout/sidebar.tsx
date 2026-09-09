@@ -116,6 +116,7 @@ export function Sidebar({
                 const link = (
                   <NavLink
                     to={item.to}
+                    data-cy={`nav-${item.to.replace(/^\//, '').replace(/\//g, '-') || 'home'}`}
                     // Only the sidebar-wide winner may report itself active; every
                     // other entry is forced to an exact match (which the current
                     // path can't satisfy, or it would have won) so React Router
@@ -166,6 +167,7 @@ export function Sidebar({
         <Button
           variant="ghost"
           size={collapsed ? 'icon' : 'sm'}
+          data-cy="sidebar-toggle"
           onClick={onToggleCollapsed}
           className={cn('text-muted-foreground', !collapsed && 'w-full justify-start')}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}

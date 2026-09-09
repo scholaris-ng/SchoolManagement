@@ -52,7 +52,7 @@ export function ReceiptPage() {
             { label: record.receiptNo },
           ]}
           actions={
-            <Button onClick={() => window.print()}>
+            <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
               <Printer />
               Print
             </Button>

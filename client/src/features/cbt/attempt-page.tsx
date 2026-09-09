@@ -158,7 +158,7 @@ export function AttemptPage() {
           icon={<XCircle />}
           title="This attempt is no longer on this device"
           description="An exam in progress is stored in the browser you started it in. If you submitted it already, your score is with your teacher."
-          action={<Button onClick={() => navigate('/cbt')}>Back to assessments</Button>}
+          action={<Button data-cy="cbt-attempt-back-to-assessments" onClick={() => navigate('/cbt')}>Back to assessments</Button>}
         />
       </PageContainer>
     );
@@ -201,7 +201,7 @@ export function AttemptPage() {
           </>
         }
         actions={
-          <Button onClick={() => setConfirmOpen(true)}>
+          <Button data-cy="cbt-attempt-submit-paper" onClick={() => setConfirmOpen(true)}>
             <Send />
             Submit paper
           </Button>
@@ -229,6 +229,7 @@ export function AttemptPage() {
                 {index + 1}. {question?.text}
               </CardTitle>
               <Button
+                data-cy="attempt-flag-question"
                 variant={flagged.includes(question?.id ?? '') ? 'primary' : 'outline'}
                 size="sm"
                 onClick={() =>
@@ -270,6 +271,7 @@ export function AttemptPage() {
                       )}
                     >
                       <input
+                        data-cy="cbt-attempt-selected"
                         type="radio"
                         name={question.id}
                         checked={selected}
@@ -290,6 +292,7 @@ export function AttemptPage() {
                   Your answer
                 </label>
                 <Input
+                  data-cy="short-answer"
                   id="short-answer"
                   value={answers[question?.id ?? ''] ?? ''}
                   onChange={(event) => setAnswer(question.id, event.target.value)}
@@ -300,6 +303,7 @@ export function AttemptPage() {
 
             <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
               <Button
+                data-cy="cbt-attempt-previous"
                 variant="outline"
                 disabled={index === 0}
                 onClick={() => setIndex((current) => current - 1)}
@@ -311,6 +315,7 @@ export function AttemptPage() {
                 {question?.marks} mark{question?.marks === 1 ? '' : 's'}
               </span>
               <Button
+                data-cy="cbt-attempt-next"
                 variant="outline"
                 disabled={index === questions.length - 1}
                 onClick={() => setIndex((current) => current + 1)}
@@ -339,6 +344,7 @@ export function AttemptPage() {
                   <button
                     key={entry.id}
                     type="button"
+                    data-cy={`attempt-jump-to-question-${entryIndex + 1}`}
                     onClick={() => setIndex(entryIndex)}
                     aria-label={`Go to question ${entryIndex + 1}${answered ? ', answered' : ', not answered'}`}
                     aria-current={entryIndex === index}
@@ -425,7 +431,7 @@ function AttemptResultView({ result, onDone }: { result: AttemptResult; onDone: 
             </div>
           </dl>
 
-          <Button onClick={onDone} block>
+          <Button data-cy="cbt-attempt-done" onClick={onDone} block>
             Done
           </Button>
         </CardContent>

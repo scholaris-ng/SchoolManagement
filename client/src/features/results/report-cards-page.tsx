@@ -58,6 +58,7 @@ export function ReportCardsPage() {
         <div className="space-y-1.5">
           <Label htmlFor="rc-term">Term</Label>
           <NativeSelect
+            data-cy="rc-term"
             id="rc-term"
             value={effectiveTermId}
             onChange={(event) => setTermId(event.target.value)}
@@ -73,6 +74,7 @@ export function ReportCardsPage() {
         <div className="space-y-1.5">
           <Label htmlFor="rc-class">Class</Label>
           <NativeSelect
+            data-cy="rc-class"
             id="rc-class"
             value={classId}
             onChange={(event) => setClassId(event.target.value)}
@@ -138,7 +140,7 @@ export function ReportCardsPage() {
                       <span className="text-muted-foreground">{row.grade}</span>
                       <span className="text-muted-foreground">{ordinal(row.position)}</span>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
+                    <Button data-cy="results-report-cards-open-report" variant="outline" size="sm" asChild>
                       <Link to={`/report-cards/${row.studentId}/${effectiveTermId}`}>
                         <Printer />
                         Open report

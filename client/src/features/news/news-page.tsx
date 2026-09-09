@@ -39,7 +39,7 @@ export function NewsPage() {
         breadcrumbs={[{ label: 'Communication' }, { label: 'News feed' }]}
         actions={
           <PermissionGate require="news.manage">
-            <Button asChild>
+            <Button data-cy="news-new-post" asChild>
               <Link to="/news/new">
                 <Plus />
                 New post

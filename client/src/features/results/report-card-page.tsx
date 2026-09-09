@@ -87,6 +87,7 @@ export function ReportCardPage() {
             <>
               {canComment && (
                 <Button
+                  data-cy="results-report-card-save-comments"
                   variant="outline"
                   disabled={!dirty}
                   loading={saveComments.isPending}
@@ -100,7 +101,7 @@ export function ReportCardPage() {
                   Save comments
                 </Button>
               )}
-              <Button onClick={() => window.print()}>
+              <Button data-cy="results-report-card-print" onClick={() => window.print()}>
                 <Printer />
                 Print
               </Button>
@@ -353,6 +354,7 @@ function CommentBlock({
         <Label htmlFor={`comment-${label}`}>{label}</Label>
         {templates.length > 0 && (
           <NativeSelect
+            data-cy={`report-card-comment-template-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
             aria-label={`Insert a template for ${label}`}
             value=""
             onChange={(event) => {
@@ -370,6 +372,7 @@ function CommentBlock({
         )}
       </div>
       <Textarea
+        data-cy="results-report-card-value"
         id={`comment-${label}`}
         rows={2}
         value={value}

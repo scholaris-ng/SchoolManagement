@@ -85,6 +85,7 @@ export function AnalyticsPage() {
         breadcrumbs={[{ label: 'Overview' }, { label: 'Analytics' }]}
         actions={
           <NativeSelect
+            data-cy="analytics-term-id"
             value={termId}
             onChange={(event) => setTermId(event.target.value)}
             aria-label="Term"
@@ -320,6 +321,8 @@ function AcademicPanel({ termId }: { termId: string }) {
       </div>
 
       <DataTable
+
+        data-cy="analytics-table"
         caption="Average score and pass rate for each subject"
         data={data?.subjects}
         columns={columns}
@@ -334,6 +337,7 @@ function AcademicPanel({ termId }: { termId: string }) {
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium">Subject performance</p>
             <Button
+              data-cy="analytics-export"
               variant="outline"
               size="sm"
               disabled={(data?.subjects.length ?? 0) === 0}
@@ -408,7 +412,7 @@ function AttendancePanel() {
         align: 'right',
         hideOnMobile: true,
         cell: (row) => (
-          <Button variant="ghost" size="sm" asChild>
+          <Button data-cy="analytics-open-register" variant="ghost" size="sm" asChild>
             <Link to={`/attendance?classId=${row.classId}`}>Open register</Link>
           </Button>
         ),
@@ -482,6 +486,8 @@ function AttendancePanel() {
       </Card>
 
       <DataTable
+
+        data-cy="analytics-table-2"
         caption="Attendance rate for each class"
         data={rows}
         columns={columns}
@@ -823,6 +829,7 @@ function StaffPanel({ termId }: { termId: string }) {
   return (
     <div className="space-y-6 pt-6">
       <DataTable
+        data-cy="analytics-table-3"
         caption="Compliance and curriculum coverage for each member of teaching staff"
         data={performance.data}
         columns={columns}
@@ -844,6 +851,7 @@ function StaffPanel({ termId }: { termId: string }) {
               </p>
             </div>
             <Button
+              data-cy="analytics-export-2"
               variant="outline"
               size="sm"
               disabled={(performance.data?.length ?? 0) === 0}

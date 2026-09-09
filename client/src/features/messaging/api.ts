@@ -1,25 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
-import type { ChatMessage, Conversation } from '@/types/engagement';
+import type { ListQuery } from '@/types/api';
+import { MessagingEndpoints } from './messaging.endpoints';
+import type { MessageContact, StartConversationInput } from './messaging.endpoints';
 
-/** A person this user is permitted to open a conversation with. */
-export interface MessageContact {
-  id: string;
-  name: string;
-  role: string;
-  subjects?: string[];
-  photoUrl?: string | null;
-}
+export type { MessageContact, StartConversationInput };
 
 export function useConversations(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.messaging.conversations(schoolId, query),
-    queryFn: () => http.get<Paginated<Conversation>>('/conversations', { query }),
+    queryFn: () => MessagingEndpoints.fetchConversations(query),
     enabled: Boolean(schoolId),
     // Realtime delivery is Firestore's job; this poll keeps the *list* fresh
     // for users whose browser has no Firestore connection.
@@ -31,24 +24,18 @@ export function useMessages(conversationId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.messaging.conversation(schoolId, conversationId ?? ''),
-    queryFn: () => http.get<ChatMessage[]>(`/conversations/${conversationId}/messages`),
+    queryFn: () => MessagingEndpoints.fetchMessages(conversationId ?? ''),
     enabled: Boolean(schoolId && conversationId),
     refetchInterval: 20_000,
   });
 }
 
-/**
- * Who this user is allowed to start a thread with.
- *
- * The list comes from the server, derived from the school's messaging policy
- * and the sender's relationship to a child. A parent cannot address arbitrary
- * staff, and no one can enumerate other users (spec section 29).
- */
+/** Who this user is allowed to start a thread with. */
 export function useMessageContacts(studentId?: string) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.messaging.contacts(schoolId, studentId),
-    queryFn: () => http.get<MessageContact[]>('/message-contacts', { query: { studentId } }),
+    queryFn: () => MessagingEndpoints.fetchContacts(studentId),
     enabled: Boolean(schoolId),
   });
 }
@@ -58,8 +45,7 @@ export function useSendMessage(conversationId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: string) =>
-      http.post<ChatMessage>(`/conversations/${conversationId}/messages`, { body }),
+    mutationFn: (body: string) => MessagingEndpoints.sendMessage(conversationId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.messaging.conversation(schoolId, conversationId),
@@ -77,12 +63,7 @@ export function useStartConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
-      subject: string;
-      recipientIds: string[];
-      studentId?: string;
-      body: string;
-    }) => http.post<Conversation>('/conversations', input),
+    mutationFn: (input: StartConversationInput) => MessagingEndpoints.startConversation(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messaging.conversations(schoolId) });
       toast.success('Message sent');

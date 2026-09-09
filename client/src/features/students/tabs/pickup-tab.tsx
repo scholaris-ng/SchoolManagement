@@ -44,6 +44,7 @@ export function StudentPickupTab({ studentId }: { studentId: string }) {
             </div>
             <PermissionGate require="collection.manage">
               <Button
+                data-cy="tabs-pickup-tab-add"
                 size="sm"
                 onClick={() => {
                   setEditing(null);
@@ -83,6 +84,7 @@ export function StudentPickupTab({ studentId }: { studentId: string }) {
                   <StatusBadge status={person.authorizationStatus} />
                   <PermissionGate require="collection.manage">
                     <Button
+                      data-cy="tabs-pickup-tab-edit"
                       variant="ghost"
                       size="sm"
                       onClick={() => {
@@ -203,10 +205,10 @@ function PickupPersonSheet({
       width="sm"
       footer={
         <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="tabs-pickup-tab-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} loading={save.isPending}>
+          <Button data-cy="tabs-pickup-tab-save" onClick={() => void submit()} loading={save.isPending}>
             Save
           </Button>
         </>
@@ -233,6 +235,7 @@ function PickupPersonSheet({
             Full name
           </Label>
           <Input
+            data-cy="pickup-name"
             id="pickup-name"
             value={current.name ?? ''}
             onChange={(event) => setValues((v) => ({ ...v, name: event.target.value }))}
@@ -244,6 +247,7 @@ function PickupPersonSheet({
             Relationship to the child
           </Label>
           <Input
+            data-cy="pickup-relationship"
             id="pickup-relationship"
             placeholder="e.g. Aunt, driver, grandparent"
             value={current.relationship ?? ''}
@@ -256,6 +260,7 @@ function PickupPersonSheet({
             Phone number
           </Label>
           <Input
+            data-cy="pickup-phone"
             id="pickup-phone"
             type="tel"
             value={current.phone ?? ''}
@@ -266,6 +271,7 @@ function PickupPersonSheet({
         <div className="space-y-1.5">
           <Label htmlFor="pickup-status">Authorisation</Label>
           <NativeSelect
+            data-cy="pickup-status"
             id="pickup-status"
             value={current.authorizationStatus ?? 'AUTHORIZED'}
             onChange={(event) =>

@@ -65,6 +65,18 @@ export interface DataTableProps<T> {
   /** Renders a stacked card per row below `lg`. Defaults to true. */
   responsiveCards?: boolean;
   rowClassName?: (row: T) => string | undefined;
+  /**
+   * Cypress hook. The wrapper carries it verbatim and everything inside is
+   * namespaced from it, so one prop makes a whole table addressable:
+   *
+   * - `<cy>-empty`             the empty state
+   * - `<cy>-row`               every row (desktop and mobile card alike),
+   *                            each also carrying `data-row-id`
+   * - `<cy>-sort-<columnId>`   a sortable column header
+   * - `<cy>-select-all`        the header checkbox
+   * - `<cy>-select-<rowId>`    a row checkbox
+   */
+  'data-cy'?: string;
 }
 
 export function DataTable<T>({
@@ -94,7 +106,9 @@ export function DataTable<T>({
   className,
   responsiveCards = true,
   rowClassName,
+  'data-cy': dataCy,
 }: DataTableProps<T>) {
+  const cy = (suffix: string) => (dataCy ? `${dataCy}-${suffix}` : undefined);
   const captionId = useId();
   const selectable = Boolean(onSelectionChange);
   const rows = data ?? [];
@@ -130,11 +144,11 @@ export function DataTable<T>({
   const cardColumns = columns.filter((column) => !column.hideOnMobile);
 
   return (
-    <div className={cn('rounded-lg border border-border bg-card', className)}>
+    <div data-cy={dataCy} className={cn('rounded-lg border border-border bg-card', className)}>
       {toolbar && <div className="border-b border-border p-3">{toolbar}</div>}
 
       {error ? (
-        <ErrorState error={error} onRetry={onRetry} />
+        <ErrorState error={error} onRetry={onRetry} data-cy={cy('error')} />
       ) : isLoading ? (
         <TableSkeleton columns={Math.min(visibleColumns.length, 6)} />
       ) : rows.length === 0 ? (
@@ -143,6 +157,7 @@ export function DataTable<T>({
           title={emptyTitle}
           description={emptyDescription}
           action={emptyAction}
+          data-cy={cy('empty')}
         />
       ) : (
         <>
@@ -165,6 +180,7 @@ export function DataTable<T>({
                       <Checkbox
                         checked={allSelected ? true : someSelected ? 'indeterminate' : false}
                         onCheckedChange={toggleAll}
+                        data-cy={cy('select-all')}
                         aria-label="Select all rows on this page"
                       />
                     </th>
@@ -191,6 +207,7 @@ export function DataTable<T>({
                         {column.sortKey && onSortChange ? (
                           <button
                             type="button"
+                            data-cy={cy(`sort-${column.id}`)}
                             onClick={() => handleSort(column)}
                             className={cn(
                               'inline-flex items-center gap-1 rounded transition-colors hover:text-foreground',
@@ -224,6 +241,8 @@ export function DataTable<T>({
                   return (
                     <tr
                       key={id}
+                      data-cy={cy('row')}
+                      data-row-id={id}
                       onClick={onRowClick ? () => onRowClick(row) : undefined}
                       className={cn(
                         'transition-colors',
@@ -237,6 +256,7 @@ export function DataTable<T>({
                           <Checkbox
                             checked={selected}
                             onCheckedChange={() => toggleOne(id)}
+                            data-cy={cy(`select-${id}`)}
                             aria-label={`Select row ${id}`}
                           />
                         </td>
@@ -271,6 +291,8 @@ export function DataTable<T>({
                 return (
                   <li
                     key={id}
+                    data-cy={cy('row')}
+                    data-row-id={id}
                     className={cn('p-4', selected && 'bg-primary-subtle')}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                   >
@@ -280,6 +302,7 @@ export function DataTable<T>({
                           <Checkbox
                             checked={selected}
                             onCheckedChange={() => toggleOne(id)}
+                            data-cy={cy(`select-${id}`)}
                             aria-label={`Select row ${id}`}
                           />
                         </div>

@@ -16,4 +16,14 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'warn',
     'no-console': ['warn', { allow: ['warn', 'error'] }],
   },
+  overrides: [
+    {
+      // Cypress specs and support files run in the runner, not the browser
+      // bundle: they get Mocha's globals and the `cy` / `Cypress` objects.
+      files: ['cypress/**/*.ts', 'cypress.config.ts'],
+      env: { 'cypress/globals': true },
+      plugins: ['cypress'],
+      extends: ['plugin:cypress/recommended'],
+    },
+  ],
 };

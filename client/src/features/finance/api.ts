@@ -1,35 +1,23 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
+import type { ListQuery } from '@/types/api';
+import type { Discount, FeeItem, FeeStructure } from '@/types/finance';
+import { FinanceEndpoints } from './finance.endpoints';
 import type {
-  Discount,
-  FeeItem,
-  FeeStructure,
-  FinanceOverview,
-  Invoice,
-  Payment,
-  PaymentMethod,
-  Receipt,
-  StudentFinanceSummary,
-} from '@/types/finance';
+  CreateInvoiceInput,
+  FinanceOverviewQuery,
+  RecordPaymentInput,
+} from './finance.endpoints';
 
-/**
- * Finance data access.
- *
- * Fee definitions, invoices and payments are deliberately three separate
- * resources: a fee item is what the school charges, an invoice is what a family
- * owes, a payment is what arrived. Balance is derived from the last two, never
- * stored as a single mutable number (spec section 26).
- */
+export type { CreateInvoiceInput, FinanceOverviewQuery, RecordPaymentInput };
 
-export function useFinanceOverview(query: { termId?: string } = {}) {
+export function useFinanceOverview(query: FinanceOverviewQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.overview(schoolId, query),
-    queryFn: () => http.get<FinanceOverview>('/finance/overview', { query }),
+    queryFn: () => FinanceEndpoints.fetchOverview(query),
     enabled: Boolean(schoolId),
   });
 }
@@ -40,7 +28,7 @@ export function useFeeItems(query: ListQuery = { page: 1, pageSize: 100 }) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.feeItems(schoolId, query),
-    queryFn: () => http.get<Paginated<FeeItem>>('/fee-items', { query }),
+    queryFn: () => FinanceEndpoints.fetchFeeItems(query),
     enabled: Boolean(schoolId),
   });
 }
@@ -51,7 +39,7 @@ export function useSaveFeeItem() {
 
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<FeeItem> }) =>
-      id ? http.patch<FeeItem>(`/fee-items/${id}`, values) : http.post<FeeItem>('/fee-items', values),
+      id ? FinanceEndpoints.updateFeeItem(id, values) : FinanceEndpoints.createFeeItem(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.feeItems(schoolId) });
       toast.success('Fee item saved');
@@ -63,7 +51,7 @@ export function useFeeStructures(query: ListQuery = { page: 1, pageSize: 50 }) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.structures(schoolId, query),
-    queryFn: () => http.get<Paginated<FeeStructure>>('/fee-structures', { query }),
+    queryFn: () => FinanceEndpoints.fetchFeeStructures(query),
     enabled: Boolean(schoolId),
   });
 }
@@ -75,8 +63,8 @@ export function useSaveFeeStructure() {
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<FeeStructure> }) =>
       id
-        ? http.patch<FeeStructure>(`/fee-structures/${id}`, values)
-        : http.post<FeeStructure>('/fee-structures', values),
+        ? FinanceEndpoints.updateFeeStructure(id, values)
+        : FinanceEndpoints.createFeeStructure(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.structures(schoolId) });
       toast.success('Fee structure saved');
@@ -88,7 +76,7 @@ export function useDiscounts() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.discounts(schoolId),
-    queryFn: () => http.get<Discount[]>('/discounts'),
+    queryFn: () => FinanceEndpoints.fetchDiscounts(),
     enabled: Boolean(schoolId),
   });
 }
@@ -99,9 +87,7 @@ export function useSaveDiscount() {
 
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<Discount> }) =>
-      id
-        ? http.patch<Discount>(`/discounts/${id}`, values)
-        : http.post<Discount>('/discounts', values),
+      id ? FinanceEndpoints.updateDiscount(id, values) : FinanceEndpoints.createDiscount(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.discounts(schoolId) });
       toast.success('Discount saved');
@@ -120,7 +106,7 @@ export function useInvoices(query: ListQuery, options: { enabled?: boolean } = {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.invoices(schoolId, query),
-    queryFn: () => http.get<Paginated<Invoice>>('/invoices', { query }),
+    queryFn: () => FinanceEndpoints.fetchInvoices(query),
     enabled: Boolean(schoolId) && options.enabled !== false,
     placeholderData: keepPreviousData,
   });
@@ -130,17 +116,9 @@ export function useInvoice(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.invoice(schoolId, id ?? ''),
-    queryFn: () => http.get<Invoice>(`/invoices/${id}`),
+    queryFn: () => FinanceEndpoints.fetchInvoice(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
-}
-
-export interface CreateInvoiceInput {
-  studentId: string;
-  termId: string;
-  dueDate: string;
-  lines: { feeItemId: string; quantity: number; discountAmount: number }[];
-  note?: string;
 }
 
 export function useCreateInvoice() {
@@ -148,7 +126,7 @@ export function useCreateInvoice() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateInvoiceInput) => http.post<Invoice>('/invoices', input),
+    mutationFn: (input: CreateInvoiceInput) => FinanceEndpoints.createInvoice(input),
     onSuccess: (invoice) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
@@ -164,35 +142,19 @@ export function usePayments(query: ListQuery, options: { enabled?: boolean } = {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.payments(schoolId, query),
-    queryFn: () => http.get<Paginated<Payment>>('/payments', { query }),
+    queryFn: () => FinanceEndpoints.fetchPayments(query),
     enabled: Boolean(schoolId) && options.enabled !== false,
     placeholderData: keepPreviousData,
   });
 }
 
-export interface RecordPaymentInput {
-  studentId: string;
-  amount: number;
-  method: PaymentMethod;
-  paidAt: string;
-  reference?: string;
-  allocations?: { invoiceId: string; amount: number }[];
-  note?: string;
-}
-
-/**
- * Recording a payment that arrived by cash, transfer or POS.
- *
- * Online payments never come through here — those are confirmed by a verified
- * provider webhook server-side, because a browser returning from a payment page
- * proves nothing (spec section 27).
- */
+/** Records a payment that arrived by cash, transfer or POS. */
 export function useRecordPayment() {
   const schoolId = useSchoolId();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: RecordPaymentInput) => http.post<Payment>('/payments', input),
+    mutationFn: (input: RecordPaymentInput) => FinanceEndpoints.recordPayment(input),
     onSuccess: (payment) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
@@ -213,7 +175,7 @@ export function useReconcilePayment() {
 
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      http.post<Payment>(`/payments/${id}/reconcile`, { note }),
+      FinanceEndpoints.reconcilePayment(id, note),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
@@ -226,7 +188,7 @@ export function useReceipt(paymentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.receipt(schoolId, paymentId ?? ''),
-    queryFn: () => http.get<Receipt>(`/receipts/${paymentId}`),
+    queryFn: () => FinanceEndpoints.fetchReceipt(paymentId ?? ''),
     enabled: Boolean(schoolId && paymentId),
   });
 }
@@ -235,7 +197,7 @@ export function useDebtors(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.finance.debtors(schoolId, query),
-    queryFn: () => http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),
+    queryFn: () => FinanceEndpoints.fetchDebtors(query),
     enabled: Boolean(schoolId),
     placeholderData: keepPreviousData,
   });

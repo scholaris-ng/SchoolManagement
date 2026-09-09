@@ -10,7 +10,10 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:e2e": "vite --mode e2e",
+    "e2e": "start-server-and-test dev:e2e http://localhost:5173 \"cypress run\"",
+    "e2e:open": "start-server-and-test dev:e2e http://localhost:5173 \"cypress open --e2e\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -56,12 +59,15 @@
     "@typescript-eslint/parser": "^8.19.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "cypress": "^13.17.0",
     "eslint": "^8.57.1",
+    "eslint-plugin-cypress": "^3.6.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "jsdom": "^25.0.1",
     "msw": "^2.7.0",
     "postcss": "^8.4.49",
+    "start-server-and-test": "^2.0.9",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",

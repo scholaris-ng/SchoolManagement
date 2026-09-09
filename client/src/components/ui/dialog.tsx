@@ -122,6 +122,11 @@ export interface ConfirmDialogProps {
    */
   confirmationPhrase?: string;
   onConfirm: () => void | Promise<void>;
+  /**
+   * Cypress hook. The dialog carries it verbatim; the actions inside get
+   * `<cy>-confirm`, `<cy>-cancel` and `<cy>-phrase`.
+   */
+  'data-cy'?: string;
 }
 
 export function ConfirmDialog({
@@ -135,6 +140,7 @@ export function ConfirmDialog({
   loading,
   confirmationPhrase,
   onConfirm,
+  'data-cy': dataCy = 'confirm-dialog',
 }: ConfirmDialogProps) {
   const [typed, setTyped] = useState('');
   const locked = Boolean(confirmationPhrase) && typed.trim() !== confirmationPhrase;
@@ -147,7 +153,7 @@ export function ConfirmDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent size="sm">
+      <DialogContent size="sm" data-cy={dataCy}>
         <DialogHeader>
           <div className="flex items-start gap-3">
             {tone === 'danger' && (
@@ -169,6 +175,7 @@ export function ConfirmDialog({
             </label>
             <input
               id="confirm-phrase"
+              data-cy={`${dataCy}-phrase`}
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               autoComplete="off"
@@ -177,11 +184,17 @@ export function ConfirmDialog({
           </DialogBody>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button
+            variant="outline"
+            data-cy={`${dataCy}-cancel`}
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             {cancelLabel}
           </Button>
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
+            data-cy={`${dataCy}-confirm`}
             onClick={() => void onConfirm()}
             loading={loading}
             disabled={locked}
@@ -206,6 +219,8 @@ export interface SheetProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: 'sm' | 'md' | 'lg';
+  /** Cypress hook. The panel carries it; the close button gets `<cy>-close`. */
+  'data-cy'?: string;
 }
 
 export function Sheet({
@@ -216,6 +231,7 @@ export function Sheet({
   children,
   footer,
   width = 'md',
+  'data-cy': dataCy = 'sheet',
 }: SheetProps) {
   const widths = { sm: 'sm:max-w-md', md: 'sm:max-w-xl', lg: 'sm:max-w-3xl' };
   return (
@@ -223,6 +239,7 @@ export function Sheet({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
         <DialogPrimitive.Content
+          data-cy={dataCy}
           className={cn(
             'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-card shadow-popover data-[state=open]:animate-slide-in-right',
             widths[width],
@@ -240,6 +257,7 @@ export function Sheet({
               )}
             </div>
             <DialogPrimitive.Close
+              data-cy={`${dataCy}-close`}
               className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label="Close"
             >

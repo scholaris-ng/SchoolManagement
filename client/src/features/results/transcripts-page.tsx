@@ -79,7 +79,7 @@ export function TranscriptsPage() {
         align: 'right',
         hideOnMobile: true,
         cell: (student) => (
-          <Button variant="ghost" size="sm" asChild>
+          <Button data-cy="results-transcripts-view-transcript" variant="ghost" size="sm" asChild>
             <Link to={`/transcripts/${student.id}`}>View transcript</Link>
           </Button>
         ),
@@ -109,6 +109,8 @@ export function TranscriptsPage() {
       />
 
       <DataTable
+
+        data-cy="results-transcripts-table"
         caption="Students a transcript can be issued for"
         data={students.data?.items}
         meta={students.data?.meta}

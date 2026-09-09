@@ -117,7 +117,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
 
       <div className="flex justify-end gap-2">
         <PermissionGate require="invoice.manage">
-          <Button variant="outline" asChild>
+          <Button data-cy="tabs-finance-tab-create-invoice" variant="outline" asChild>
             <Link to={`/finance/invoices/new?studentId=${studentId}`}>
               <Receipt />
               Create invoice
@@ -125,7 +125,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
           </Button>
         </PermissionGate>
         <PermissionGate require="payment.manage">
-          <Button asChild>
+          <Button data-cy="tabs-finance-tab-record-payment" asChild>
             <Link to={`/finance/payments/new?studentId=${studentId}`}>
               <Wallet />
               Record payment
@@ -144,6 +144,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
         </Card>
       ) : (
         <DataTable
+          data-cy="student-finance-table"
           caption="Statement of account showing every charge, payment and the running balance"
           data={entries}
           columns={columns}

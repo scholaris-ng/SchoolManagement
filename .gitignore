@@ -1,0 +1,5 @@
+
+# Cypress run artefacts
+client/cypress/screenshots
+client/cypress/videos
+client/cypress/downloads

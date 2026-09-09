@@ -101,7 +101,7 @@ export function SchemesPage() {
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Schemes of work' }]}
         actions={
           can('scheme.manage') && (
-            <Button onClick={() => setGenerateOpen(true)}>
+            <Button data-cy="curriculum-schemes-generate-a-draft" onClick={() => setGenerateOpen(true)}>
               <Sparkles />
               Generate a draft
             </Button>
@@ -132,6 +132,8 @@ export function SchemesPage() {
       />
 
       <DataTable
+
+        data-cy="curriculum-schemes-table"
         caption="Schemes of work by class and subject, with approval status"
         data={schemes.data?.items}
         meta={schemes.data?.meta}
@@ -209,6 +211,7 @@ function GenerateSchemeDialog({
               Curriculum
             </Label>
             <NativeSelect
+              data-cy="gen-curriculum"
               id="gen-curriculum"
               value={curriculumId}
               onChange={(event) => setCurriculumId(event.target.value)}
@@ -232,6 +235,7 @@ function GenerateSchemeDialog({
               Term
             </Label>
             <NativeSelect
+              data-cy="gen-term"
               id="gen-term"
               value={effectiveTermId}
               onChange={(event) => setTermId(event.target.value)}
@@ -254,10 +258,11 @@ function GenerateSchemeDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="curriculum-schemes-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="curriculum-schemes-generate-draft"
             loading={generating}
             loadingLabel="Generating…"
             disabled={!valid}

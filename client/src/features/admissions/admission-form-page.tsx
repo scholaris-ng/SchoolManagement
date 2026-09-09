@@ -198,6 +198,7 @@ export function AdmissionFormPage() {
                       <p className="text-sm font-medium">Guardian {index + 1}</p>
                       {guardians.fields.length > 1 && (
                         <Button
+                          data-cy="admissions-admission-form-remove"
                           type="button"
                           variant="ghost"
                           size="sm"
@@ -260,6 +261,7 @@ export function AdmissionFormPage() {
                 ))}
 
                 <Button
+                  data-cy="admissions-admission-form-add-another-guardian"
                   type="button"
                   variant="outline"
                   onClick={() => guardians.append({ ...emptyGuardian })}

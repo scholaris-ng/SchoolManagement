@@ -71,6 +71,18 @@ interface BaseFieldProps<T extends FieldValues> {
   hint?: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  /**
+   * Cypress hook. Defaults to `field-<name>` — the form path is already unique
+   * within a form, so every field is addressable without each caller inventing
+   * an id. Pass this only where two forms with the same field name are on
+   * screen at once.
+   */
+  'data-cy'?: string;
+}
+
+/** The default selector for a field, derived from its form path. */
+function fieldCy(name: string, override?: string): string {
+  return override ?? `field-${name}`;
 }
 
 export function TextField<T extends FieldValues>({
@@ -82,6 +94,7 @@ export function TextField<T extends FieldValues>({
   hint,
   className,
   disabled,
+  'data-cy': dataCy,
   type = 'text',
   placeholder,
   autoComplete,
@@ -109,6 +122,7 @@ export function TextField<T extends FieldValues>({
             <Input
               id={id}
               type={type}
+              data-cy={fieldCy(name, dataCy)}
               placeholder={placeholder}
               autoComplete={autoComplete}
               aria-describedby={describedBy}
@@ -134,6 +148,7 @@ export function NumberField<T extends FieldValues>({
   hint,
   className,
   disabled,
+  'data-cy': dataCy,
   min,
   max,
   step,
@@ -169,6 +184,7 @@ export function NumberField<T extends FieldValues>({
               <Input
                 id={id}
                 type="number"
+                data-cy={fieldCy(name, dataCy)}
                 inputMode="decimal"
                 min={min}
                 max={max}
@@ -203,6 +219,7 @@ export function TextareaField<T extends FieldValues>({
   hint,
   className,
   disabled,
+  'data-cy': dataCy,
   rows,
   placeholder,
   maxLength,
@@ -233,6 +250,7 @@ export function TextareaField<T extends FieldValues>({
             {({ id, describedBy, invalid }) => (
               <Textarea
                 id={id}
+                data-cy={fieldCy(name, dataCy)}
                 rows={rows}
                 placeholder={placeholder}
                 maxLength={maxLength}
@@ -259,6 +277,7 @@ export function SelectField<T extends FieldValues>({
   hint,
   className,
   disabled,
+  'data-cy': dataCy,
   options,
   placeholder,
   native,
@@ -285,6 +304,7 @@ export function SelectField<T extends FieldValues>({
             native ? (
               <NativeSelect
                 id={id}
+                data-cy={fieldCy(name, dataCy)}
                 aria-describedby={describedBy}
                 invalid={invalid}
                 disabled={disabled}
@@ -301,6 +321,7 @@ export function SelectField<T extends FieldValues>({
             ) : (
               <Select
                 id={id}
+                data-cy={fieldCy(name, dataCy)}
                 options={options}
                 placeholder={placeholder}
                 disabled={disabled}
@@ -338,6 +359,7 @@ export function DateField<T extends FieldValues>(
             <Input
               id={id}
               type="date"
+              data-cy={fieldCy(rest.name, rest['data-cy'])}
               min={min}
               max={max}
               aria-describedby={describedBy}
@@ -360,6 +382,7 @@ export function CheckboxField<T extends FieldValues>({
   description,
   className,
   disabled,
+  'data-cy': dataCy,
 }: Omit<BaseFieldProps<T>, 'required' | 'hint'>) {
   const id = useId();
   return (
@@ -371,6 +394,7 @@ export function CheckboxField<T extends FieldValues>({
           <div className="flex items-start gap-2.5">
             <Checkbox
               id={id}
+              data-cy={fieldCy(name, dataCy)}
               checked={Boolean(field.value)}
               onCheckedChange={field.onChange}
               disabled={disabled}
@@ -403,6 +427,7 @@ export function SwitchField<T extends FieldValues>({
   description,
   className,
   disabled,
+  'data-cy': dataCy,
 }: Omit<BaseFieldProps<T>, 'required' | 'hint'>) {
   const id = useId();
   return (
@@ -419,6 +444,7 @@ export function SwitchField<T extends FieldValues>({
           </div>
           <Switch
             id={id}
+            data-cy={fieldCy(name, dataCy)}
             checked={Boolean(field.value)}
             onCheckedChange={field.onChange}
             disabled={disabled}
@@ -446,6 +472,7 @@ export function MultiSelectField<T extends FieldValues>({
   hint,
   className,
   disabled,
+  'data-cy': dataCy,
   options,
   emptyLabel = 'Nothing to choose from yet.',
   columns = 2,
@@ -487,6 +514,7 @@ export function MultiSelectField<T extends FieldValues>({
                 <div
                   role="group"
                   aria-label={label}
+                  data-cy={fieldCy(name, dataCy)}
                   aria-describedby={describedBy}
                   className={cn(
                     'scrollbar-thin grid max-h-56 gap-2 overflow-y-auto rounded-md border border-input p-3',
@@ -499,6 +527,7 @@ export function MultiSelectField<T extends FieldValues>({
                       className="flex cursor-pointer items-start gap-2.5 text-sm"
                     >
                       <Checkbox
+                        data-cy={`${fieldCy(name, dataCy)}-option-${option.value}`}
                         checked={selected.includes(option.value)}
                         onCheckedChange={() => toggle(option.value)}
                         disabled={disabled || option.disabled}

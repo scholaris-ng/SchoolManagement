@@ -182,6 +182,7 @@ export function LessonNoteFormPage() {
           <>
             {canDelete && (
               <Button
+                data-cy="curriculum-lesson-note-form-delete"
                 variant="outline"
                 className="text-danger hover:text-danger"
                 onClick={() => setConfirmDelete(true)}
@@ -193,6 +194,7 @@ export function LessonNoteFormPage() {
             {editable && can('lessonnote.manage') && (
               <>
                 <Button
+                  data-cy="curriculum-lesson-note-form-save-draft"
                   variant="outline"
                   onClick={() => void submit()}
                   loading={save.isPending}
@@ -202,6 +204,7 @@ export function LessonNoteFormPage() {
                   Save draft
                 </Button>
                 <Button
+                  data-cy="curriculum-lesson-note-form-submit"
                   onClick={() => void submit('SUBMITTED')}
                   loading={save.isPending}
                   disabled={!valid}
@@ -214,6 +217,7 @@ export function LessonNoteFormPage() {
             {canReview && (
               <>
                 <Button
+                  data-cy="curriculum-lesson-note-form-return"
                   variant="outline"
                   onClick={() => void submit('RETURNED')}
                   loading={save.isPending}
@@ -221,7 +225,7 @@ export function LessonNoteFormPage() {
                   <Undo2 />
                   Return
                 </Button>
-                <Button onClick={() => void submit('APPROVED')} loading={save.isPending}>
+                <Button data-cy="curriculum-lesson-note-form-approve" onClick={() => void submit('APPROVED')} loading={save.isPending}>
                   <ShieldCheck />
                   Approve
                 </Button>
@@ -264,6 +268,7 @@ export function LessonNoteFormPage() {
                     Scheme of work
                   </Label>
                   <NativeSelect
+                    data-cy="note-scheme"
                     id="note-scheme"
                     value={draft.schemeId}
                     onChange={(event) => update({ schemeId: event.target.value, schemeWeekId: '' })}
@@ -282,6 +287,7 @@ export function LessonNoteFormPage() {
                     Week
                   </Label>
                   <NativeSelect
+                    data-cy="note-week"
                     id="note-week"
                     value={draft.schemeWeekId}
                     disabled={!draft.schemeId || scheme.isPending}
@@ -302,7 +308,7 @@ export function LessonNoteFormPage() {
                   tone="warning"
                   title="No schemes of work yet"
                   action={
-                    <Button asChild variant="outline" size="sm">
+                    <Button data-cy="curriculum-lesson-note-form-view-schemes" asChild variant="outline" size="sm">
                       <Link to="/schemes">View schemes</Link>
                     </Button>
                   }
@@ -331,6 +337,7 @@ export function LessonNoteFormPage() {
               Date taught
             </Label>
             <Input
+              data-cy="note-date"
               id="note-date"
               type="date"
               className="max-w-xs"
@@ -410,6 +417,7 @@ export function LessonNoteFormPage() {
           <CardContent className="space-y-1.5">
             <Label htmlFor="note-review">Comment to the teacher</Label>
             <Textarea
+              data-cy="note-review"
               id="note-review"
               rows={3}
               value={reviewComment}

@@ -84,13 +84,13 @@ export function WebsiteSettingsPage() {
         breadcrumbs={[{ label: 'Administration' }, { label: 'Website' }]}
         actions={
           <>
-            <Button variant="outline" asChild>
+            <Button data-cy="settings-website-settings-preview" variant="outline" asChild>
               <a href={`/s/${draft.slug}`} target="_blank" rel="noreferrer">
                 <ExternalLink />
                 Preview
               </a>
             </Button>
-            <Button onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
+            <Button data-cy="settings-website-settings-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
               <Save />
               Save changes
             </Button>
@@ -123,6 +123,7 @@ export function WebsiteSettingsPage() {
               </p>
             </div>
             <Switch
+              data-cy="website-settings-enabled"
               checked={draft.enabled}
               onCheckedChange={(value) => set({ enabled: value })}
               aria-label="Publish the website"
@@ -134,6 +135,7 @@ export function WebsiteSettingsPage() {
               Address
             </Label>
             <Input
+              data-cy="site-slug"
               id="site-slug"
               value={draft.slug}
               onChange={(event) =>
@@ -165,6 +167,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="site-tagline">Tagline</Label>
             <Input
+              data-cy="site-tagline"
               id="site-tagline"
               value={draft.tagline}
               onChange={(event) => set({ tagline: event.target.value })}
@@ -175,6 +178,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="site-about">About</Label>
             <Textarea
+              data-cy="site-about"
               id="site-about"
               rows={5}
               value={draft.about}
@@ -186,6 +190,7 @@ export function WebsiteSettingsPage() {
             <div className="space-y-1.5">
               <Label htmlFor="site-mission">Mission</Label>
               <Textarea
+                data-cy="site-mission"
                 id="site-mission"
                 rows={3}
                 value={draft.mission ?? ''}
@@ -195,6 +200,7 @@ export function WebsiteSettingsPage() {
             <div className="space-y-1.5">
               <Label htmlFor="site-vision">Vision</Label>
               <Textarea
+                data-cy="site-vision"
                 id="site-vision"
                 rows={3}
                 value={draft.vision ?? ''}
@@ -219,6 +225,7 @@ export function WebsiteSettingsPage() {
               </p>
             </div>
             <Switch
+              data-cy="website-settings-admissions-open"
               checked={draft.admissionsOpen}
               onCheckedChange={(value) => set({ admissionsOpen: value })}
               aria-label="Admissions are open"
@@ -228,6 +235,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="site-admissions">Admissions introduction</Label>
             <Textarea
+              data-cy="site-admissions"
               id="site-admissions"
               rows={4}
               value={draft.admissionsIntro ?? ''}
@@ -246,6 +254,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="site-email">Email</Label>
             <Input
+              data-cy="site-email"
               id="site-email"
               type="email"
               value={draft.contactEmail}
@@ -255,6 +264,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="site-phone">Phone</Label>
             <Input
+              data-cy="site-phone"
               id="site-phone"
               type="tel"
               value={draft.contactPhone}
@@ -264,6 +274,7 @@ export function WebsiteSettingsPage() {
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="site-address">Address</Label>
             <Input
+              data-cy="site-address"
               id="site-address"
               value={draft.address}
               onChange={(event) => set({ address: event.target.value })}
@@ -279,6 +290,7 @@ export function WebsiteSettingsPage() {
             <CardDescription>Where else the school can be found.</CardDescription>
           </div>
           <Button
+            data-cy="settings-website-settings-add-link"
             variant="outline"
             size="sm"
             onClick={() =>
@@ -298,6 +310,7 @@ export function WebsiteSettingsPage() {
                 <div className="w-40 space-y-1.5">
                   <Label htmlFor={`social-platform-${index}`}>Platform</Label>
                   <Input
+                    data-cy="website-settings-platform"
                     id={`social-platform-${index}`}
                     list="social-platforms"
                     value={link.platform}
@@ -313,6 +326,7 @@ export function WebsiteSettingsPage() {
                 <div className="min-w-[12rem] flex-1 space-y-1.5">
                   <Label htmlFor={`social-url-${index}`}>Address</Label>
                   <Input
+                    data-cy="website-settings-url"
                     id={`social-url-${index}`}
                     type="url"
                     placeholder="https://"
@@ -329,6 +343,7 @@ export function WebsiteSettingsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  data-cy={`website-social-remove-${index}`}
                   aria-label={`Remove ${link.platform || 'social'} link`}
                   onClick={() =>
                     set({
@@ -356,6 +371,7 @@ export function WebsiteSettingsPage() {
             <CardDescription>Quotes from parents, alumni and staff.</CardDescription>
           </div>
           <Button
+            data-cy="settings-website-settings-add-testimonial"
             variant="outline"
             size="sm"
             onClick={() =>
@@ -381,6 +397,7 @@ export function WebsiteSettingsPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor={`testimonial-author-${index}`}>Author</Label>
                     <Input
+                      data-cy="website-settings-author"
                       id={`testimonial-author-${index}`}
                       value={testimonial.author}
                       onChange={(event) =>
@@ -395,6 +412,7 @@ export function WebsiteSettingsPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor={`testimonial-role-${index}`}>Role</Label>
                     <Input
+                      data-cy="website-settings-role"
                       id={`testimonial-role-${index}`}
                       value={testimonial.role}
                       placeholder="Parent, alumnus, staff…"
@@ -411,6 +429,7 @@ export function WebsiteSettingsPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor={`testimonial-quote-${index}`}>Quote</Label>
                   <Textarea
+                    data-cy="website-settings-quote"
                     id={`testimonial-quote-${index}`}
                     rows={2}
                     value={testimonial.quote}
@@ -424,6 +443,7 @@ export function WebsiteSettingsPage() {
                   />
                 </div>
                 <Button
+                  data-cy="settings-website-settings-remove"
                   variant="ghost"
                   size="sm"
                   onClick={() =>
@@ -475,6 +495,7 @@ export function WebsiteSettingsPage() {
                     className="aspect-video w-full rounded-md object-cover"
                   />
                   <Input
+                    data-cy="website-settings-caption"
                     aria-label={`Caption for image ${index + 1}`}
                     placeholder="Caption"
                     value={image.caption ?? ''}
@@ -487,6 +508,7 @@ export function WebsiteSettingsPage() {
                     }
                   />
                   <Button
+                    data-cy="settings-website-settings-remove-2"
                     variant="ghost"
                     size="sm"
                     className="w-full"

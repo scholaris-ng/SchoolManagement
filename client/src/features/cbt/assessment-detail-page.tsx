@@ -127,11 +127,12 @@ export function AssessmentDetailPage() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" onClick={() => navigate('/cbt')}>
+        <Button data-cy="cbt-assessment-detail-back" variant="outline" onClick={() => navigate('/cbt')}>
           Back
         </Button>
         {canTake ? (
           <Button
+            data-cy="cbt-assessment-detail-start-now"
             onClick={() => void start()}
             loading={startAttempt.isPending}
             loadingLabel="Preparing your paper…"
@@ -140,7 +141,7 @@ export function AssessmentDetailPage() {
             Start now
           </Button>
         ) : (
-          <Button disabled>
+          <Button disabled data-cy="assessment-detail-start-blocked">
             {paper.state === 'OPEN' ? 'You cannot take this paper' : 'Not open'}
           </Button>
         )}

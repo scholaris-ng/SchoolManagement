@@ -149,7 +149,7 @@ export function FamilyFinancePage() {
         hideOnMobile: true,
         cell: (row) =>
           row.status === 'SUCCESSFUL' ? (
-            <Button variant="ghost" size="sm" asChild>
+            <Button data-cy="family-finance-receipt" variant="ghost" size="sm" asChild>
               <Link to={`/finance/receipts/${row.id}`}>
                 <Receipt />
                 Receipt
@@ -319,6 +319,7 @@ export function FamilyFinancePage() {
             </CardDescription>
           </div>
           <Button
+            data-cy="family-finance-print"
             variant="outline"
             size="sm"
             disabled={(ledger.data?.entries.length ?? 0) === 0}
@@ -330,6 +331,7 @@ export function FamilyFinancePage() {
         </CardHeader>
         <CardContent className="p-0">
           <DataTable
+            data-cy="family-finance-table"
             className="rounded-none border-0"
             caption={`Fee statement for ${activeChild?.fullName ?? 'this child'}`}
             data={ledger.data?.entries}
@@ -352,6 +354,7 @@ export function FamilyFinancePage() {
           </CardHeader>
           <CardContent className="p-0">
             <DataTable
+              data-cy="family-finance-table-2"
               className="rounded-none border-0"
               caption={`Invoices for ${activeChild?.fullName ?? 'this child'}`}
               data={invoices.data?.items}
@@ -375,6 +378,7 @@ export function FamilyFinancePage() {
           </CardHeader>
           <CardContent className="p-0">
             <DataTable
+              data-cy="family-finance-table-3"
               className="rounded-none border-0"
               caption={`Payments recorded for ${activeChild?.fullName ?? 'this child'}`}
               data={payments.data?.items}

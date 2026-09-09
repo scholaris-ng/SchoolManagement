@@ -57,6 +57,7 @@ export function Pagination({
           <label className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
             Rows
             <NativeSelect
+              data-cy="pagination-size"
               value={String(meta.pageSize)}
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
               className="h-8 w-[4.5rem] text-xs"
@@ -75,6 +76,7 @@ export function Pagination({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-cy="pagination-first"
             onClick={() => onPageChange(1)}
             disabled={!meta.hasPrevious || isFetching}
             aria-label="First page"
@@ -84,6 +86,7 @@ export function Pagination({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-cy="pagination-prev"
             onClick={() => onPageChange(meta.page - 1)}
             disabled={!meta.hasPrevious || isFetching}
             aria-label="Previous page"
@@ -102,6 +105,7 @@ export function Pagination({
                   key={page}
                   variant={page === meta.page ? 'primary' : 'ghost'}
                   size="icon-sm"
+                  data-cy={`pagination-page-${page}`}
                   onClick={() => onPageChange(page)}
                   disabled={isFetching}
                   aria-current={page === meta.page ? 'page' : undefined}
@@ -121,6 +125,7 @@ export function Pagination({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-cy="pagination-next"
             onClick={() => onPageChange(meta.page + 1)}
             disabled={!meta.hasNext || isFetching}
             aria-label="Next page"
@@ -130,6 +135,7 @@ export function Pagination({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-cy="pagination-last"
             onClick={() => onPageChange(meta.totalPages)}
             disabled={!meta.hasNext || isFetching}
             aria-label="Last page"

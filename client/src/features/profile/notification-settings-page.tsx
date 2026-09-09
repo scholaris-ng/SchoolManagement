@@ -204,6 +204,7 @@ function PreferenceRow({
                     </span>
                   </span>
                   <Switch
+                    data-cy="profile-notification-settings-checked"
                     checked={checked}
                     onCheckedChange={(value) => onToggle(channel.key, value)}
                     aria-label={label}
@@ -314,12 +315,12 @@ function PushCard() {
         </p>
 
         {state === 'granted' ? (
-          <Button variant="outline" onClick={() => void disable()} loading={busy}>
+          <Button data-cy="profile-notification-settings-turn-off-on-this" variant="outline" onClick={() => void disable()} loading={busy}>
             <BellOff />
             Turn off on this device
           </Button>
         ) : (
-          <Button onClick={() => void enable()} loading={busy} disabled={state === 'denied'}>
+          <Button data-cy="profile-notification-settings-enable-push" onClick={() => void enable()} loading={busy} disabled={state === 'denied'}>
             <Bell />
             Enable push
           </Button>

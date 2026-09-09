@@ -70,7 +70,12 @@ export function StudentDocumentsTab({ studentId }: { studentId: string }) {
                       {humanizeEnum(document.category)}
                     </Badge>
                     {document.downloadUrl && (
-                      <Button variant="ghost" size="icon-sm" asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        asChild
+                        data-cy={`student-document-open-${document.id}`}
+                      >
                         <a
                           href={document.downloadUrl}
                           target="_blank"
@@ -85,6 +90,7 @@ export function StudentDocumentsTab({ studentId }: { studentId: string }) {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`student-document-delete-${document.id}`}
                         onClick={() => setPendingDelete(document)}
                         aria-label={`Delete ${document.name}`}
                       >
@@ -108,6 +114,7 @@ export function StudentDocumentsTab({ studentId }: { studentId: string }) {
             <div className="space-y-1.5">
               <Label htmlFor="document-category">Category</Label>
               <NativeSelect
+                data-cy="document-category"
                 id="document-category"
                 value={category}
                 onChange={(event) =>

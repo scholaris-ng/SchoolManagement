@@ -92,6 +92,7 @@ export function StudentAttendanceTab({ studentId }: { studentId: string }) {
             : toDateInputValue(new Date())}
         </p>
         <NativeSelect
+          data-cy="tabs-attendance-effective-term-id"
           value={effectiveTermId}
           onChange={(event) => setTermId(event.target.value)}
           aria-label="Term"
@@ -158,6 +159,7 @@ export function StudentAttendanceTab({ studentId }: { studentId: string }) {
         </Card>
       ) : (
         <DataTable
+          data-cy="student-attendance-table"
           caption="Days this student was absent, late or excused, with the recorded reason"
           data={absences}
           columns={columns}

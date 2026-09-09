@@ -66,7 +66,7 @@ export function HousesPage() {
         breadcrumbs={[{ label: 'Behaviour & safety' }, { label: 'Houses' }]}
         actions={
           can('house.manage') && (
-            <Button onClick={() => setAwardOpen(true)}>
+            <Button data-cy="behaviour-houses-award-points" onClick={() => setAwardOpen(true)}>
               <Plus />
               Award points
             </Button>
@@ -237,13 +237,14 @@ function AwardDialog({
             {student ? (
               <div className="flex items-center gap-3 rounded-md border border-border p-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{student.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>
+                <Button data-cy="behaviour-houses-change" variant="ghost" size="sm" onClick={() => setStudent(null)}>
                   Change
                 </Button>
               </div>
             ) : (
               <>
                 <SearchInput
+                  data-cy="behaviour-houses-query"
                   value={query}
                   onValueChange={setQuery}
                   placeholder="Search by name or admission number…"
@@ -254,6 +255,7 @@ function AwardDialog({
                       <li key={match.id}>
                         <button
                           type="button"
+                          data-cy={`houses-student-result-${match.id}`}
                           onClick={() => setStudent({ id: match.id, name: match.fullName })}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                         >
@@ -276,6 +278,7 @@ function AwardDialog({
                 Points
               </Label>
               <Input
+                data-cy="award-points"
                 id="award-points"
                 type="number"
                 value={points}
@@ -285,6 +288,7 @@ function AwardDialog({
             <div className="space-y-1.5">
               <Label htmlFor="award-reason">Reason</Label>
               <NativeSelect
+                data-cy="award-reason"
                 id="award-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
@@ -301,6 +305,7 @@ function AwardDialog({
           <div className="space-y-1.5">
             <Label htmlFor="award-note">Note</Label>
             <Textarea
+              data-cy="award-note"
               id="award-note"
               rows={2}
               value={note}
@@ -311,10 +316,11 @@ function AwardDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button data-cy="behaviour-houses-cancel" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            data-cy="behaviour-houses-award"
             loading={award.isPending}
             disabled={!valid}
             onClick={() =>

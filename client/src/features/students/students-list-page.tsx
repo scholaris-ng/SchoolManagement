@@ -125,7 +125,12 @@ export function StudentsListPage() {
         align: 'right',
         hideOnMobile: true,
         cell: (student) => (
-          <Button variant="ghost" size="icon-sm" asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            asChild
+            data-cy={`students-list-open-${student.id}`}
+          >
             <Link to={`/students/${student.id}`} aria-label={`Open ${student.fullName}`}>
               <ArrowUpRight />
             </Link>
@@ -166,7 +171,7 @@ export function StudentsListPage() {
         actions={
           <>
             <PermissionGate require="import.run">
-              <Button variant="outline" asChild>
+              <Button data-cy="students-list-import" variant="outline" asChild>
                 <Link to="/import?entity=STUDENTS">
                   <UploadCloud />
                   Import
@@ -174,12 +179,12 @@ export function StudentsListPage() {
               </Button>
             </PermissionGate>
             <PermissionGate require="student.promote">
-              <Button variant="outline" onClick={() => setPromoteOpen(true)}>
+              <Button data-cy="students-list-promote-class" variant="outline" onClick={() => setPromoteOpen(true)}>
                 Promote class
               </Button>
             </PermissionGate>
             <PermissionGate require="student.create">
-              <Button asChild>
+              <Button data-cy="students-list-add-student" asChild>
                 <Link to="/students/new">
                   <Plus />
                   Add student
@@ -229,13 +234,15 @@ export function StudentsListPage() {
       />
 
       <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
-        <Button variant="outline" size="sm" onClick={exportSelection}>
+        <Button data-cy="students-list-export-excel" variant="outline" size="sm" onClick={exportSelection}>
           <Download />
           Export Excel
         </Button>
       </SelectionBar>
 
       <DataTable
+
+        data-cy="students-table"
         caption="List of students with class, house, guardian count and enrolment status"
         data={students.data?.items}
         meta={students.data?.meta}
@@ -262,12 +269,12 @@ export function StudentsListPage() {
         }
         emptyAction={
           list.isFiltered ? (
-            <Button variant="outline" onClick={list.reset}>
+            <Button data-cy="students-list-clear-filters" variant="outline" onClick={list.reset}>
               Clear filters
             </Button>
           ) : (
             <PermissionGate require="student.create">
-              <Button asChild>
+              <Button data-cy="students-list-add-the-first-student" asChild>
                 <Link to="/students/new">
                   <Plus />
                   Add the first student

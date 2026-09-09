@@ -135,7 +135,7 @@ export function AcademicsSettingsPage() {
         breadcrumbs={[{ label: 'Administration' }, { label: 'Academic setup' }]}
         actions={
           newAction && (
-            <Button onClick={newAction}>
+            <Button data-cy="settings-academics-settings-new" onClick={newAction}>
               <Plus />
               New {tab.slice(0, -1)}
             </Button>
@@ -151,6 +151,7 @@ export function AcademicsSettingsPage() {
             key={option.id}
             type="button"
             role="tab"
+            data-cy={`academics-settings-tab-${option.id}`}
             aria-selected={tab === option.id}
             onClick={() => setTab(option.id)}
             className={cn(
@@ -193,6 +194,7 @@ export function AcademicsSettingsPage() {
                         {formatDate(session.startDate)} – {formatDate(session.endDate)}
                       </span>
                       <Button
+                        data-cy="settings-academics-settings-edit"
                         variant="ghost"
                         size="sm"
                         className="ml-auto h-6 px-2 text-xs"
@@ -201,6 +203,7 @@ export function AcademicsSettingsPage() {
                         Edit
                       </Button>
                       <Button
+                        data-cy="settings-academics-settings-delete"
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs text-danger hover:text-danger"
@@ -231,6 +234,7 @@ export function AcademicsSettingsPage() {
                               <div className="flex shrink-0 items-center gap-1">
                                 <button
                                   type="button"
+                                  data-cy={`academics-settings-term-edit-${term.id}`}
                                   aria-label={`Edit ${term.name}`}
                                   onClick={() =>
                                     setTermDialog({ open: true, term, sessionId: session.id })
@@ -243,6 +247,7 @@ export function AcademicsSettingsPage() {
                                   <Badge tone="primary">Current</Badge>
                                 ) : (
                                   <Button
+                                    data-cy="settings-academics-settings-make-current"
                                     variant="ghost"
                                     size="sm"
                                     className="h-6 px-2 text-xs"
@@ -266,6 +271,7 @@ export function AcademicsSettingsPage() {
                         ))}
                       <li>
                         <button
+                          data-cy="settings-academics-settings-add-term"
                           type="button"
                           onClick={() =>
                             setTermDialog({
@@ -322,6 +328,7 @@ export function AcademicsSettingsPage() {
                     </div>
                     {period.isBreak && <Badge tone="warning">Break</Badge>}
                     <Button
+                      data-cy="settings-academics-settings-edit-2"
                       variant="ghost"
                       size="sm"
                       onClick={() => setPeriodDialog({ open: true, period })}
@@ -329,6 +336,7 @@ export function AcademicsSettingsPage() {
                       Edit
                     </Button>
                     <Button
+                      data-cy="settings-academics-settings-delete-2"
                       variant="ghost"
                       size="sm"
                       className="text-danger hover:text-danger"
@@ -379,6 +387,7 @@ export function AcademicsSettingsPage() {
                       </p>
                     </div>
                     <Button
+                      data-cy="settings-academics-settings-edit-3"
                       variant="ghost"
                       size="sm"
                       onClick={() => setLevelDialog({ open: true, level })}
@@ -424,6 +433,7 @@ export function AcademicsSettingsPage() {
                     </span>
                     {!schoolClass.isActive && <Badge tone="warning">Inactive</Badge>}
                     <Button
+                      data-cy="settings-academics-settings-edit-4"
                       variant="ghost"
                       size="sm"
                       onClick={() => setClassDialog({ open: true, schoolClass })}
@@ -469,6 +479,7 @@ export function AcademicsSettingsPage() {
                     {subject.isCore && <Badge tone="primary">Core</Badge>}
                     {!subject.isActive && <Badge tone="warning">Inactive</Badge>}
                     <Button
+                      data-cy="settings-academics-settings-edit-5"
                       variant="ghost"
                       size="sm"
                       onClick={() => setSubjectDialog({ open: true, subject })}
@@ -511,6 +522,7 @@ export function AcademicsSettingsPage() {
                       </p>
                     </div>
                     <Button
+                      data-cy="settings-academics-settings-edit-6"
                       variant="ghost"
                       size="sm"
                       onClick={() => setHouseDialog({ open: true, house })}
@@ -657,6 +669,7 @@ function SessionDialog({
                 Name
               </Label>
               <Input
+                data-cy="session-name"
                 id="session-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -668,6 +681,7 @@ function SessionDialog({
                 Starts
               </Label>
               <Input
+                data-cy="session-start"
                 id="session-start"
                 type="date"
                 value={startDate}
@@ -679,6 +693,7 @@ function SessionDialog({
                 Ends
               </Label>
               <Input
+                data-cy="session-end"
                 id="session-end"
                 type="date"
                 min={startDate}
@@ -701,6 +716,7 @@ function SessionDialog({
                       Name
                     </Label>
                     <Input
+                      data-cy="academics-settings-name"
                       id={`term-name-${index}`}
                       value={row.name}
                       onChange={(event) => updateTerm(index, { name: event.target.value })}
@@ -711,6 +727,7 @@ function SessionDialog({
                       Starts
                     </Label>
                     <Input
+                      data-cy="academics-settings-start-date"
                       id={`term-start-${index}`}
                       type="date"
                       value={row.startDate}
@@ -722,6 +739,7 @@ function SessionDialog({
                       Ends
                     </Label>
                     <Input
+                      data-cy="academics-settings-end-date"
                       id={`term-end-${index}`}
                       type="date"
                       min={row.startDate}
@@ -732,6 +750,7 @@ function SessionDialog({
                   <div className="space-y-1.5">
                     <Label htmlFor={`term-weeks-${index}`}>Teaching weeks</Label>
                     <Input
+                      data-cy="academics-settings-end-date-2"
                       id={`term-weeks-${index}`}
                       value={teachingWeeksBetween(row.startDate, row.endDate) || '—'}
                       readOnly
@@ -744,10 +763,11 @@ function SessionDialog({
           )}
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save"
             loading={save.isPending}
             disabled={!valid}
             onClick={() =>
@@ -814,6 +834,7 @@ function TermDialog({
               Name
             </Label>
             <Input
+              data-cy="term-name"
               id="term-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -826,6 +847,7 @@ function TermDialog({
                 Starts
               </Label>
               <Input
+                data-cy="term-start"
                 id="term-start"
                 type="date"
                 value={startDate}
@@ -837,6 +859,7 @@ function TermDialog({
                 Ends
               </Label>
               <Input
+                data-cy="term-end"
                 id="term-end"
                 type="date"
                 min={startDate}
@@ -847,7 +870,7 @@ function TermDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="term-weeks">Teaching weeks</Label>
-            <Input id="term-weeks" value={teachingWeeks || '—'} readOnly disabled />
+            <Input data-cy="term-weeks" id="term-weeks" value={teachingWeeks || '—'} readOnly disabled />
             <p className="text-xs text-muted-foreground">
               {datesOutOfOrder
                 ? 'The end date is before the start date.'
@@ -858,10 +881,11 @@ function TermDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-2" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-2"
             loading={save.isPending}
             disabled={!valid}
             onClick={() =>
@@ -920,6 +944,7 @@ function PeriodDialog({
               Name
             </Label>
             <Input
+              data-cy="period-name"
               id="period-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -932,6 +957,7 @@ function PeriodDialog({
                 Starts
               </Label>
               <Input
+                data-cy="period-start"
                 id="period-start"
                 type="time"
                 value={startTime}
@@ -943,6 +969,7 @@ function PeriodDialog({
                 Ends
               </Label>
               <Input
+                data-cy="period-end"
                 id="period-end"
                 type="time"
                 value={endTime}
@@ -955,6 +982,7 @@ function PeriodDialog({
               Sequence
             </Label>
             <Input
+              data-cy="period-sequence"
               id="period-sequence"
               type="number"
               min={1}
@@ -964,6 +992,7 @@ function PeriodDialog({
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
+              data-cy="academics-settings-is-break"
               type="checkbox"
               checked={isBreak}
               onChange={(event) => setIsBreak(event.target.checked)}
@@ -973,10 +1002,11 @@ function PeriodDialog({
           </label>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-3" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-3"
             loading={save.isPending}
             disabled={!valid}
             onClick={() =>
@@ -1031,6 +1061,7 @@ function LevelDialog({
               Name
             </Label>
             <Input
+              data-cy="level-name"
               id="level-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -1041,6 +1072,7 @@ function LevelDialog({
             <div className="space-y-1.5">
               <Label htmlFor="level-code">Code</Label>
               <Input
+                data-cy="level-code"
                 id="level-code"
                 value={code}
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -1051,6 +1083,7 @@ function LevelDialog({
                 Sequence
               </Label>
               <Input
+                data-cy="level-sequence"
                 id="level-sequence"
                 type="number"
                 min={1}
@@ -1061,10 +1094,11 @@ function LevelDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-4" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-4"
             loading={save.isPending}
             disabled={!name.trim()}
             onClick={() =>
@@ -1126,6 +1160,7 @@ function ClassDialog({
               Class name
             </Label>
             <Input
+              data-cy="class-name"
               id="class-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -1137,6 +1172,7 @@ function ClassDialog({
               Level
             </Label>
             <NativeSelect
+              data-cy="class-level"
               id="class-level"
               value={levelId}
               onChange={(event) => setLevelId(event.target.value)}
@@ -1151,6 +1187,7 @@ function ClassDialog({
           <div className="space-y-1.5">
             <Label htmlFor="class-arm">Arm</Label>
             <Input
+              data-cy="class-arm"
               id="class-arm"
               value={arm}
               onChange={(event) => setArm(event.target.value)}
@@ -1160,6 +1197,7 @@ function ClassDialog({
           <div className="space-y-1.5">
             <Label htmlFor="class-capacity">Capacity</Label>
             <Input
+              data-cy="class-capacity"
               id="class-capacity"
               type="number"
               min={1}
@@ -1178,6 +1216,7 @@ function ClassDialog({
                 {teachers.map((teacher) => (
                   <label key={teacher.value} className="flex items-center gap-2 text-sm">
                     <input
+                      data-cy="academics-settings-value"
                       type="checkbox"
                       checked={formTeacherIds.includes(teacher.value)}
                       onChange={() => toggleTeacher(teacher.value)}
@@ -1191,10 +1230,11 @@ function ClassDialog({
           </fieldset>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-5" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-5"
             loading={save.isPending}
             disabled={!name.trim() || !levelId}
             onClick={() =>
@@ -1266,6 +1306,7 @@ function SubjectDialog({
                 Name
               </Label>
               <Input
+                data-cy="subject-name"
                 id="subject-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -1276,6 +1317,7 @@ function SubjectDialog({
                 Code
               </Label>
               <Input
+                data-cy="subject-code"
                 id="subject-code"
                 value={code}
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -1284,6 +1326,7 @@ function SubjectDialog({
             <div className="space-y-1.5">
               <Label htmlFor="subject-category">Category</Label>
               <Input
+                data-cy="subject-category"
                 id="subject-category"
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
@@ -1298,6 +1341,7 @@ function SubjectDialog({
               {levels.map((level) => (
                 <label key={level.id} className="flex items-center gap-2 text-sm">
                   <input
+                    data-cy="academics-settings-id"
                     type="checkbox"
                     checked={levelIds.includes(level.id)}
                     onChange={() =>
@@ -1317,6 +1361,7 @@ function SubjectDialog({
 
           <label className="flex items-center gap-2 text-sm">
             <input
+              data-cy="academics-settings-is-core"
               type="checkbox"
               checked={isCore}
               onChange={(event) => setIsCore(event.target.checked)}
@@ -1358,6 +1403,7 @@ function SubjectDialog({
                         {WEEKDAYS.map((day) => (
                           <td key={day.value} className="px-2 py-1.5 text-center">
                             <input
+                              data-cy="academics-settings-id-2"
                               type="checkbox"
                               aria-label={`${period.name} on ${day.label}`}
                               checked={schedule.has(`${day.value}:${period.id}`)}
@@ -1375,10 +1421,11 @@ function SubjectDialog({
           </fieldset>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-6" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-6"
             loading={save.isPending}
             disabled={!name.trim() || !code.trim()}
             onClick={() =>
@@ -1432,6 +1479,7 @@ function HouseDialog({
               Name
             </Label>
             <Input
+              data-cy="house-name"
               id="house-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -1442,18 +1490,20 @@ function HouseDialog({
             <Label htmlFor="house-color">Colour</Label>
             <div className="flex items-center gap-2">
               <input
+                data-cy="house-color"
                 id="house-color"
                 type="color"
                 value={color}
                 onChange={(event) => setColor(event.target.value)}
                 className="size-9 shrink-0 cursor-pointer rounded border border-input"
               />
-              <Input value={color} onChange={(event) => setColor(event.target.value)} />
+              <Input data-cy="academics-settings-color" value={color} onChange={(event) => setColor(event.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="house-motto">Motto</Label>
             <Input
+              data-cy="house-motto"
               id="house-motto"
               value={motto}
               onChange={(event) => setMotto(event.target.value)}
@@ -1461,10 +1511,11 @@ function HouseDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="settings-academics-settings-cancel-7" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="settings-academics-settings-save-7"
             loading={save.isPending}
             disabled={!name.trim()}
             onClick={() =>

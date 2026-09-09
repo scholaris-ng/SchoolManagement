@@ -27,6 +27,12 @@ export interface FileUploadProps {
   className?: string;
   /** Renders a round preview suitable for a photograph. */
   variant?: 'dropzone' | 'avatar';
+  /**
+   * Cypress hook. Defaults to `upload-<purpose>`. The hidden file input carries
+   * it (`cy.dataCy(...).selectFile(...)`); the buttons get `<cy>-choose` and
+   * `<cy>-remove`.
+   */
+  'data-cy'?: string;
 }
 
 /**
@@ -46,7 +52,9 @@ export function FileUpload({
   disabled,
   className,
   variant = 'dropzone',
+  'data-cy': dataCy,
 }: FileUploadProps) {
+  const cy = dataCy ?? `upload-${purpose}`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +119,7 @@ export function FileUpload({
               type="button"
               variant="outline"
               size="sm"
+              data-cy={`${cy}-choose`}
               onClick={() => inputRef.current?.click()}
               disabled={disabled || progress !== null}
             >
@@ -118,7 +127,14 @@ export function FileUpload({
               {value?.url ? 'Replace' : 'Upload'}
             </Button>
             {value?.url && onRemove && (
-              <Button type="button" variant="ghost" size="sm" onClick={onRemove} disabled={disabled}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-cy={`${cy}-remove`}
+                onClick={onRemove}
+                disabled={disabled}
+              >
                 <Trash2 />
                 Remove
               </Button>
@@ -134,6 +150,7 @@ export function FileUpload({
         <input
           ref={inputRef}
           type="file"
+          data-cy={cy}
           accept={config.accept}
           className="sr-only"
           onChange={(event) => handleFiles(event.target.files)}
@@ -179,7 +196,14 @@ export function FileUpload({
               </a>
             </div>
             {onRemove && (
-              <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove file">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                data-cy={`${cy}-remove`}
+                onClick={onRemove}
+                aria-label="Remove file"
+              >
                 <Trash2 />
               </Button>
             )}
@@ -198,6 +222,7 @@ export function FileUpload({
               type="button"
               variant="outline"
               size="sm"
+              data-cy={`${cy}-choose`}
               className="mt-3"
               onClick={() => inputRef.current?.click()}
               disabled={disabled}
@@ -215,6 +240,7 @@ export function FileUpload({
       <input
         ref={inputRef}
         type="file"
+        data-cy={cy}
         accept={config.accept}
         className="sr-only"
         onChange={(event) => handleFiles(event.target.files)}

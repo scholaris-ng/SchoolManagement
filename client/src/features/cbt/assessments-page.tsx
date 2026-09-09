@@ -122,7 +122,7 @@ export function AssessmentsPage() {
         align: 'right',
         cell: (assessment) =>
           assessment.state === 'OPEN' && can('cbt.take') ? (
-            <Button size="sm" asChild>
+            <Button data-cy="cbt-assessments-event-stoppropagation-start" size="sm" asChild>
               <Link to={`/cbt/${assessment.id}`} onClick={(event) => event.stopPropagation()}>
                 Start
               </Link>
@@ -145,7 +145,7 @@ export function AssessmentsPage() {
         breadcrumbs={[{ label: 'Assessment' }, { label: 'CBT' }]}
         actions={
           <PermissionGate require="cbt.manage">
-            <Button asChild>
+            <Button data-cy="cbt-assessments-new-assessment" asChild>
               <Link to="/cbt/new">
                 <Plus />
                 New assessment
@@ -183,6 +183,8 @@ export function AssessmentsPage() {
       )}
 
       <DataTable
+
+        data-cy="cbt-assessments-table"
         caption="Assessments with mode, paper shape, availability window and status"
         data={assessments.data?.items}
         meta={assessments.data?.meta}

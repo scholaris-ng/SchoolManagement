@@ -78,6 +78,7 @@ export function Toaster() {
               {message.action && (
                 <button
                   type="button"
+                  data-cy={`toast-action-${message.id}`}
                   onClick={() => {
                     message.action?.onClick();
                     dismiss(message.id);
@@ -90,6 +91,7 @@ export function Toaster() {
             </div>
             <button
               type="button"
+              data-cy={`toast-dismiss-${message.id}`}
               onClick={() => dismiss(message.id)}
               className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
               aria-label="Dismiss notification"
@@ -114,9 +116,18 @@ export interface AlertProps {
   action?: React.ReactNode;
   className?: string;
   icon?: React.ReactNode;
+  'data-cy'?: string;
 }
 
-export function Alert({ tone = 'info', title, children, action, className, icon }: AlertProps) {
+export function Alert({
+  tone = 'info',
+  title,
+  children,
+  action,
+  className,
+  icon,
+  'data-cy': dataCy,
+}: AlertProps) {
   const tones = {
     info: { wrapper: 'border-info/30 bg-info-subtle', text: 'text-info', Icon: Info },
     success: { wrapper: 'border-success/30 bg-success-subtle', text: 'text-success', Icon: CheckCircle2 },
@@ -127,6 +138,7 @@ export function Alert({ tone = 'info', title, children, action, className, icon 
   return (
     <div
       role={tone === 'danger' ? 'alert' : 'note'}
+      data-cy={dataCy}
       className={cn('flex items-start gap-3 rounded-lg border p-3.5', tones.wrapper, className)}
     >
       <span className={cn('mt-0.5 shrink-0 [&_svg]:size-4', tones.text)} aria-hidden="true">
@@ -152,6 +164,7 @@ export interface EmptyStateProps {
   action?: React.ReactNode;
   className?: string;
   compact?: boolean;
+  'data-cy'?: string;
 }
 
 export function EmptyState({
@@ -161,9 +174,11 @@ export function EmptyState({
   action,
   className,
   compact,
+  'data-cy': dataCy,
 }: EmptyStateProps) {
   return (
     <div
+      data-cy={dataCy}
       className={cn(
         'flex flex-col items-center justify-center text-center',
         compact ? 'gap-2 px-4 py-8' : 'gap-3 px-6 py-14',
@@ -194,9 +209,18 @@ export interface ErrorStateProps {
   title?: string;
   className?: string;
   compact?: boolean;
+  /** The state carries it; the retry button gets `<cy>-retry`. */
+  'data-cy'?: string;
 }
 
-export function ErrorState({ error, onRetry, title, className, compact }: ErrorStateProps) {
+export function ErrorState({
+  error,
+  onRetry,
+  title,
+  className,
+  compact,
+  'data-cy': dataCy,
+}: ErrorStateProps) {
   const offline = isApiError(error) && error.isOffline;
   const forbidden = isApiError(error) && error.isForbidden;
 
@@ -220,12 +244,18 @@ export function ErrorState({ error, onRetry, title, className, compact }: ErrorS
     <EmptyState
       className={className}
       compact={compact}
+      data-cy={dataCy}
       icon={offline ? <WifiOff /> : forbidden ? <ShieldAlert /> : <AlertCircle />}
       title={heading}
       description={description}
       action={
         onRetry && !forbidden ? (
-          <Button variant="outline" size="sm" onClick={onRetry}>
+          <Button
+            variant="outline"
+            size="sm"
+            data-cy={dataCy ? `${dataCy}-retry` : undefined}
+            onClick={onRetry}
+          >
             <RefreshCw />
             Try again
           </Button>

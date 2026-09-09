@@ -53,6 +53,7 @@ export function SyncIndicator({ className }: { className?: string }) {
       <Popover.Trigger asChild>
         <button
           type="button"
+          data-cy="sync-indicator"
           className={cn(
             'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent',
             className,
@@ -88,7 +89,13 @@ export function SyncIndicator({ className }: { className?: string }) {
               </p>
             </div>
             {(failed.length > 0 || pending.length > 0) && isOnline && (
-              <Button variant="outline" size="sm" onClick={retryNow} loading={isFlushing}>
+              <Button
+                variant="outline"
+                size="sm"
+                data-cy="sync-retry"
+                onClick={retryNow}
+                loading={isFlushing}
+              >
                 <RefreshCw />
                 Retry
               </Button>
@@ -135,6 +142,7 @@ export function SyncIndicator({ className }: { className?: string }) {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`sync-discard-${entry.id}`}
                         onClick={() => discard(entry.id)}
                         aria-label={`Discard ${entry.label}`}
                       >

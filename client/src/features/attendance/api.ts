@@ -1,60 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { outbox } from '@/lib/outbox';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
+import { AttendanceEndpoints } from './attendance.endpoints';
 import type {
-  AttendanceMarkInput,
-  AttendanceRegister,
-  AttendanceTrendPoint,
-} from '@/types/attendance';
+  AttendanceSummaryQuery,
+  AttendanceTrendQuery,
+  ClassAttendanceSummaryRow,
+  SaveRegisterInput,
+  SaveRegisterResult,
+} from './attendance.endpoints';
 
-export interface ClassAttendanceSummaryRow {
-  classId: string;
-  className: string;
-  attendanceRate: number;
-  totalDays: number;
-}
+export type {
+  AttendanceSummaryQuery,
+  AttendanceTrendQuery,
+  ClassAttendanceSummaryRow,
+  SaveRegisterInput,
+  SaveRegisterResult,
+};
 
 export function useAttendanceRegister(classId: string | undefined, date: string) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.attendance.register(schoolId, classId ?? '', date),
-    queryFn: () =>
-      http.get<AttendanceRegister>('/attendance/register', { query: { classId, date } }),
+    queryFn: () => AttendanceEndpoints.fetchRegister(classId ?? '', date),
     enabled: Boolean(schoolId && classId && date),
   });
 }
 
-export function useAttendanceSummary(query: { classId?: string; from?: string; to?: string } = {}) {
+export function useAttendanceSummary(query: AttendanceSummaryQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.attendance.summary(schoolId, query),
-    queryFn: () => http.get<ClassAttendanceSummaryRow[]>('/attendance/summary', { query }),
+    queryFn: () => AttendanceEndpoints.fetchSummary(query),
     enabled: Boolean(schoolId),
   });
 }
 
-export function useAttendanceTrend(query: { classId?: string; days?: number } = {}) {
+export function useAttendanceTrend(query: AttendanceTrendQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.attendance.trend(schoolId, query),
-    queryFn: () => http.get<AttendanceTrendPoint[]>('/attendance/trend', { query }),
+    queryFn: () => AttendanceEndpoints.fetchTrend(query),
     enabled: Boolean(schoolId),
   });
-}
-
-export interface SaveRegisterInput {
-  classId: string;
-  className: string;
-  date: string;
-  marks: AttendanceMarkInput[];
-}
-
-export interface SaveRegisterResult {
-  saved: number;
-  notificationsSent: number;
 }
 
 /**
@@ -72,11 +62,7 @@ export function useSaveRegister() {
   return useMutation({
     mutationFn: async (input: SaveRegisterInput): Promise<SaveRegisterResult | 'queued'> => {
       try {
-        return await http.post<SaveRegisterResult>('/attendance/register', {
-          classId: input.classId,
-          date: input.date,
-          marks: input.marks,
-        });
+        return await AttendanceEndpoints.saveRegister(input);
       } catch (error) {
         const offline =
           typeof navigator !== 'undefined' && navigator.onLine === false

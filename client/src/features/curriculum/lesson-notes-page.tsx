@@ -104,7 +104,7 @@ export function LessonNotesPage() {
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Lesson notes' }]}
         actions={
           <PermissionGate require="lessonnote.manage">
-            <Button asChild>
+            <Button data-cy="curriculum-lesson-notes-write-a-note" asChild>
               <Link to="/lesson-notes/new">
                 <Plus />
                 Write a note
@@ -139,6 +139,7 @@ export function LessonNotesPage() {
       {canDelete && (
         <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
           <Button
+            data-cy="curriculum-lesson-notes-delete-selected"
             variant="outline"
             size="sm"
             className="text-danger hover:text-danger"
@@ -151,6 +152,8 @@ export function LessonNotesPage() {
       )}
 
       <DataTable
+
+        data-cy="curriculum-lesson-notes-table"
         caption="Lesson notes with class, subject, teacher and review status"
         data={notes.data?.items}
         meta={notes.data?.meta}

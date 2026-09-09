@@ -115,7 +115,7 @@ export function DebtorsPage() {
         hideOnMobile: true,
         cell: (row) => (
           <PermissionGate require="payment.manage">
-            <Button variant="ghost" size="sm" asChild>
+            <Button data-cy="finance-debtors-event-stoppropagation-record-payment" variant="ghost" size="sm" asChild>
               <Link
                 to={`/finance/payments/new?studentId=${row.studentId}`}
                 onClick={(event) => event.stopPropagation()}
@@ -156,7 +156,7 @@ export function DebtorsPage() {
         description="Families with an outstanding balance, largest first."
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Debtors' }]}
         actions={
-          <Button variant="outline" onClick={exportDebtors}>
+          <Button data-cy="finance-debtors-export-list" variant="outline" onClick={exportDebtors}>
             <Download />
             Export list
           </Button>
@@ -186,6 +186,8 @@ export function DebtorsPage() {
       />
 
       <DataTable
+
+        data-cy="finance-debtors-table"
         caption="Students with an outstanding fee balance"
         data={debtors.data?.items}
         meta={debtors.data?.meta}

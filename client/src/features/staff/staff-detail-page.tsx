@@ -63,7 +63,7 @@ export function StaffDetailPage() {
         }
         actions={
           <PermissionGate require="staff.manage">
-            <Button onClick={() => navigate(`/staff/${record.id}/edit`)}>
+            <Button data-cy="staff-detail-edit" onClick={() => navigate(`/staff/${record.id}/edit`)}>
               <Pencil />
               Edit
             </Button>

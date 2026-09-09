@@ -110,6 +110,12 @@ export interface SelectProps {
   id?: string;
   name?: string;
   'aria-label'?: string;
+  /**
+   * Cypress hook. The trigger carries it verbatim and every option gets
+   * `<cy>-option-<value>`, so a spec can open the list and pick a value
+   * without selecting on generated Radix classes.
+   */
+  'data-cy'?: string;
 }
 
 export function Select({
@@ -123,12 +129,14 @@ export function Select({
   id,
   name,
   'aria-label': ariaLabel,
+  'data-cy': dataCy,
 }: SelectProps) {
   return (
     <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled} name={name}>
       <SelectPrimitive.Trigger
         id={id}
         aria-label={ariaLabel}
+        data-cy={dataCy}
         aria-invalid={invalid || undefined}
         className={cn(fieldBase, 'h-9 items-center justify-between gap-2 text-left', className)}
       >
@@ -152,6 +160,7 @@ export function Select({
                 key={option.value}
                 value={option.value}
                 disabled={option.disabled}
+                data-cy={dataCy ? `${dataCy}-option-${option.value}` : undefined}
                 className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-3 text-sm outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[disabled]:opacity-50"
               >
                 <SelectPrimitive.ItemIndicator className="absolute left-2 flex items-center">
@@ -184,6 +193,8 @@ export interface SearchInputProps
   value: string;
   onValueChange: (value: string) => void;
   label?: string;
+  /** Cypress hook. Lands on the input; the clear button gets `<cy>-clear`. */
+  'data-cy'?: string;
 }
 
 export function SearchInput({
@@ -195,6 +206,9 @@ export function SearchInput({
   ...props
 }: SearchInputProps) {
   const id = useId();
+  // `data-cy` arrives in `props` and lands on the input; the clear button
+  // derives its own so a spec can reset the box without a text selector.
+  const dataCy = props['data-cy'];
   return (
     <div className={cn('relative', className)}>
       <label htmlFor={id} className="sr-only">
@@ -217,6 +231,7 @@ export function SearchInput({
         <button
           type="button"
           onClick={() => onValueChange('')}
+          data-cy={dataCy ? `${dataCy}-clear` : undefined}
           className="absolute right-2 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Clear search"
         >

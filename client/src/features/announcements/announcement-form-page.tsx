@@ -101,6 +101,7 @@ export function AnnouncementFormPage() {
         actions={
           <>
             <Button
+              data-cy="announcements-announcement-form-save-draft"
               variant="outline"
               onClick={() => void submit('DRAFT')}
               loading={save.isPending}
@@ -110,6 +111,7 @@ export function AnnouncementFormPage() {
               Save draft
             </Button>
             <Button
+              data-cy="announcement-form-publish"
               onClick={() => void submit(publishAt ? 'SCHEDULED' : 'PUBLISHED')}
               loading={save.isPending}
               disabled={!valid}
@@ -133,6 +135,7 @@ export function AnnouncementFormPage() {
               Title
             </Label>
             <Input
+              data-cy="ann-title"
               id="ann-title"
               value={title}
               onChange={(event) => {
@@ -148,6 +151,7 @@ export function AnnouncementFormPage() {
               Message
             </Label>
             <Textarea
+              data-cy="ann-body"
               id="ann-body"
               rows={8}
               value={body}
@@ -172,6 +176,7 @@ export function AnnouncementFormPage() {
                 Audience
               </Label>
               <NativeSelect
+                data-cy="ann-audience"
                 id="ann-audience"
                 value={audience}
                 onChange={(event) => {
@@ -189,6 +194,7 @@ export function AnnouncementFormPage() {
             <div className="space-y-1.5">
               <Label htmlFor="ann-publish">Publish at</Label>
               <Input
+                data-cy="ann-publish"
                 id="ann-publish"
                 type="datetime-local"
                 value={publishAt}
@@ -208,6 +214,7 @@ export function AnnouncementFormPage() {
                 {(classes.data ?? []).map((schoolClass) => (
                   <label key={schoolClass.id} className="flex items-center gap-2 text-sm">
                     <input
+                      data-cy="announcement-form-id"
                       type="checkbox"
                       checked={classIds.includes(schoolClass.id)}
                       onChange={() => {
@@ -232,6 +239,7 @@ export function AnnouncementFormPage() {
             {CHANNELS.map((channel) => (
               <label key={channel.value} className="flex items-start gap-2.5 text-sm">
                 <input
+                  data-cy="announcement-form-value"
                   type="checkbox"
                   checked={channels.includes(channel.value)}
                   disabled={channel.value === 'IN_APP'}
@@ -255,6 +263,7 @@ export function AnnouncementFormPage() {
 
           <label className="flex items-center gap-2.5 text-sm">
             <input
+              data-cy="announcement-form-pinned"
               type="checkbox"
               checked={pinned}
               onChange={(event) => {

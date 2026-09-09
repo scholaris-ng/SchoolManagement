@@ -110,6 +110,7 @@ export function GradingSettingsPage() {
         breadcrumbs={[{ label: 'Administration' }, { label: 'Grading' }]}
         actions={
           <Button
+            data-cy="settings-grading-settings-save-scheme"
             onClick={() =>
               draft && void save.mutateAsync({ id: draft.id, values: draft }).then(() => setDirty(false))
             }
@@ -138,6 +139,7 @@ export function GradingSettingsPage() {
             <div className="space-y-1.5">
               <Label htmlFor="scheme-picker">Scheme</Label>
               <NativeSelect
+                data-cy="scheme-picker"
                 id="scheme-picker"
                 value={selectedId ?? ''}
                 onChange={(event) => setSelectedId(event.target.value)}
@@ -180,6 +182,7 @@ export function GradingSettingsPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor={`component-name-${component.id}`}>Name</Label>
                     <Input
+                      data-cy="grading-settings-name"
                       id={`component-name-${component.id}`}
                       value={component.name}
                       onChange={(event) => updateComponent(index, { name: event.target.value })}
@@ -188,6 +191,7 @@ export function GradingSettingsPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor={`component-max-${component.id}`}>Max score</Label>
                     <Input
+                      data-cy="grading-settings-max-score"
                       id={`component-max-${component.id}`}
                       type="number"
                       min={1}
@@ -200,6 +204,7 @@ export function GradingSettingsPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor={`component-type-${component.id}`}>Type</Label>
                     <NativeSelect
+                      data-cy="grading-settings-type"
                       id={`component-type-${component.id}`}
                       value={component.type}
                       onChange={(event) =>
@@ -215,6 +220,7 @@ export function GradingSettingsPage() {
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    data-cy={`grading-component-remove-${index}`}
                     aria-label={`Remove ${component.name}`}
                     onClick={() => {
                       update({
@@ -228,6 +234,7 @@ export function GradingSettingsPage() {
               ))}
 
               <Button
+                data-cy="settings-grading-settings-add-a-component"
                 variant="outline"
                 onClick={() =>
                   update({
@@ -280,6 +287,7 @@ export function GradingSettingsPage() {
                       <div className="space-y-1.5">
                         <Label htmlFor={`band-label-${band.id}`}>Grade</Label>
                         <Input
+                          data-cy="grading-settings-label"
                           id={`band-label-${band.id}`}
                           value={band.label}
                           onChange={(event) => updateBand(index, { label: event.target.value })}
@@ -288,6 +296,7 @@ export function GradingSettingsPage() {
                       <div className="space-y-1.5">
                         <Label htmlFor={`band-min-${band.id}`}>From</Label>
                         <Input
+                          data-cy="grading-settings-min-score"
                           id={`band-min-${band.id}`}
                           type="number"
                           min={0}
@@ -300,6 +309,7 @@ export function GradingSettingsPage() {
                       <div className="space-y-1.5">
                         <Label htmlFor={`band-max-${band.id}`}>To</Label>
                         <Input
+                          data-cy="grading-settings-max-score-2"
                           id={`band-max-${band.id}`}
                           type="number"
                           value={band.maxScore}
@@ -311,6 +321,7 @@ export function GradingSettingsPage() {
                       <div className="space-y-1.5">
                         <Label htmlFor={`band-remark-${band.id}`}>Remark</Label>
                         <Input
+                          data-cy="grading-settings-remark"
                           id={`band-remark-${band.id}`}
                           value={band.remark}
                           onChange={(event) => updateBand(index, { remark: event.target.value })}
@@ -318,6 +329,7 @@ export function GradingSettingsPage() {
                       </div>
                       <label className="flex items-center gap-2 pb-2 text-sm">
                         <input
+                          data-cy="grading-settings-is-pass"
                           type="checkbox"
                           checked={band.isPass}
                           onChange={(event) => updateBand(index, { isPass: event.target.checked })}
@@ -328,6 +340,7 @@ export function GradingSettingsPage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`grading-band-remove-${band.id}`}
                         aria-label={`Remove grade ${band.label}`}
                         onClick={() =>
                           update({ bands: draft.bands.filter((entry) => entry.id !== band.id) })
@@ -340,6 +353,7 @@ export function GradingSettingsPage() {
                 })}
 
               <Button
+                data-cy="settings-grading-settings-add-a-grade"
                 variant="outline"
                 onClick={() =>
                   update({
@@ -381,6 +395,7 @@ export function GradingSettingsPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="scheme-name">Scheme name</Label>
                   <Input
+                    data-cy="scheme-name"
                     id="scheme-name"
                     value={draft.name}
                     onChange={(event) => update({ name: event.target.value })}
@@ -389,6 +404,7 @@ export function GradingSettingsPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="scheme-pass">Pass mark</Label>
                   <Input
+                    data-cy="scheme-pass"
                     id="scheme-pass"
                     type="number"
                     min={0}
@@ -405,6 +421,7 @@ export function GradingSettingsPage() {
                   {(levels.data ?? []).map((level) => (
                     <label key={level.id} className="flex items-center gap-2 text-sm">
                       <input
+                        data-cy="grading-settings-id"
                         type="checkbox"
                         checked={draft.levelIds.includes(level.id)}
                         onChange={() =>
@@ -430,6 +447,7 @@ export function GradingSettingsPage() {
                   </p>
                 </div>
                 <Switch
+                  data-cy="grading-settings-show-position"
                   checked={draft.showPosition}
                   onCheckedChange={(value) => update({ showPosition: value })}
                   aria-label="Show class position"

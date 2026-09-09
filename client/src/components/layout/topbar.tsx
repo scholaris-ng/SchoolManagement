@@ -44,6 +44,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
         <Button
           variant="ghost"
           size="icon"
+          data-cy="open-mobile-nav"
           className="lg:hidden"
           onClick={onOpenMobileNav}
           aria-label="Open navigation menu"
@@ -53,6 +54,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
 
         <button
           type="button"
+          data-cy="open-command-palette"
           onClick={() => setPaletteOpen(true)}
           className="flex h-9 flex-1 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent sm:max-w-sm"
         >
@@ -70,7 +72,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
           {quickActions.length > 0 && (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <Button size="sm" className="hidden sm:inline-flex">
+                <Button size="sm" data-cy="quick-actions-trigger" className="hidden sm:inline-flex">
                   <Plus />
                   New
                 </Button>
@@ -84,6 +86,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   {quickActions.map((action) => (
                     <DropdownMenu.Item
                       key={action.to}
+                      data-cy={`quick-action-${action.to.replace(/^\//, '').replace(/\//g, '-')}`}
                       onSelect={() => navigate(action.to)}
                       className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                     >
@@ -102,6 +105,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
+                data-cy="account-menu-trigger"
                 className="ml-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Account menu"
               >
@@ -134,6 +138,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 <DropdownMenu.Item asChild>
                   <Link
                     to="/profile"
+                    data-cy="account-menu-profile"
                     className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                   >
                     <UserIcon className="size-4 text-muted-foreground" />
@@ -143,6 +148,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 <DropdownMenu.Item asChild>
                   <Link
                     to="/profile/notifications"
+                    data-cy="account-menu-notifications"
                     className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                   >
                     <Bell className="size-4 text-muted-foreground" />
@@ -153,6 +159,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   <DropdownMenu.Item asChild>
                     <Link
                       to="/settings"
+                      data-cy="account-menu-settings"
                       className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                     >
                       <Settings className="size-4 text-muted-foreground" />
@@ -177,6 +184,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                     <button
                       key={option.value}
                       type="button"
+                      data-cy={`theme-${option.value}`}
                       onClick={() => setMode(option.value)}
                       aria-pressed={mode === option.value}
                       className={cn(
@@ -195,6 +203,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 <DropdownMenu.Separator className="my-1 h-px bg-border" />
 
                 <DropdownMenu.Item
+                  data-cy="sign-out"
                   onSelect={() => void signOut()}
                   className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-danger outline-none data-[highlighted]:bg-danger-subtle"
                 >

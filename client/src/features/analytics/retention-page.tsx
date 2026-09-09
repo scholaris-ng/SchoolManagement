@@ -163,6 +163,7 @@ export function RetentionPage() {
         breadcrumbs={[{ label: 'Overview' }, { label: 'Retention risk' }]}
         actions={
           <Button
+            data-cy="analytics-retention-export-list"
             variant="outline"
             disabled={rows.length === 0}
             onClick={() =>
@@ -246,6 +247,8 @@ export function RetentionPage() {
       />
 
       <DataTable
+
+        data-cy="analytics-retention-table"
         caption="Students whose families show early signs of withdrawing"
         data={rows}
         meta={risk.data?.meta}
@@ -354,11 +357,11 @@ function RiskDetailDialog({
             </DialogBody>
 
             <DialogFooter>
-              <Button variant="outline" asChild>
+              <Button data-cy="analytics-retention-open-student" variant="outline" asChild>
                 <Link to={`/students/${row.studentId}`}>Open student</Link>
               </Button>
               <PermissionGate require="message.send">
-                <Button asChild>
+                <Button data-cy="analytics-retention-message-the-family" asChild>
                   <Link to={`/messages?studentId=${row.studentId}`}>
                     <MessageSquare />
                     Message the family

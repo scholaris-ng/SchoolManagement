@@ -58,7 +58,7 @@ export function ForgotPasswordPage() {
                 the password. It expires in one hour.
               </p>
             </div>
-            <Button variant="outline" block asChild>
+            <Button data-cy="auth-forgot-password-return-to-sign-in" variant="outline" block asChild>
               <Link to="/sign-in">Return to sign in</Link>
             </Button>
           </div>
@@ -83,7 +83,7 @@ export function ForgotPasswordPage() {
                 required
                 leadingIcon={<Mail />}
               />
-              <Button type="submit" block loading={form.formState.isSubmitting}>
+              <Button data-cy="auth-forgot-password-send-reset-link" type="submit" block loading={form.formState.isSubmitting}>
                 Send reset link
               </Button>
             </form>

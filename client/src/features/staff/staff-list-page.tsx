@@ -120,7 +120,7 @@ export function StaffListPage() {
         actions={
           <>
             <PermissionGate require="import.run">
-              <Button variant="outline" asChild>
+              <Button data-cy="staff-list-import" variant="outline" asChild>
                 <Link to="/import?entity=STAFF">
                   <UploadCloud />
                   Import
@@ -128,7 +128,7 @@ export function StaffListPage() {
               </Button>
             </PermissionGate>
             <PermissionGate require="staff.manage">
-              <Button asChild>
+              <Button data-cy="staff-list-add-staff" asChild>
                 <Link to="/staff/new">
                   <Plus />
                   Add staff
@@ -153,6 +153,8 @@ export function StaffListPage() {
       />
 
       <DataTable
+
+        data-cy="staff-table"
         caption="Staff with roles, teaching assignments and employment status"
         data={staff.data?.items}
         meta={staff.data?.meta}
@@ -177,7 +179,7 @@ export function StaffListPage() {
         }
         emptyAction={
           <PermissionGate require="staff.manage">
-            <Button asChild>
+            <Button data-cy="staff-list-add-the-first-staff" asChild>
               <Link to="/staff/new">
                 <Plus />
                 Add the first staff member

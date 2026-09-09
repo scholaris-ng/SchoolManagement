@@ -113,7 +113,7 @@ export function DisciplineListPage() {
         breadcrumbs={[{ label: 'Behaviour & safety' }, { label: 'Discipline' }]}
         actions={
           <PermissionGate require="discipline.manage">
-            <Button asChild>
+            <Button data-cy="discipline-list-report-an-incident" asChild>
               <Link to="/discipline/new">
                 <Plus />
                 Report an incident
@@ -147,6 +147,8 @@ export function DisciplineListPage() {
       />
 
       <DataTable
+
+        data-cy="discipline-table"
         caption="Discipline incidents with student, severity, reporter and current status"
         data={incidents.data?.items}
         meta={incidents.data?.meta}

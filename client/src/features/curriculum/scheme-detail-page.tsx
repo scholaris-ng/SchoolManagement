@@ -115,13 +115,14 @@ export function SchemeDetailPage() {
           }
           actions={
             <>
-              <Button variant="outline" onClick={() => window.print()}>
+              <Button data-cy="curriculum-scheme-detail-print" variant="outline" onClick={() => window.print()}>
                 <Printer />
                 Print
               </Button>
               {editable && (
                 <>
                   <Button
+                    data-cy="curriculum-scheme-detail-save"
                     variant="outline"
                     onClick={() => void save()}
                     loading={saveScheme.isPending}
@@ -131,7 +132,7 @@ export function SchemeDetailPage() {
                     Save
                   </Button>
                   {record.status === 'DRAFT' && (
-                    <Button onClick={() => void save('SUBMITTED')} loading={saveScheme.isPending}>
+                    <Button data-cy="curriculum-scheme-detail-submit-for-approval" onClick={() => void save('SUBMITTED')} loading={saveScheme.isPending}>
                       <Send />
                       Submit for approval
                     </Button>
@@ -139,7 +140,7 @@ export function SchemeDetailPage() {
                 </>
               )}
               {record.status === 'SUBMITTED' && can('scheme.approve') && (
-                <Button onClick={() => void save('APPROVED')} loading={saveScheme.isPending}>
+                <Button data-cy="curriculum-scheme-detail-approve" onClick={() => void save('APPROVED')} loading={saveScheme.isPending}>
                   <ShieldCheck />
                   Approve
                 </Button>
@@ -176,6 +177,7 @@ export function SchemeDetailPage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`scheme-week-up-${week.weekNumber}`}
                         aria-label={`Move week ${week.weekNumber} earlier`}
                         disabled={index === 0}
                         onClick={() => moveWeek(index, -1)}
@@ -187,6 +189,7 @@ export function SchemeDetailPage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`scheme-week-down-${week.weekNumber}`}
                         aria-label={`Move week ${week.weekNumber} later`}
                         disabled={index === weeks.length - 1}
                         onClick={() => moveWeek(index, 1)}
@@ -204,6 +207,7 @@ export function SchemeDetailPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor={`week-topic-${week.id}`}>Topic</Label>
                   <Input
+                    data-cy="curriculum-scheme-detail-topic-title"
                     id={`week-topic-${week.id}`}
                     value={week.topicTitle}
                     onChange={(event) => updateWeek(index, { topicTitle: event.target.value })}

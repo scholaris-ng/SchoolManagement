@@ -44,7 +44,7 @@ export function AnnouncementsPage() {
         breadcrumbs={[{ label: 'Communication' }, { label: 'Announcements' }]}
         actions={
           <PermissionGate require="announcement.manage">
-            <Button asChild>
+            <Button data-cy="announcements-new-announcement" asChild>
               <Link to="/announcements/new">
                 <Plus />
                 New announcement
@@ -83,7 +83,7 @@ export function AnnouncementsPage() {
             }
             action={
               <PermissionGate require="announcement.manage">
-                <Button asChild>
+                <Button data-cy="announcements-write-the-first-one" asChild>
                   <Link to="/announcements/new">
                     <Plus />
                     Write the first one
@@ -118,7 +118,7 @@ export function AnnouncementsPage() {
                         </p>
                       </div>
                       <PermissionGate require="announcement.manage">
-                        <Button variant="ghost" size="sm" asChild>
+                        <Button data-cy="announcements-edit" variant="ghost" size="sm" asChild>
                           <Link to={`/announcements/${announcement.id}/edit`}>Edit</Link>
                         </Button>
                       </PermissionGate>

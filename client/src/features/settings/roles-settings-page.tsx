@@ -219,6 +219,7 @@ export function RolesSettingsPage() {
           <nav aria-label="Roles" className="space-y-1">
             {list.map((role) => (
               <button
+                data-cy="settings-roles-settings-permission-role-membercount-undefined"
                 key={role.id}
                 type="button"
                 onClick={() => setSelectedId(role.id)}
@@ -323,7 +324,7 @@ function RoleEditor({ role, isOwnRole }: { role: Role; isOwnRole: boolean }) {
                 : 'A role your school created. Rename it or change what it may do.'}
             </CardDescription>
           </div>
-          <Button onClick={() => void submit()} loading={save.isPending} disabled={!dirty}>
+          <Button data-cy="settings-roles-settings-save-role" onClick={() => void submit()} loading={save.isPending} disabled={!dirty}>
             <Save />
             Save role
           </Button>
@@ -336,6 +337,7 @@ function RoleEditor({ role, isOwnRole }: { role: Role; isOwnRole: boolean }) {
                 Role name
               </Label>
               <Input
+                data-cy="role-name"
                 id="role-name"
                 value={name}
                 onChange={(event) => {
@@ -347,6 +349,7 @@ function RoleEditor({ role, isOwnRole }: { role: Role; isOwnRole: boolean }) {
             <div className="space-y-1.5">
               <Label htmlFor="role-description">Description</Label>
               <Input
+                data-cy="role-description"
                 id="role-description"
                 value={description}
                 onChange={(event) => {
@@ -392,7 +395,12 @@ function RoleEditor({ role, isOwnRole }: { role: Role; isOwnRole: boolean }) {
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {grantedCount}/{keys.length}
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => toggleGroup(keys, !allOn)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-cy={`roles-toggle-group-${group}`}
+                  onClick={() => toggleGroup(keys, !allOn)}
+                >
                   {allOn ? 'Clear all' : 'Select all'}
                 </Button>
               </div>
@@ -404,6 +412,7 @@ function RoleEditor({ role, isOwnRole }: { role: Role; isOwnRole: boolean }) {
                   className="flex cursor-pointer items-start gap-2.5 rounded py-1"
                 >
                   <Checkbox
+                    data-cy="roles-settings-key"
                     checked={granted.has(permission.key)}
                     onCheckedChange={() => toggle(permission.key)}
                     className="mt-0.5"

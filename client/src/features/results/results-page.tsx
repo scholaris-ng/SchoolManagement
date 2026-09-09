@@ -85,7 +85,7 @@ export function ResultsPage() {
         actions={
           tab === 'broadsheet' &&
           broadsheet.data && (
-            <Button variant="outline" onClick={exportBroadsheet}>
+            <Button data-cy="results-export-excel" variant="outline" onClick={exportBroadsheet}>
               <Download />
               Export Excel
             </Button>
@@ -97,6 +97,7 @@ export function ResultsPage() {
         <div className="space-y-1.5">
           <Label htmlFor="results-term">Term</Label>
           <NativeSelect
+            data-cy="results-term"
             id="results-term"
             value={effectiveTermId}
             onChange={(event) => setTermId(event.target.value)}
@@ -114,6 +115,7 @@ export function ResultsPage() {
           <div className="space-y-1.5">
             <Label htmlFor="results-class">Class</Label>
             <NativeSelect
+              data-cy="results-class"
               id="results-class"
               value={classId}
               onChange={(event) => setClassId(event.target.value)}
@@ -144,6 +146,7 @@ export function ResultsPage() {
               key={option.id}
               type="button"
               role="tab"
+              data-cy={`results-tab-${option.id}`}
               aria-selected={tab === option.id}
               onClick={() => setTab(option.id)}
               className={cn(

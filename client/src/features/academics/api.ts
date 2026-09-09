@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
@@ -14,6 +13,10 @@ import type {
   Term,
 } from '@/types/academics';
 import type { TimetablePeriod } from '@/types/curriculum';
+import { AcademicsEndpoints } from './academics.endpoints';
+import type { ClassQuery, SessionPayload, SubjectQuery } from './academics.endpoints';
+
+export type { ClassQuery, SessionPayload, SubjectQuery };
 
 /**
  * Academic structure: sessions, terms, levels, classes, subjects, houses.
@@ -27,7 +30,7 @@ export function useAcademicSessions() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.sessions(schoolId),
-    queryFn: () => http.get<AcademicSession[]>('/academics/sessions'),
+    queryFn: () => AcademicsEndpoints.fetchSessions(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -37,7 +40,7 @@ export function useTerms(sessionId?: string) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.terms(schoolId, sessionId),
-    queryFn: () => http.get<Term[]>('/academics/terms', { query: { sessionId } }),
+    queryFn: () => AcademicsEndpoints.fetchTerms(sessionId),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -56,19 +59,17 @@ export function useLevels() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.levels(schoolId),
-    queryFn: () => http.get<SchoolLevel[]>('/academics/levels'),
+    queryFn: () => AcademicsEndpoints.fetchLevels(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
 }
 
-export function useClasses(
-  query: { levelId?: string; includeInactive?: boolean; formTeacherOnly?: boolean } = {},
-) {
+export function useClasses(query: ClassQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.classes(schoolId, query),
-    queryFn: () => http.get<SchoolClass[]>('/academics/classes', { query }),
+    queryFn: () => AcademicsEndpoints.fetchClasses(query),
     enabled: Boolean(schoolId),
     staleTime: 5 * 60_000,
   });
@@ -78,16 +79,16 @@ export function useClass(classId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.classDetail(schoolId, classId ?? ''),
-    queryFn: () => http.get<SchoolClass>(`/academics/classes/${classId}`),
+    queryFn: () => AcademicsEndpoints.fetchClass(classId ?? ''),
     enabled: Boolean(schoolId && classId),
   });
 }
 
-export function useSubjects(query: { levelId?: string; classId?: string } = {}) {
+export function useSubjects(query: SubjectQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.subjects(schoolId, query),
-    queryFn: () => http.get<Subject[]>('/academics/subjects', { query }),
+    queryFn: () => AcademicsEndpoints.fetchSubjects(query),
     enabled: Boolean(schoolId),
     staleTime: 5 * 60_000,
   });
@@ -97,7 +98,7 @@ export function useRooms() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.rooms(schoolId),
-    queryFn: () => http.get<Room[]>('/academics/rooms'),
+    queryFn: () => AcademicsEndpoints.fetchRooms(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -107,7 +108,7 @@ export function useHouses() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.houses(schoolId),
-    queryFn: () => http.get<House[]>('/academics/houses'),
+    queryFn: () => AcademicsEndpoints.fetchHouses(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -118,7 +119,7 @@ export function usePeriods() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.academics.periods(schoolId),
-    queryFn: () => http.get<TimetablePeriod[]>('/academics/periods'),
+    queryFn: () => AcademicsEndpoints.fetchPeriods(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -148,14 +149,11 @@ function useAcademicMutation<TInput, TResult>(config: {
 }
 
 export function useSaveSession() {
-  return useAcademicMutation<
-    { id?: string; values: Partial<AcademicSession> & { terms?: Partial<Term>[] } },
-    AcademicSession
-  >({
+  return useAcademicMutation<{ id?: string; values: SessionPayload }, AcademicSession>({
     request: ({ id, values }) =>
       id
-        ? http.patch<AcademicSession>(`/academics/sessions/${id}`, values)
-        : http.post<AcademicSession>('/academics/sessions', values),
+        ? AcademicsEndpoints.updateSession(id, values)
+        : AcademicsEndpoints.createSession(values),
     invalidate: (schoolId) => [
       queryKeys.academics.sessions(schoolId),
       queryKeys.academics.terms(schoolId),
@@ -167,7 +165,7 @@ export function useSaveSession() {
 export function useSaveTerm() {
   return useAcademicMutation<{ id?: string; values: Partial<Term> }, Term>({
     request: ({ id, values }) =>
-      id ? http.patch<Term>(`/academics/terms/${id}`, values) : http.post<Term>('/academics/terms', values),
+      id ? AcademicsEndpoints.updateTerm(id, values) : AcademicsEndpoints.createTerm(values),
     invalidate: (schoolId) => [queryKeys.academics.terms(schoolId)],
     successMessage: 'Term saved',
   });
@@ -184,7 +182,7 @@ export function useSaveTerm() {
  */
 export function useSetCurrentTerm() {
   return useAcademicMutation<string, Term>({
-    request: (termId) => http.post<Term>(`/academics/terms/${termId}/set-current`),
+    request: (termId) => AcademicsEndpoints.setCurrentTerm(termId),
     invalidate: (schoolId) => [queryKeys.all(schoolId)],
     successMessage: 'Current term updated',
   });
@@ -192,7 +190,7 @@ export function useSetCurrentTerm() {
 
 export function useDeleteSession() {
   return useAcademicMutation<string, void>({
-    request: (id) => http.delete<void>(`/academics/sessions/${id}`),
+    request: (id) => AcademicsEndpoints.removeSession(id),
     invalidate: (schoolId) => [
       queryKeys.academics.sessions(schoolId),
       queryKeys.academics.terms(schoolId),
@@ -204,9 +202,7 @@ export function useDeleteSession() {
 export function useSaveLevel() {
   return useAcademicMutation<{ id?: string; values: Partial<SchoolLevel> }, SchoolLevel>({
     request: ({ id, values }) =>
-      id
-        ? http.patch<SchoolLevel>(`/academics/levels/${id}`, values)
-        : http.post<SchoolLevel>('/academics/levels', values),
+      id ? AcademicsEndpoints.updateLevel(id, values) : AcademicsEndpoints.createLevel(values),
     invalidate: (schoolId) => [
       queryKeys.academics.levels(schoolId),
       queryKeys.academics.classes(schoolId),
@@ -217,7 +213,7 @@ export function useSaveLevel() {
 
 export function useDeleteLevel() {
   return useAcademicMutation<string, void>({
-    request: (id) => http.delete<void>(`/academics/levels/${id}`),
+    request: (id) => AcademicsEndpoints.removeLevel(id),
     invalidate: (schoolId) => [queryKeys.academics.levels(schoolId)],
     successMessage: 'Level removed',
   });
@@ -226,9 +222,7 @@ export function useDeleteLevel() {
 export function useSaveClass() {
   return useAcademicMutation<{ id?: string; values: Partial<SchoolClass> }, SchoolClass>({
     request: ({ id, values }) =>
-      id
-        ? http.patch<SchoolClass>(`/academics/classes/${id}`, values)
-        : http.post<SchoolClass>('/academics/classes', values),
+      id ? AcademicsEndpoints.updateClass(id, values) : AcademicsEndpoints.createClass(values),
     invalidate: (schoolId) => [
       queryKeys.academics.classes(schoolId),
       queryKeys.academics.levels(schoolId),
@@ -239,7 +233,7 @@ export function useSaveClass() {
 
 export function useDeleteClass() {
   return useAcademicMutation<string, void>({
-    request: (id) => http.delete<void>(`/academics/classes/${id}`),
+    request: (id) => AcademicsEndpoints.removeClass(id),
     invalidate: (schoolId) => [queryKeys.academics.classes(schoolId)],
     successMessage: 'Class removed',
   });
@@ -248,9 +242,7 @@ export function useDeleteClass() {
 export function useSaveSubject() {
   return useAcademicMutation<{ id?: string; values: Partial<Subject> }, Subject>({
     request: ({ id, values }) =>
-      id
-        ? http.patch<Subject>(`/academics/subjects/${id}`, values)
-        : http.post<Subject>('/academics/subjects', values),
+      id ? AcademicsEndpoints.updateSubject(id, values) : AcademicsEndpoints.createSubject(values),
     invalidate: (schoolId) => [queryKeys.academics.subjects(schoolId)],
     successMessage: 'Subject saved',
   });
@@ -258,7 +250,7 @@ export function useSaveSubject() {
 
 export function useDeleteSubject() {
   return useAcademicMutation<string, void>({
-    request: (id) => http.delete<void>(`/academics/subjects/${id}`),
+    request: (id) => AcademicsEndpoints.removeSubject(id),
     invalidate: (schoolId) => [queryKeys.academics.subjects(schoolId)],
     successMessage: 'Subject removed',
   });
@@ -267,9 +259,7 @@ export function useDeleteSubject() {
 export function useSaveHouse() {
   return useAcademicMutation<{ id?: string; values: Partial<House> }, House>({
     request: ({ id, values }) =>
-      id
-        ? http.patch<House>(`/academics/houses/${id}`, values)
-        : http.post<House>('/academics/houses', values),
+      id ? AcademicsEndpoints.updateHouse(id, values) : AcademicsEndpoints.createHouse(values),
     invalidate: (schoolId) => [queryKeys.academics.houses(schoolId)],
     successMessage: 'House saved',
   });
@@ -278,7 +268,7 @@ export function useSaveHouse() {
 export function useSaveRoom() {
   return useAcademicMutation<{ id?: string; values: Partial<Room> }, Room>({
     request: ({ id, values }) =>
-      id ? http.patch<Room>(`/academics/rooms/${id}`, values) : http.post<Room>('/academics/rooms', values),
+      id ? AcademicsEndpoints.updateRoom(id, values) : AcademicsEndpoints.createRoom(values),
     invalidate: (schoolId) => [queryKeys.academics.rooms(schoolId)],
     successMessage: 'Room saved',
   });
@@ -287,18 +277,19 @@ export function useSaveRoom() {
 export function useSavePeriod() {
   return useAcademicMutation<{ id?: string; values: Partial<TimetablePeriod> }, TimetablePeriod>({
     request: ({ id, values }) =>
-      id
-        ? http.patch<TimetablePeriod>(`/academics/periods/${id}`, values)
-        : http.post<TimetablePeriod>('/academics/periods', values),
+      id ? AcademicsEndpoints.updatePeriod(id, values) : AcademicsEndpoints.createPeriod(values),
     // A new or retimed period changes what the timetable grid can show.
-    invalidate: (schoolId) => [queryKeys.academics.periods(schoolId), queryKeys.timetable.list(schoolId)],
+    invalidate: (schoolId) => [
+      queryKeys.academics.periods(schoolId),
+      queryKeys.timetable.list(schoolId),
+    ],
     successMessage: 'Period saved',
   });
 }
 
 export function useDeletePeriod() {
   return useAcademicMutation<string, void>({
-    request: (id) => http.delete<void>(`/academics/periods/${id}`),
+    request: (id) => AcademicsEndpoints.removePeriod(id),
     invalidate: (schoolId) => [
       queryKeys.academics.periods(schoolId),
       queryKeys.timetable.list(schoolId),
@@ -320,7 +311,7 @@ export function useClassOptions(levelId?: string): SelectOption[] {
   }));
 }
 
-export function useSubjectOptions(query: { levelId?: string; classId?: string } = {}): SelectOption[] {
+export function useSubjectOptions(query: SubjectQuery = {}): SelectOption[] {
   const { data } = useSubjects(query);
   return (data ?? []).map((subject) => ({
     value: subject.id,

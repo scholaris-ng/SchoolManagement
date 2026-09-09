@@ -124,12 +124,12 @@ export function StudentDetailPage() {
         actions={
           <>
             <PermissionGate require="student.update">
-              <Button variant="outline" onClick={() => setStatusOpen(true)}>
+              <Button data-cy="students-student-detail-change-status" variant="outline" onClick={() => setStatusOpen(true)}>
                 Change status
               </Button>
             </PermissionGate>
             <PermissionGate require="student.update">
-              <Button asChild>
+              <Button data-cy="students-student-detail-edit" asChild>
                 <Link to={`/students/${record.id}/edit`}>
                   <Pencil />
                   Edit
@@ -148,6 +148,7 @@ export function StudentDetailPage() {
               type="button"
               role="tab"
               id={`tab-${tab.id}`}
+              data-cy={`student-tab-${tab.id}`}
               aria-selected={currentTab?.id === tab.id}
               aria-controls={`panel-${tab.id}`}
               onClick={() => setTab(tab.id)}

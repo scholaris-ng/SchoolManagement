@@ -62,6 +62,7 @@ export function TabStrip({
               type="button"
               role="tab"
               id={`tab-${tab.id}`}
+              data-cy={`tab-${tab.id}`}
               aria-selected={selected}
               aria-controls={`panel-${tab.id}`}
               onClick={() => onChange(tab.id)}

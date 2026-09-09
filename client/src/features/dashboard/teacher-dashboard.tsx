@@ -62,7 +62,7 @@ export function TeacherDashboard() {
             : `${outstanding} ${outstanding === 1 ? 'task is' : 'tasks are'} waiting on you.`
         }
         actions={
-          <Button asChild>
+          <Button data-cy="teacher-dashboard-take-attendance" asChild>
             <Link to="/attendance">
               <ClipboardCheck />
               Take attendance
@@ -117,7 +117,7 @@ export function TeacherDashboard() {
                             Register taken
                           </Badge>
                         ) : (
-                          <Button size="sm" variant="outline" asChild>
+                          <Button data-cy="teacher-dashboard-take-register" size="sm" variant="outline" asChild>
                             <Link to={`/attendance?classId=${lesson.id}`}>Take register</Link>
                           </Button>
                         )}
@@ -164,7 +164,7 @@ export function TeacherDashboard() {
                     </div>
                   ))
                 )}
-                <Button variant="outline" size="sm" block asChild>
+                <Button data-cy="teacher-dashboard-open-curriculum" variant="outline" size="sm" block asChild>
                   <Link to="/curriculum">Open curriculum</Link>
                 </Button>
               </CardContent>
@@ -190,7 +190,7 @@ export function TeacherDashboard() {
                           <p className="truncate font-medium">{task.className}</p>
                           <p className="text-xs text-muted-foreground">{formatDate(task.date)}</p>
                         </div>
-                        <Button size="sm" variant="ghost" asChild>
+                        <Button data-cy="teacher-dashboard-take" size="sm" variant="ghost" asChild>
                           <Link to={`/attendance?classId=${task.classId}&date=${task.date}`}>
                             Take
                           </Link>
@@ -232,7 +232,7 @@ export function TeacherDashboard() {
                           className="mt-1.5"
                           value={sheet.totalCount === 0 ? 0 : (sheet.enteredCount / sheet.totalCount) * 100}
                         />
-                        <Button size="sm" variant="ghost" className="mt-1 h-7 px-0" asChild>
+                        <Button data-cy="teacher-dashboard-continue-entry" size="sm" variant="ghost" className="mt-1 h-7 px-0" asChild>
                           <Link to={`/results/entry/${sheet.scoreSheetId}`}>Continue entry</Link>
                         </Button>
                       </li>
@@ -260,7 +260,7 @@ export function TeacherDashboard() {
                               {note.className} · week {note.weekNumber}
                             </p>
                           </div>
-                          <Button size="sm" variant="ghost" asChild>
+                          <Button data-cy="teacher-dashboard-write" size="sm" variant="ghost" asChild>
                             <Link to="/lesson-notes/new">Write</Link>
                           </Button>
                         </li>

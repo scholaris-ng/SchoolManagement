@@ -42,7 +42,7 @@ export function FinanceOverviewPage() {
         actions={
           <>
             <PermissionGate require="invoice.manage">
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-overview-new-invoice" variant="outline" asChild>
                 <Link to="/finance/invoices/new">
                   <Receipt />
                   New invoice
@@ -50,7 +50,7 @@ export function FinanceOverviewPage() {
               </Button>
             </PermissionGate>
             <PermissionGate require="payment.manage">
-              <Button asChild>
+              <Button data-cy="finance-overview-record-payment" asChild>
                 <Link to="/finance/payments/new">
                   <CreditCard />
                   Record payment
@@ -189,16 +189,16 @@ export function FinanceOverviewPage() {
 
           <Card>
             <CardContent className="flex flex-wrap gap-3 pt-5">
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-overview-fee-items-and-structures" variant="outline" asChild>
                 <Link to="/finance/fees">Fee items and structures</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-overview-all-invoices" variant="outline" asChild>
                 <Link to="/finance/invoices">All invoices</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-overview-all-payments" variant="outline" asChild>
                 <Link to="/finance/payments">All payments</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button data-cy="finance-overview-debtors" variant="outline" asChild>
                 <Link to="/finance/debtors">Debtors</Link>
               </Button>
             </CardContent>

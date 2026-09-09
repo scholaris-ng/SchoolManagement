@@ -21,6 +21,7 @@ export function DevPersonaPanel({ onSignInAs }: { onSignInAs: (email: string) =>
         <div className="grid gap-1.5">
           {DEMO_PERSONAS.map((persona) => (
             <button
+              data-cy="auth-dev-personas-sign-in"
               key={persona.email}
               type="button"
               onClick={() => onSignInAs(persona.email)}

@@ -1,23 +1,30 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
-import type {
-  Student,
-  StudentDocument,
-  StudentEnrollment,
-  StudentGuardianLink,
-  StudentSummary,
-  PickupPerson,
-  CollectionEvent,
-} from '@/types/people';
-import type { AttendanceRecord, AttendanceSummary } from '@/types/attendance';
-import type { StudentLedgerEntry, StudentFinanceSummary } from '@/types/finance';
-import type { BehaviourTermRating } from '@/types/behaviour';
-import type { ReportCard } from '@/types/results';
+import type { ListQuery } from '@/types/api';
+import type { PickupPerson } from '@/types/people';
 import type { StudentFormValues, PromotionValues, StatusChangeValues } from './schema';
+import { StudentEndpoints } from './students.endpoints';
+import type {
+  AddStudentDocumentInput,
+  LinkGuardianInput,
+  PromotionResult,
+  StudentAttendanceRange,
+  StudentAttendanceResult,
+  StudentLedgerResult,
+  StudentPickupResult,
+} from './students.endpoints';
+
+export type {
+  AddStudentDocumentInput,
+  LinkGuardianInput,
+  PromotionResult,
+  StudentAttendanceRange,
+  StudentAttendanceResult,
+  StudentLedgerResult,
+  StudentPickupResult,
+};
 
 /**
  * Data access for the student module.
@@ -31,7 +38,7 @@ export function useStudents(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.list(schoolId, query),
-    queryFn: () => http.get<Paginated<Student>>('/students', { query }),
+    queryFn: () => StudentEndpoints.fetchAll(query),
     enabled: Boolean(schoolId),
     // Keeps the previous page visible while the next one loads, so paging a
     // large register does not flash an empty table.
@@ -43,7 +50,7 @@ export function useStudent(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.detail(schoolId, id ?? ''),
-    queryFn: () => http.get<Student>(`/students/${id}`),
+    queryFn: () => StudentEndpoints.fetchById(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
 }
@@ -54,9 +61,7 @@ export function useStudentSearch(term: string, options: { enabled?: boolean } = 
   return useQuery({
     queryKey: queryKeys.students.list(schoolId, { search: term, pageSize: 8, mode: 'summary' }),
     queryFn: async () => {
-      const result = await http.get<Paginated<StudentSummary>>('/students/search', {
-        query: { search: term, pageSize: 8 },
-      });
+      const result = await StudentEndpoints.search(term);
       return result.items;
     },
     enabled: Boolean(schoolId) && term.trim().length >= 2 && options.enabled !== false,
@@ -69,7 +74,7 @@ export function useCreateStudent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: StudentFormValues) => http.post<Student>('/students', values),
+    mutationFn: (values: StudentFormValues) => StudentEndpoints.create(values),
     onSuccess: (student) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.list(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.admin(schoolId) });
@@ -84,9 +89,7 @@ export function useUpdateStudent(id: string) {
 
   return useMutation({
     mutationFn: ({ values, version }: { values: Partial<StudentFormValues>; version: number }) =>
-      // The version travels as If-Match so a concurrent edit is rejected by the
-      // server rather than silently overwriting a colleague's change.
-      http.patch<Student>(`/students/${id}`, values, { version }),
+      StudentEndpoints.update(id, values, version),
     onSuccess: (student) => {
       queryClient.setQueryData(queryKeys.students.detail(schoolId, id), student);
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.list(schoolId) });
@@ -100,8 +103,7 @@ export function useChangeStudentStatus(id: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: StatusChangeValues) =>
-      http.post<Student>(`/students/${id}/status`, values),
+    mutationFn: (values: StatusChangeValues) => StudentEndpoints.changeStatus(id, values),
     onSuccess: (student) => {
       queryClient.setQueryData(queryKeys.students.detail(schoolId, id), student);
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.list(schoolId) });
@@ -117,11 +119,7 @@ export function usePromoteStudents() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: PromotionValues) =>
-      http.post<{ promoted: number; repeated: number; graduated: number }>(
-        '/students/promotions',
-        values,
-      ),
+    mutationFn: (values: PromotionValues) => StudentEndpoints.promote(values),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.list(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.academics.classes(schoolId) });
@@ -136,7 +134,7 @@ export function useStudentEnrollments(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.enrollments(schoolId, studentId ?? ''),
-    queryFn: () => http.get<StudentEnrollment[]>(`/students/${studentId}/enrollments`),
+    queryFn: () => StudentEndpoints.fetchEnrollments(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -145,7 +143,7 @@ export function useStudentGuardians(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.guardians(schoolId, studentId ?? ''),
-    queryFn: () => http.get<StudentGuardianLink[]>(`/students/${studentId}/guardians`),
+    queryFn: () => StudentEndpoints.fetchGuardians(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -155,14 +153,7 @@ export function useLinkGuardian(studentId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: {
-      guardianId: string;
-      relationship: string;
-      isPrimaryContact: boolean;
-      isEmergencyContact: boolean;
-      isFinanciallyResponsible: boolean;
-      canPickUp: boolean;
-    }) => http.post<StudentGuardianLink>(`/students/${studentId}/guardians`, values),
+    mutationFn: (values: LinkGuardianInput) => StudentEndpoints.linkGuardian(studentId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.students.guardians(schoolId, studentId),
@@ -178,8 +169,7 @@ export function useUnlinkGuardian(studentId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (linkId: string) =>
-      http.delete<void>(`/students/${studentId}/guardians/${linkId}`),
+    mutationFn: (linkId: string) => StudentEndpoints.unlinkGuardian(studentId, linkId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.students.guardians(schoolId, studentId),
@@ -193,7 +183,7 @@ export function useStudentDocuments(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.documents(schoolId, studentId ?? ''),
-    queryFn: () => http.get<StudentDocument[]>(`/students/${studentId}/documents`),
+    queryFn: () => StudentEndpoints.fetchDocuments(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -203,14 +193,8 @@ export function useAddStudentDocument(studentId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: {
-      name: string;
-      category: StudentDocument['category'];
-      storagePath: string;
-      downloadUrl: string;
-      mimeType: string;
-      sizeBytes: number;
-    }) => http.post<StudentDocument>(`/students/${studentId}/documents`, values),
+    mutationFn: (values: AddStudentDocumentInput) =>
+      StudentEndpoints.addDocument(studentId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.students.documents(schoolId, studentId),
@@ -225,8 +209,7 @@ export function useDeleteStudentDocument(studentId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (documentId: string) =>
-      http.delete<void>(`/students/${studentId}/documents/${documentId}`),
+    mutationFn: (documentId: string) => StudentEndpoints.removeDocument(studentId, documentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.students.documents(schoolId, studentId),
@@ -238,16 +221,12 @@ export function useDeleteStudentDocument(studentId: string) {
 
 export function useStudentAttendance(
   studentId: string | undefined,
-  range: { from?: string; to?: string; termId?: string },
+  range: StudentAttendanceRange,
 ) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.attendance(schoolId, studentId ?? '', range),
-    queryFn: () =>
-      http.get<{ summary: AttendanceSummary; records: AttendanceRecord[] }>(
-        `/students/${studentId}/attendance`,
-        { query: range },
-      ),
+    queryFn: () => StudentEndpoints.fetchAttendance(studentId ?? '', range),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -256,10 +235,7 @@ export function useStudentLedger(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.ledger(schoolId, studentId ?? ''),
-    queryFn: () =>
-      http.get<{ summary: StudentFinanceSummary; entries: StudentLedgerEntry[] }>(
-        `/students/${studentId}/ledger`,
-      ),
+    queryFn: () => StudentEndpoints.fetchLedger(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -268,8 +244,7 @@ export function useStudentBehaviour(studentId: string | undefined, termId?: stri
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.behaviour(schoolId, studentId ?? '', termId),
-    queryFn: () =>
-      http.get<BehaviourTermRating[]>(`/students/${studentId}/behaviour`, { query: { termId } }),
+    queryFn: () => StudentEndpoints.fetchBehaviour(studentId ?? '', termId),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -278,8 +253,7 @@ export function useStudentResults(studentId: string | undefined, termId?: string
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.results(schoolId, studentId ?? '', termId),
-    queryFn: () =>
-      http.get<ReportCard>(`/students/${studentId}/results`, { query: { termId } }),
+    queryFn: () => StudentEndpoints.fetchResults(studentId ?? '', termId),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -288,10 +262,7 @@ export function useStudentPickupPersons(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.pickupPersons(schoolId, studentId ?? ''),
-    queryFn: () =>
-      http.get<{ persons: PickupPerson[]; recentEvents: CollectionEvent[] }>(
-        `/students/${studentId}/pickup`,
-      ),
+    queryFn: () => StudentEndpoints.fetchPickupPersons(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -303,8 +274,8 @@ export function useSavePickupPerson(studentId: string) {
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<PickupPerson> }) =>
       id
-        ? http.patch<PickupPerson>(`/students/${studentId}/pickup/${id}`, values)
-        : http.post<PickupPerson>(`/students/${studentId}/pickup`, values),
+        ? StudentEndpoints.updatePickupPerson(studentId, id, values)
+        : StudentEndpoints.createPickupPerson(studentId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.students.pickupPersons(schoolId, studentId),

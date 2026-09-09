@@ -180,6 +180,7 @@ export function TimetablePage() {
           <>
             {canManage && (
               <Button
+                data-cy="timetable-clear-timetable"
                 variant="outline"
                 className="text-danger hover:text-danger"
                 disabled={(timetable.data?.entries.length ?? 0) === 0}
@@ -189,7 +190,7 @@ export function TimetablePage() {
                 Clear timetable
               </Button>
             )}
-            <Button variant="outline" onClick={() => window.print()}>
+            <Button data-cy="timetable-print" variant="outline" onClick={() => window.print()}>
               <Printer />
               Print
             </Button>
@@ -202,6 +203,7 @@ export function TimetablePage() {
           <div className="space-y-1.5">
             <Label htmlFor="tt-class">Class</Label>
             <NativeSelect
+              data-cy="tt-class"
               id="tt-class"
               value={classId}
               onChange={(event) => {
@@ -224,6 +226,7 @@ export function TimetablePage() {
             <div className="space-y-1.5">
               <Label htmlFor="tt-teacher">Teacher</Label>
               <NativeSelect
+                data-cy="tt-teacher"
                 id="tt-teacher"
                 value={teacherId}
                 onChange={(event) => {
@@ -245,6 +248,7 @@ export function TimetablePage() {
           <div className="space-y-1.5">
             <Label htmlFor="tt-subject">Subject</Label>
             <NativeSelect
+              data-cy="tt-subject"
               id="tt-subject"
               value={subjectId}
               onChange={(event) => setParams({ subjectId: event.target.value })}
@@ -376,6 +380,7 @@ export function TimetablePage() {
                             canManage ? (
                               <button
                                 type="button"
+                                data-cy={`timetable-add-${day.value}-${period.id}`}
                                 onClick={() => {
                                   setConflict(null);
                                   setSlot({ day: day.value, periodId: period.id });
@@ -392,6 +397,7 @@ export function TimetablePage() {
                             <div className="space-y-1">
                               {cellEntries.map((entry) => (
                                 <button
+                                  data-cy="timetable-entry-roomname"
                                   key={entry.id}
                                   type="button"
                                   disabled={!canManage}
@@ -585,6 +591,7 @@ function EntryDialog({
               Class
             </Label>
             <NativeSelect
+              data-cy="entry-class"
               id="entry-class"
               value={classIdValue}
               onChange={(event) => setClassId(event.target.value)}
@@ -603,6 +610,7 @@ function EntryDialog({
               Subject
             </Label>
             <NativeSelect
+              data-cy="entry-subject"
               id="entry-subject"
               value={subjectId}
               onChange={(event) => setSubjectId(event.target.value)}
@@ -621,6 +629,7 @@ function EntryDialog({
               Teacher
             </Label>
             <NativeSelect
+              data-cy="entry-teacher"
               id="entry-teacher"
               value={teacherIdValue}
               onChange={(event) => setTeacherId(event.target.value)}
@@ -637,6 +646,7 @@ function EntryDialog({
           <div className="space-y-1.5">
             <Label htmlFor="entry-room">Room</Label>
             <NativeSelect
+              data-cy="entry-room"
               id="entry-room"
               value={roomId}
               onChange={(event) => setRoomId(event.target.value)}
@@ -654,6 +664,7 @@ function EntryDialog({
         <DialogFooter>
           {slot?.entry && (
             <Button
+              data-cy="timetable-remove"
               variant="danger"
               className="mr-auto"
               loading={deleting}
@@ -663,10 +674,11 @@ function EntryDialog({
               Remove
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="timetable-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="timetable-save"
             loading={saving}
             disabled={!valid}
             onClick={() =>

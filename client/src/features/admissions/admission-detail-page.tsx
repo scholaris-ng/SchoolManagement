@@ -152,6 +152,7 @@ export function AdmissionDetailPage() {
               nextStatuses.map((status) => (
                 <Button
                   key={status}
+                  data-cy={`admission-transition-${status.toLowerCase()}`}
                   variant={status === 'REJECTED' || status === 'WITHDRAWN' ? 'outline' : 'primary'}
                   onClick={() => openTransition(status)}
                 >
@@ -160,13 +161,13 @@ export function AdmissionDetailPage() {
                 </Button>
               ))}
             {record.status === 'ACCEPTED' && !record.convertedStudentId && can('student.create') && (
-              <Button onClick={() => setConvertOpen(true)}>
+              <Button data-cy="admissions-admission-detail-enrol-as-a-student" onClick={() => setConvertOpen(true)}>
                 <UserPlus />
                 Enrol as a student
               </Button>
             )}
             {record.convertedStudentId && (
-              <Button variant="outline" asChild>
+              <Button data-cy="admissions-admission-detail-open-student-record" variant="outline" asChild>
                 <Link to={`/students/${record.convertedStudentId}`}>
                   <GraduationCap />
                   Open student record
@@ -273,7 +274,12 @@ export function AdmissionDetailPage() {
                         </p>
                       </div>
                       {document.downloadUrl && (
-                        <Button variant="ghost" size="icon-sm" asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          asChild
+                          data-cy={`admission-document-download-${document.id}`}
+                        >
                           <a
                             href={document.downloadUrl}
                             target="_blank"
@@ -364,6 +370,7 @@ export function AdmissionDetailPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="screening-score">Screening score</Label>
                 <Input
+                  data-cy="screening-score"
                   id="screening-score"
                   type="number"
                   min={0}
@@ -381,6 +388,7 @@ export function AdmissionDetailPage() {
                   Class being offered
                 </Label>
                 <NativeSelect
+                  data-cy="offered-class"
                   id="offered-class"
                   value={offeredClassId}
                   onChange={(event) => setOfferedClassId(event.target.value)}
@@ -398,6 +406,7 @@ export function AdmissionDetailPage() {
             <div className="space-y-1.5">
               <Label htmlFor="transition-note">Note</Label>
               <Textarea
+                data-cy="transition-note"
                 id="transition-note"
                 rows={3}
                 value={note}
@@ -408,10 +417,11 @@ export function AdmissionDetailPage() {
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setPendingStatus(null)}>
+            <Button data-cy="admissions-admission-detail-cancel" type="button" variant="outline" onClick={() => setPendingStatus(null)}>
               Cancel
             </Button>
             <Button
+              data-cy="admissions-admission-detail-confirm"
               onClick={() => void submitTransition()}
               loading={transition.isPending}
               disabled={pendingStatus === 'OFFERED' && !offeredClassId}

@@ -211,6 +211,7 @@ export function ScoreSheetPage() {
           <>
             {editable && (
               <Button
+                data-cy="results-score-sheet-save"
                 onClick={() => void save()}
                 loading={saveScores.isPending}
                 loadingLabel="Saving…"
@@ -223,6 +224,7 @@ export function ScoreSheetPage() {
             {transitions.map((option) => (
               <Button
                 key={option.to}
+                data-cy={`score-sheet-transition-${option.to.toLowerCase()}`}
                 variant={option.to === 'DRAFT' ? 'outline' : 'primary'}
                 onClick={() => setPendingTransition(option.to)}
                 disabled={dirty}
@@ -320,6 +322,7 @@ export function ScoreSheetPage() {
                           return (
                             <td key={component.id} className="px-2 py-1.5 text-center">
                               <Input
+                                data-cy="results-score-sheet-value"
                                 data-cell
                                 type="number"
                                 inputMode="numeric"

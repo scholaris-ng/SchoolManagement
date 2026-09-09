@@ -140,11 +140,12 @@ export function CommandPalette({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" hideClose className="top-[12%] translate-y-0 p-0">
+      <DialogContent size="lg" hideClose data-cy="command-palette" className="top-[12%] translate-y-0 p-0">
         <div className="flex items-center gap-2 border-b border-border px-4">
           <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
             autoFocus
+            data-cy="command-palette-input"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
@@ -174,6 +175,7 @@ export function CommandPalette({
                     <button
                       type="button"
                       role="option"
+                      data-cy={`command-palette-option-${entry.id}`}
                       aria-selected={index === activeIndex}
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => go(entry)}

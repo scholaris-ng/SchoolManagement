@@ -30,7 +30,14 @@ export function OfflineBanner() {
           : 'You are offline. Your work is saved on this device and will be sent when the connection returns.'}
       </span>
       {isOnline && (
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={retryNow} loading={isFlushing}>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-cy="offline-retry"
+          className="h-6 px-2 text-xs"
+          onClick={retryNow}
+          loading={isFlushing}
+        >
           <RefreshCw />
           Retry now
         </Button>

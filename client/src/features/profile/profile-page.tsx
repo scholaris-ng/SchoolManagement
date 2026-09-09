@@ -100,7 +100,7 @@ export function ProfilePage() {
         description="How you appear to the school, and how this app behaves for you."
         breadcrumbs={[{ label: 'My profile' }]}
         actions={
-          <Button onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
+          <Button data-cy="profile-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
             <Save />
             Save changes
           </Button>
@@ -140,6 +140,7 @@ export function ProfilePage() {
                 Full name
               </Label>
               <Input
+                data-cy="profile-name"
                 id="profile-name"
                 value={displayName}
                 onChange={(event) => {
@@ -151,6 +152,7 @@ export function ProfilePage() {
             <div className="space-y-1.5">
               <Label htmlFor="profile-phone">Phone</Label>
               <Input
+                data-cy="profile-phone"
                 id="profile-phone"
                 type="tel"
                 value={phone}
@@ -163,7 +165,7 @@ export function ProfilePage() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="profile-email">Email</Label>
-              <Input id="profile-email" value={user?.email ?? ''} readOnly disabled />
+              <Input data-cy="profile-email" id="profile-email" value={user?.email ?? ''} readOnly disabled />
               <p className="text-xs text-muted-foreground">
                 Your email address is your sign-in identity. Ask your school administrator if it
                 needs to change.
@@ -202,7 +204,7 @@ export function ProfilePage() {
                       Active
                     </Badge>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => switchSchool(entry.schoolId)}>
+                    <Button data-cy="profile-switch" variant="outline" size="sm" onClick={() => switchSchool(entry.schoolId)}>
                       Switch
                     </Button>
                   )}
@@ -233,6 +235,7 @@ export function ProfilePage() {
                   )}
                 >
                   <input
+                    data-cy="profile-value"
                     type="radio"
                     name="theme"
                     value={option.value}
@@ -257,7 +260,7 @@ export function ProfilePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" asChild>
+          <Button data-cy="profile-notification-settings" variant="outline" asChild>
             <Link to="/profile/notifications">
               <Bell />
               Notification settings
@@ -290,6 +293,7 @@ export function ProfilePage() {
                 Do not clear this browser&rsquo;s data until these have synchronised.
               </Alert>
               <Button
+                data-cy="profile-try-to-sync-now"
                 variant="outline"
                 onClick={outbox.retryNow}
                 loading={outbox.isFlushing}
@@ -314,7 +318,12 @@ export function ProfilePage() {
                 We email you a link rather than asking for your current password.
               </p>
             </div>
-            <Button variant="outline" onClick={() => void requestReset()} disabled={resetSent}>
+            <Button
+              variant="outline"
+              data-cy="profile-send-reset-link"
+              onClick={() => void requestReset()}
+              disabled={resetSent}
+            >
               <KeyRound />
               {resetSent ? 'Reset link sent' : 'Send reset link'}
             </Button>
@@ -327,7 +336,7 @@ export function ProfilePage() {
                 Ends this session and clears cached school data from this device.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setSignOutOpen(true)}>
+            <Button data-cy="profile-sign-out" variant="outline" onClick={() => setSignOutOpen(true)}>
               <LogOut />
               Sign out
             </Button>

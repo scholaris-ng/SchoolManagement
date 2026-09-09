@@ -1,33 +1,25 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { outbox } from '@/lib/outbox';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
+import type { ListQuery } from '@/types/api';
+import type { GradingScheme, CommentTemplate, ResultStatus, ScoreSheet } from '@/types/results';
+import { ResultsEndpoints } from './results.endpoints';
 import type {
-  Broadsheet,
-  CommentTemplate,
-  GradingScheme,
-  ReportCard,
-  ResultStatus,
-  ScoreSheet,
-  Transcript,
-} from '@/types/results';
-import type { ResultAnalytics } from '@/types/analytics';
+  ReportCardCommentsInput,
+  ScoreEntry,
+  ScoreSheetSummary,
+  TransitionScoreSheetInput,
+} from './results.endpoints';
 
-/** A row in the score-sheet list carries progress instead of every mark. */
-export interface ScoreSheetSummary extends Omit<ScoreSheet, 'rows'> {
-  rows: [];
-  enteredCount: number;
-  totalCount: number;
-}
+export type { ReportCardCommentsInput, ScoreEntry, ScoreSheetSummary, TransitionScoreSheetInput };
 
 export function useScoreSheets(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.scoreSheets(schoolId, query),
-    queryFn: () => http.get<Paginated<ScoreSheetSummary>>('/score-sheets', { query }),
+    queryFn: () => ResultsEndpoints.fetchScoreSheets(query),
     enabled: Boolean(schoolId),
     placeholderData: keepPreviousData,
   });
@@ -37,15 +29,9 @@ export function useScoreSheet(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.scoreSheet(schoolId, id ?? ''),
-    queryFn: () => http.get<ScoreSheet>(`/score-sheets/${id}`),
+    queryFn: () => ResultsEndpoints.fetchScoreSheet(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
-}
-
-export interface ScoreEntry {
-  studentId: string;
-  componentId: string;
-  score: number | null;
 }
 
 /**
@@ -53,8 +39,6 @@ export interface ScoreEntry {
  *
  * Like attendance, this is a workflow a teacher cannot easily redo, so a
  * connectivity failure queues the write rather than losing an hour of typing.
- * The sheet version travels as `If-Match`, so if a colleague saved first the
- * server rejects the write instead of quietly overwriting their marks.
  */
 export function useSaveScores(scoreSheetId: string) {
   const schoolId = useSchoolId();
@@ -67,11 +51,7 @@ export function useSaveScores(scoreSheetId: string) {
       label: string;
     }): Promise<ScoreSheet | 'queued'> => {
       try {
-        return await http.patch<ScoreSheet>(
-          `/score-sheets/${scoreSheetId}/scores`,
-          { entries: input.entries },
-          { version: input.version },
-        );
+        return await ResultsEndpoints.saveScores(scoreSheetId, input.entries, input.version);
       } catch (error) {
         const offline =
           typeof navigator !== 'undefined' && navigator.onLine === false
@@ -112,8 +92,8 @@ export function useTransitionScoreSheet(scoreSheetId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { to: ResultStatus; note?: string }) =>
-      http.post<ScoreSheet>(`/score-sheets/${scoreSheetId}/transition`, input),
+    mutationFn: (input: TransitionScoreSheetInput) =>
+      ResultsEndpoints.transitionScoreSheet(scoreSheetId, input),
     onSuccess: (sheet) => {
       queryClient.setQueryData(queryKeys.results.scoreSheet(schoolId, scoreSheetId), sheet);
       void queryClient.invalidateQueries({ queryKey: queryKeys.results.scoreSheets(schoolId) });
@@ -133,7 +113,7 @@ export function useGradingSchemes() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.schemes(schoolId),
-    queryFn: () => http.get<GradingScheme[]>('/grading-schemes'),
+    queryFn: () => ResultsEndpoints.fetchGradingSchemes(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -146,8 +126,8 @@ export function useSaveGradingScheme() {
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<GradingScheme> }) =>
       id
-        ? http.patch<GradingScheme>(`/grading-schemes/${id}`, values)
-        : http.post<GradingScheme>('/grading-schemes', values),
+        ? ResultsEndpoints.updateGradingScheme(id, values)
+        : ResultsEndpoints.createGradingScheme(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.results.schemes(schoolId) });
       toast.success('Grading scheme saved');
@@ -159,7 +139,7 @@ export function useReportCard(studentId: string | undefined, termId: string | un
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.reportCard(schoolId, studentId ?? '', termId ?? ''),
-    queryFn: () => http.get<ReportCard>(`/report-cards/${studentId}/${termId}`),
+    queryFn: () => ResultsEndpoints.fetchReportCard(studentId ?? '', termId ?? ''),
     enabled: Boolean(schoolId && studentId && termId),
   });
 }
@@ -168,7 +148,7 @@ export function useResultAnalytics(termId?: string) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.analytics(schoolId, termId),
-    queryFn: () => http.get<ResultAnalytics>('/analytics/results', { query: { termId } }),
+    queryFn: () => ResultsEndpoints.fetchAnalytics(termId),
     enabled: Boolean(schoolId),
   });
 }
@@ -177,7 +157,7 @@ export function useBroadsheet(classId: string | undefined, termId: string | unde
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.broadsheet(schoolId, classId ?? '', termId ?? ''),
-    queryFn: () => http.get<Broadsheet>('/broadsheet', { query: { classId, termId } }),
+    queryFn: () => ResultsEndpoints.fetchBroadsheet(classId ?? '', termId ?? ''),
     enabled: Boolean(schoolId && classId && termId),
   });
 }
@@ -186,7 +166,7 @@ export function useCommentTemplates() {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.comments(schoolId),
-    queryFn: () => http.get<CommentTemplate[]>('/comment-templates'),
+    queryFn: () => ResultsEndpoints.fetchCommentTemplates(),
     enabled: Boolean(schoolId),
     staleTime: 10 * 60_000,
   });
@@ -198,7 +178,7 @@ export function useSaveCommentTemplate() {
 
   return useMutation({
     mutationFn: (values: Partial<CommentTemplate>) =>
-      http.post<CommentTemplate>('/comment-templates', values),
+      ResultsEndpoints.createCommentTemplate(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.results.comments(schoolId) });
       toast.success('Comment template saved');
@@ -211,8 +191,8 @@ export function useSaveReportCardComments(studentId: string, termId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (values: { formTeacherComment?: string; principalComment?: string }) =>
-      http.patch<ReportCard>(`/report-cards/${studentId}/${termId}`, values),
+    mutationFn: (values: ReportCardCommentsInput) =>
+      ResultsEndpoints.saveReportCardComments(studentId, termId, values),
     onSuccess: (card) => {
       queryClient.setQueryData(queryKeys.results.reportCard(schoolId, studentId, termId), card);
       toast.success('Comments saved');
@@ -224,7 +204,7 @@ export function useTranscript(studentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.results.transcript(schoolId, studentId ?? ''),
-    queryFn: () => http.get<Transcript>(`/transcripts/${studentId}`),
+    queryFn: () => ResultsEndpoints.fetchTranscript(studentId ?? ''),
     enabled: Boolean(schoolId && studentId),
   });
 }
@@ -235,7 +215,7 @@ export function useIssueTranscript(studentId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => http.post<Transcript>(`/transcripts/${studentId}/issue`),
+    mutationFn: () => ResultsEndpoints.issueTranscript(studentId),
     onSuccess: (transcript) => {
       queryClient.setQueryData(queryKeys.results.transcript(schoolId, studentId), transcript);
       toast.success('Transcript issued', { description: transcript.verificationCode });

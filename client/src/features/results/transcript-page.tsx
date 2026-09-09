@@ -72,6 +72,7 @@ export function TranscriptPage() {
               {can('transcript.issue') && (
                 <Button
                   variant="outline"
+                  data-cy="transcript-issue"
                   loading={issue.isPending}
                   onClick={() => issue.mutate()}
                 >
@@ -79,7 +80,7 @@ export function TranscriptPage() {
                   {record.issuedAt ? 'Re-issue' : 'Issue officially'}
                 </Button>
               )}
-              <Button onClick={() => window.print()}>
+              <Button data-cy="results-transcript-print" onClick={() => window.print()}>
                 <Printer />
                 Print
               </Button>

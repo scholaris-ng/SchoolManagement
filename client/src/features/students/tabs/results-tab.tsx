@@ -52,6 +52,7 @@ export function StudentResultsTab({ studentId }: { studentId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <NativeSelect
+            data-cy="tabs-results-effective-term-id"
             value={effectiveTermId}
             onChange={(event) => setTermId(event.target.value)}
             aria-label="Term"
@@ -64,7 +65,7 @@ export function StudentResultsTab({ studentId }: { studentId: string }) {
             ))}
           </NativeSelect>
           <PermissionGate require="reportcard.read">
-            <Button variant="outline" asChild>
+            <Button data-cy="tabs-results-tab-report-card" variant="outline" asChild>
               <Link to={`/report-cards/${studentId}/${effectiveTermId}`}>
                 <FileText />
                 Report card

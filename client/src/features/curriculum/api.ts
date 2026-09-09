@@ -1,42 +1,31 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { ListQuery, Paginated } from '@/types/api';
+import type { ListQuery } from '@/types/api';
 import type {
   Curriculum,
-  CurriculumCoverage,
   CurriculumTopic,
   LearningObjective,
   LessonNote,
   SchemeOfWork,
 } from '@/types/curriculum';
+import { CurriculumEndpoints } from './curriculum.endpoints';
+import type {
+  CoverageQuery,
+  CurriculumQuery,
+  GenerateSchemeInput,
+  MarkCoverageInput,
+  SchemeSummary,
+} from './curriculum.endpoints';
 
-/** The scheme list omits the weeks; only the detail view needs them. */
-export interface SchemeSummary extends Omit<SchemeOfWork, 'weeks'> {
-  weeks: [];
-  weekCount: number;
-}
+export type { CoverageQuery, CurriculumQuery, GenerateSchemeInput, MarkCoverageInput, SchemeSummary };
 
-export function useCurricula(
-  query: {
-    subjectId?: string;
-    levelId?: string;
-    classId?: string;
-    /**
-     * Omit to get the school's current session, which is what almost every
-     * caller wants. Pass `'ALL'` to look across previous years.
-     */
-    sessionId?: string;
-    /** Narrows the list to one author — "written by me". */
-    createdById?: string;
-  } = {},
-) {
+export function useCurricula(query: CurriculumQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.list(schoolId, query),
-    queryFn: () => http.get<Curriculum[]>('/curricula', { query }),
+    queryFn: () => CurriculumEndpoints.fetchAll(query),
     enabled: Boolean(schoolId),
   });
 }
@@ -56,9 +45,7 @@ export function useSaveCurriculum() {
 
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<Curriculum> }) =>
-      id
-        ? http.patch<Curriculum>(`/curricula/${id}`, values)
-        : http.post<Curriculum>('/curricula', values),
+      id ? CurriculumEndpoints.update(id, values) : CurriculumEndpoints.create(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
       toast.success('Curriculum saved');
@@ -71,7 +58,7 @@ export function useDeleteCurriculum() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => http.delete<void>(`/curricula/${id}`),
+    mutationFn: (id: string) => CurriculumEndpoints.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.list(schoolId) });
       toast.success('Curriculum deleted');
@@ -83,7 +70,7 @@ export function useCurriculumTopics(curriculumId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.topics(schoolId, curriculumId ?? ''),
-    queryFn: () => http.get<CurriculumTopic[]>(`/curricula/${curriculumId}/topics`),
+    queryFn: () => CurriculumEndpoints.fetchTopics(curriculumId ?? ''),
     enabled: Boolean(schoolId && curriculumId),
   });
 }
@@ -95,8 +82,8 @@ export function useSaveTopic(curriculumId: string) {
   return useMutation({
     mutationFn: ({ id, values }: { id?: string; values: Partial<CurriculumTopic> }) =>
       id
-        ? http.patch<CurriculumTopic>(`/curricula/${curriculumId}/topics/${id}`, values)
-        : http.post<CurriculumTopic>(`/curricula/${curriculumId}/topics`, values),
+        ? CurriculumEndpoints.updateTopic(curriculumId, id, values)
+        : CurriculumEndpoints.createTopic(curriculumId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
@@ -112,8 +99,7 @@ export function useDeleteTopic(curriculumId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (topicId: string) =>
-      http.delete<void>(`/curricula/${curriculumId}/topics/${topicId}`),
+    mutationFn: (topicId: string) => CurriculumEndpoints.removeTopic(curriculumId, topicId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
@@ -139,14 +125,8 @@ export function useSaveObjective(curriculumId: string) {
       values: Partial<LearningObjective>;
     }) =>
       id
-        ? http.patch<LearningObjective>(
-            `/curricula/${curriculumId}/topics/${topicId}/objectives/${id}`,
-            values,
-          )
-        : http.post<LearningObjective>(
-            `/curricula/${curriculumId}/topics/${topicId}/objectives`,
-            values,
-          ),
+        ? CurriculumEndpoints.updateObjective(curriculumId, topicId, id, values)
+        : CurriculumEndpoints.createObjective(curriculumId, topicId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
@@ -163,7 +143,7 @@ export function useDeleteObjective(curriculumId: string) {
 
   return useMutation({
     mutationFn: ({ topicId, objectiveId }: { topicId: string; objectiveId: string }) =>
-      http.delete<void>(`/curricula/${curriculumId}/topics/${topicId}/objectives/${objectiveId}`),
+      CurriculumEndpoints.removeObjective(curriculumId, topicId, objectiveId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
@@ -174,11 +154,11 @@ export function useDeleteObjective(curriculumId: string) {
   });
 }
 
-export function useCurriculumCoverage(query: { curriculumId?: string; classId?: string } = {}) {
+export function useCurriculumCoverage(query: CoverageQuery = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.coverage(schoolId, query),
-    queryFn: () => http.get<CurriculumCoverage>('/curriculum-coverage', { query }),
+    queryFn: () => CurriculumEndpoints.fetchCoverage(query),
     enabled: Boolean(schoolId && query.curriculumId),
   });
 }
@@ -197,8 +177,8 @@ export function useMarkObjectiveCoverage(curriculumId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { objectiveIds: string[]; taught?: boolean; assessed?: boolean }) =>
-      http.post<{ updated: number }>(`/curricula/${curriculumId}/coverage`, input),
+    mutationFn: (input: MarkCoverageInput) =>
+      CurriculumEndpoints.markCoverage(curriculumId, input),
     onSuccess: (result, input) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.curriculum.topics(schoolId, curriculumId),
@@ -225,7 +205,7 @@ export function useSchemes(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.schemes(schoolId, query),
-    queryFn: () => http.get<Paginated<SchemeSummary>>('/schemes', { query }),
+    queryFn: () => CurriculumEndpoints.fetchSchemes(query),
     enabled: Boolean(schoolId),
     placeholderData: keepPreviousData,
   });
@@ -235,7 +215,7 @@ export function useScheme(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.scheme(schoolId, id ?? ''),
-    queryFn: () => http.get<SchemeOfWork>(`/schemes/${id}`),
+    queryFn: () => CurriculumEndpoints.fetchScheme(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
 }
@@ -250,8 +230,7 @@ export function useGenerateScheme() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { curriculumId: string; classId: string; termId: string }) =>
-      http.post<SchemeOfWork>('/schemes/generate', input),
+    mutationFn: (input: GenerateSchemeInput) => CurriculumEndpoints.generateScheme(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.schemes(schoolId) });
       toast.success('Draft scheme generated', {
@@ -267,13 +246,11 @@ export function useSaveScheme(id: string) {
 
   return useMutation({
     mutationFn: ({ values, version }: { values: Partial<SchemeOfWork>; version: number }) =>
-      http.patch<SchemeOfWork>(`/schemes/${id}`, values, { version }),
+      CurriculumEndpoints.updateScheme(id, values, version),
     onSuccess: (scheme) => {
       queryClient.setQueryData(queryKeys.curriculum.scheme(schoolId, id), scheme);
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.schemes(schoolId) });
-      toast.success(
-        scheme.status === 'APPROVED' ? 'Scheme approved' : 'Scheme of work saved',
-      );
+      toast.success(scheme.status === 'APPROVED' ? 'Scheme approved' : 'Scheme of work saved');
     },
   });
 }
@@ -284,7 +261,7 @@ export function useLessonNotes(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.lessonNotes(schoolId, query),
-    queryFn: () => http.get<Paginated<LessonNote>>('/lesson-notes', { query }),
+    queryFn: () => CurriculumEndpoints.fetchLessonNotes(query),
     enabled: Boolean(schoolId),
     placeholderData: keepPreviousData,
   });
@@ -294,7 +271,7 @@ export function useLessonNote(id: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.curriculum.lessonNote(schoolId, id ?? ''),
-    queryFn: () => http.get<LessonNote>(`/lesson-notes/${id}`),
+    queryFn: () => CurriculumEndpoints.fetchLessonNote(id ?? ''),
     enabled: Boolean(schoolId && id),
   });
 }
@@ -306,8 +283,8 @@ export function useSaveLessonNote(id?: string) {
   return useMutation({
     mutationFn: ({ values, version }: { values: Partial<LessonNote>; version?: number }) =>
       id
-        ? http.patch<LessonNote>(`/lesson-notes/${id}`, values, { version })
-        : http.post<LessonNote>('/lesson-notes', values),
+        ? CurriculumEndpoints.updateLessonNote(id, values, version)
+        : CurriculumEndpoints.createLessonNote(values),
     onSuccess: (note) => {
       queryClient.setQueryData(queryKeys.curriculum.lessonNote(schoolId, note.id), note);
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
@@ -328,7 +305,7 @@ export function useDeleteLessonNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => http.delete<void>(`/lesson-notes/${id}`),
+    mutationFn: (id: string) => CurriculumEndpoints.removeLessonNote(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
@@ -342,8 +319,7 @@ export function useBulkDeleteLessonNotes() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (ids: string[]) =>
-      http.post<{ deleted: number }>('/lesson-notes/bulk-delete', { ids }),
+    mutationFn: (ids: string[]) => CurriculumEndpoints.bulkDeleteLessonNotes(ids),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });

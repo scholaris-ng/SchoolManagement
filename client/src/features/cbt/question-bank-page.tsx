@@ -62,6 +62,7 @@ export function QuestionBankPage() {
           <div className="min-w-0">
             <button
               type="button"
+              data-cy={`question-bank-edit-${question.id}`}
               onClick={(event) => {
                 event.stopPropagation();
                 setEditing({ open: true, question });
@@ -133,6 +134,7 @@ export function QuestionBankPage() {
           <Button
             variant="ghost"
             size="icon-sm"
+            data-cy={`question-bank-delete-${question.id}`}
             aria-label={`Delete question: ${question.text.slice(0, 40)}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -154,7 +156,7 @@ export function QuestionBankPage() {
         description="Reusable questions, tagged by subject, topic and objective."
         breadcrumbs={[{ label: 'Assessment' }, { label: 'Question bank' }]}
         actions={
-          <Button onClick={() => setEditing({ open: true })}>
+          <Button data-cy="cbt-question-bank-new-question" onClick={() => setEditing({ open: true })}>
             <Plus />
             New question
           </Button>
@@ -185,6 +187,8 @@ export function QuestionBankPage() {
       />
 
       <DataTable
+
+        data-cy="cbt-question-bank-table"
         caption="Question bank with subject, type, difficulty and linked objective"
         data={questions.data?.items}
         meta={questions.data?.meta}
@@ -204,7 +208,7 @@ export function QuestionBankPage() {
             : 'Build a bank once and reuse it across practice papers and examinations.'
         }
         emptyAction={
-          <Button onClick={() => setEditing({ open: true })}>
+          <Button data-cy="cbt-question-bank-add-the-first-question" onClick={() => setEditing({ open: true })}>
             <Plus />
             Add the first question
           </Button>
@@ -304,6 +308,7 @@ function QuestionDialog({
               Question
             </Label>
             <Textarea
+              data-cy="q-text"
               id="q-text"
               rows={3}
               value={text}
@@ -317,6 +322,7 @@ function QuestionDialog({
                 Subject
               </Label>
               <NativeSelect
+                data-cy="q-subject"
                 id="q-subject"
                 value={subjectId}
                 onChange={(event) => setSubjectId(event.target.value)}
@@ -332,6 +338,7 @@ function QuestionDialog({
             <div className="space-y-1.5">
               <Label htmlFor="q-type">Type</Label>
               <NativeSelect
+                data-cy="q-type"
                 id="q-type"
                 value={type}
                 onChange={(event) => setType(event.target.value as QuestionType)}
@@ -346,6 +353,7 @@ function QuestionDialog({
             <div className="space-y-1.5">
               <Label htmlFor="q-difficulty">Difficulty</Label>
               <NativeSelect
+                data-cy="q-difficulty"
                 id="q-difficulty"
                 value={difficulty}
                 onChange={(event) => setDifficulty(event.target.value as Question['difficulty'])}
@@ -360,6 +368,7 @@ function QuestionDialog({
             <div className="space-y-1.5">
               <Label htmlFor="q-marks">Marks</Label>
               <Input
+                data-cy="q-marks"
                 id="q-marks"
                 type="number"
                 min={1}
@@ -375,6 +384,7 @@ function QuestionDialog({
                 Expected answer
               </Label>
               <Input
+                data-cy="q-answer"
                 id="q-answer"
                 value={shortAnswer}
                 onChange={(event) => setShortAnswer(event.target.value)}
@@ -387,6 +397,7 @@ function QuestionDialog({
               {['True', 'False'].map((label, index) => (
                 <label key={label} className="flex items-center gap-2 text-sm">
                   <input
+                    data-cy="cbt-question-bank-is-correct"
                     type="radio"
                     name="true-false"
                     checked={index === 0 ? (options[0]?.isCorrect ?? true) : !(options[0]?.isCorrect ?? true)}
@@ -410,6 +421,7 @@ function QuestionDialog({
               {options.map((option, index) => (
                 <div key={option.id} className="flex items-center gap-2">
                   <input
+                    data-cy="cbt-question-bank-is-correct-2"
                     type="radio"
                     name="correct-option"
                     checked={option.isCorrect}
@@ -425,6 +437,7 @@ function QuestionDialog({
                     {OPTION_LABELS[index]}
                   </span>
                   <Input
+                    data-cy="cbt-question-bank-text"
                     value={option.text}
                     aria-label={`Option ${OPTION_LABELS[index]}`}
                     onChange={(event) =>
@@ -443,6 +456,7 @@ function QuestionDialog({
           <div className="space-y-1.5">
             <Label htmlFor="q-explanation">Explanation</Label>
             <Textarea
+              data-cy="q-explanation"
               id="q-explanation"
               rows={2}
               value={explanation}
@@ -453,10 +467,11 @@ function QuestionDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="cbt-question-bank-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="cbt-question-bank-save-question"
             loading={saving}
             disabled={!valid}
             onClick={() =>

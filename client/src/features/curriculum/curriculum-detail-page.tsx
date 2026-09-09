@@ -184,6 +184,7 @@ export function CurriculumDetailPage() {
         actions={
           canManage && (
             <Button
+              data-cy="curriculum-detail-add-topic"
               onClick={() => {
                 setTopicDialogSeq((n) => n + 1);
                 setTopicDialog({ open: true });
@@ -264,6 +265,7 @@ export function CurriculumDetailPage() {
           <div className="flex flex-wrap gap-2">
             <Tooltip content="Records that the selected objectives have been covered in class.">
               <Button
+                data-cy="curriculum-detail-mark-as-taught"
                 size="sm"
                 onClick={() => void applyCoverage({ taught: true })}
                 loading={markCoverage.isPending}
@@ -274,6 +276,7 @@ export function CurriculumDetailPage() {
             </Tooltip>
             <Tooltip content="Reverses 'taught' — use this to correct a mark made by mistake.">
               <Button
+                data-cy="curriculum-detail-mark-as-not-taught"
                 size="sm"
                 variant="outline"
                 onClick={() => void applyCoverage({ taught: false })}
@@ -291,6 +294,7 @@ export function CurriculumDetailPage() {
               }
             >
               <Button
+                data-cy="curriculum-detail-mark-as-assessed"
                 size="sm"
                 disabled={!canMarkAssessed}
                 title={
@@ -307,6 +311,7 @@ export function CurriculumDetailPage() {
             </Tooltip>
             <Tooltip content="Reverses 'assessed' — use this to correct a mark made by mistake.">
               <Button
+                data-cy="curriculum-detail-mark-as-not-assessed"
                 size="sm"
                 variant="outline"
                 onClick={() => void applyCoverage({ assessed: false })}
@@ -318,6 +323,7 @@ export function CurriculumDetailPage() {
             </Tooltip>
           </div>
           <Button
+            data-cy="curriculum-detail-clear"
             variant="ghost"
             size="sm"
             className="ml-auto h-7 text-xs"
@@ -355,6 +361,7 @@ export function CurriculumDetailPage() {
                   <div className="flex flex-wrap items-start gap-3">
                     {canManage && (
                       <Checkbox
+                        data-cy="curriculum-detail-all-selected"
                         checked={allSelected}
                         onCheckedChange={() => toggleTopic(objectiveIds)}
                         aria-label={`Select all objectives in ${topic.title}`}
@@ -362,6 +369,7 @@ export function CurriculumDetailPage() {
                       />
                     )}
                     <button
+                      data-cy="curriculum-detail-objective-week-suggested"
                       type="button"
                       onClick={() =>
                         setExpanded((current) =>
@@ -409,6 +417,7 @@ export function CurriculumDetailPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          data-cy={`curriculum-topic-edit-${topic.id}`}
                           aria-label={`Edit ${topic.title}`}
                           onClick={() => {
                             setTopicDialogSeq((n) => n + 1);
@@ -421,6 +430,7 @@ export function CurriculumDetailPage() {
                           variant="ghost"
                           size="icon-sm"
                           className="text-danger hover:text-danger"
+                          data-cy={`curriculum-topic-delete-${topic.id}`}
                           aria-label={`Delete ${topic.title}`}
                           onClick={() => setPendingDeleteTopic(topic)}
                         >
@@ -439,6 +449,7 @@ export function CurriculumDetailPage() {
                     {canManage && (
                       <div className="mb-3 flex justify-end">
                         <Button
+                          data-cy="curriculum-detail-add-objective"
                           variant="outline"
                           size="sm"
                           onClick={() => {
@@ -466,6 +477,7 @@ export function CurriculumDetailPage() {
                           >
                             {canManage && (
                               <Checkbox
+                                data-cy="curriculum-detail-id"
                                 checked={selected.includes(objective.id)}
                                 onCheckedChange={() => toggleObjective(objective.id)}
                                 aria-label={`Select ${objective.code}`}
@@ -510,6 +522,7 @@ export function CurriculumDetailPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
+                                  data-cy={`curriculum-objective-edit-${objective.id}`}
                                   aria-label={`Edit ${objective.code}`}
                                   onClick={() => {
                                     setObjectiveDialogSeq((n) => n + 1);
@@ -526,6 +539,7 @@ export function CurriculumDetailPage() {
                                   variant="ghost"
                                   size="icon-sm"
                                   className="text-danger hover:text-danger"
+                                  data-cy={`curriculum-objective-delete-${objective.id}`}
                                   aria-label={`Delete ${objective.code}`}
                                   onClick={() =>
                                     setPendingDeleteObjective({ topicId: topic.id, objective })
@@ -624,6 +638,7 @@ function TopicDialog({
               Title
             </Label>
             <Input
+              data-cy="topic-title"
               id="topic-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -633,6 +648,7 @@ function TopicDialog({
           <div className="space-y-1.5">
             <Label htmlFor="topic-description">Description</Label>
             <Textarea
+              data-cy="topic-description"
               id="topic-description"
               value={description ?? ''}
               onChange={(event) => setDescription(event.target.value)}
@@ -644,6 +660,7 @@ function TopicDialog({
                 Sequence
               </Label>
               <Input
+                data-cy="topic-sequence"
                 id="topic-sequence"
                 type="number"
                 min={1}
@@ -654,6 +671,7 @@ function TopicDialog({
             <div className="space-y-1.5">
               <Label htmlFor="topic-weeks">Suggested weeks</Label>
               <Input
+                data-cy="topic-weeks"
                 id="topic-weeks"
                 type="number"
                 min={1}
@@ -664,10 +682,11 @@ function TopicDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="curriculum-detail-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="curriculum-detail-save"
             loading={save.isPending}
             disabled={!title.trim()}
             onClick={() =>
@@ -809,6 +828,7 @@ function ObjectiveDialog({
               Statement
             </Label>
             <Textarea
+              data-cy="objective-statement"
               id="objective-statement"
               value={statement}
               onChange={(event) => setStatement(event.target.value)}
@@ -818,6 +838,7 @@ function ObjectiveDialog({
           <div className="space-y-1.5">
             <Label htmlFor="objective-bloom">Thinking level</Label>
             <Select
+              data-cy="objective-bloom"
               id="objective-bloom"
               value={bloomLevel}
               onValueChange={setBloomLevel}
@@ -853,10 +874,11 @@ function ObjectiveDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="curriculum-detail-cancel-2" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="curriculum-detail-save-2"
             loading={save.isPending}
             disabled={!statement.trim() || !state.topicId}
             onClick={() =>

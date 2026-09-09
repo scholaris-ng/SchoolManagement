@@ -108,7 +108,7 @@ export function CurriculumListPage() {
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Curriculum' }]}
         actions={
           canManage && (
-            <Button onClick={() => setCurriculumDialog({ open: true })}>
+            <Button data-cy="curriculum-list-new-curriculum" onClick={() => setCurriculumDialog({ open: true })}>
               <Plus />
               New curriculum
             </Button>
@@ -163,6 +163,7 @@ export function CurriculumListPage() {
         ]}
       >
         <Button
+          data-cy="curriculum-list-written-by-me"
           variant={mineOnly ? 'primary' : 'outline'}
           size="sm"
           className="h-9"
@@ -186,7 +187,7 @@ export function CurriculumListPage() {
             description="A curriculum ties one subject, for one class, to the topics and objectives it covers. It is what makes coverage reporting and scheme generation possible."
             action={
               canManage ? (
-                <Button onClick={() => setCurriculumDialog({ open: true })}>
+                <Button data-cy="curriculum-list-new-curriculum-2" onClick={() => setCurriculumDialog({ open: true })}>
                   <Plus />
                   New curriculum
                 </Button>
@@ -221,6 +222,7 @@ export function CurriculumListPage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        data-cy={`curriculum-edit-${curriculum.id}`}
                         aria-label={`Edit ${curriculum.subjectName} for ${curriculum.className}`}
                         onClick={() => setCurriculumDialog({ open: true, curriculum })}
                       >
@@ -231,6 +233,7 @@ export function CurriculumListPage() {
                           variant="ghost"
                           size="icon-sm"
                           className="text-danger hover:text-danger"
+                          data-cy={`curriculum-delete-${curriculum.id}`}
                           aria-label={`Delete ${curriculum.subjectName} for ${curriculum.className}`}
                           onClick={() => setPendingDelete(curriculum)}
                         >
@@ -282,7 +285,7 @@ export function CurriculumListPage() {
                   </p>
 
                   <div className="mt-auto pt-2">
-                    <Button variant="outline" block asChild>
+                    <Button data-cy="curriculum-list-open-curriculum" variant="outline" block asChild>
                       <Link to={`/curriculum/${curriculum.id}`}>
                         Open curriculum
                         <ArrowUpRight />
@@ -363,6 +366,7 @@ function CurriculumDialog({
                 Class
               </Label>
               <NativeSelect
+                data-cy="curriculum-class"
                 id="curriculum-class"
                 value={classId}
                 onChange={(event) => setClassId(event.target.value)}
@@ -385,6 +389,7 @@ function CurriculumDialog({
                 Subject
               </Label>
               <NativeSelect
+                data-cy="curriculum-subject"
                 id="curriculum-subject"
                 value={effectiveSubjectId}
                 disabled={!classId || subjects.isPending}
@@ -409,6 +414,7 @@ function CurriculumDialog({
           <div className="space-y-1.5">
             <Label htmlFor="curriculum-name">Name</Label>
             <Input
+              data-cy="curriculum-name"
               id="curriculum-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -418,6 +424,7 @@ function CurriculumDialog({
           <div className="space-y-1.5">
             <Label htmlFor="curriculum-description">Description</Label>
             <Textarea
+              data-cy="curriculum-description"
               id="curriculum-description"
               value={description ?? ''}
               onChange={(event) => setDescription(event.target.value)}
@@ -434,10 +441,11 @@ function CurriculumDialog({
           </Alert>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button data-cy="curriculum-list-cancel" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            data-cy="curriculum-list-save"
             loading={save.isPending}
             disabled={!valid}
             onClick={() =>

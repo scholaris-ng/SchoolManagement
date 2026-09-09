@@ -213,6 +213,7 @@ export function PromoteStudentsDialog({
                             </div>
                             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Checkbox
+                                data-cy="promote-students-dialog-repeating"
                                 checked={repeating}
                                 onCheckedChange={() => toggle('repeatStudentIds', student.id)}
                                 aria-label={`${student.fullName} repeats the class`}
@@ -221,6 +222,7 @@ export function PromoteStudentsDialog({
                             </label>
                             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Checkbox
+                                data-cy="promote-students-dialog-graduating"
                                 checked={graduating}
                                 onCheckedChange={() => toggle('graduateStudentIds', student.id)}
                                 aria-label={`${student.fullName} graduates`}
@@ -246,10 +248,10 @@ export function PromoteStudentsDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button data-cy="students-promote-students-dialog-cancel" type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={promote.isPending} disabled={!fromClassId}>
+            <Button data-cy="students-promote-students-dialog-promote-students" type="submit" loading={promote.isPending} disabled={!fromClassId}>
               Promote {promotedCount} students
             </Button>
           </DialogFooter>

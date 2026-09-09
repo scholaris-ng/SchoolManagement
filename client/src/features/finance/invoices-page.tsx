@@ -148,12 +148,12 @@ export function InvoicesPage() {
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices' }]}
         actions={
           <>
-            <Button variant="outline" onClick={exportInvoices}>
+            <Button data-cy="finance-invoices-export" variant="outline" onClick={exportInvoices}>
               <Download />
               Export
             </Button>
             <PermissionGate require="invoice.manage">
-              <Button asChild>
+              <Button data-cy="finance-invoices-new-invoice" asChild>
                 <Link to="/finance/invoices/new">
                   <Plus />
                   New invoice
@@ -190,6 +190,8 @@ export function InvoicesPage() {
       />
 
       <DataTable
+
+        data-cy="finance-invoices-table"
         caption="Invoices with student, term, amount billed, amount paid and balance"
         data={invoices.data?.items}
         meta={invoices.data?.meta}
