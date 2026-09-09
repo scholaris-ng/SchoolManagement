@@ -34,13 +34,14 @@ interface TimetableEntryRow {
   classId: string;
   subjectId: string;
   teacherId: string;
+  teacherName: string;
 }
 interface TimetableRow {
   entries: TimetableEntryRow[];
 }
 interface ClassRow {
   id: string;
-  formTeacherId?: string | null;
+  formTeacherIds: string[];
 }
 
 async function teacherPairsAndFormClasses(): Promise<{
@@ -61,7 +62,7 @@ async function teacherPairsAndFormClasses(): Promise<{
   );
   const classes = await get<ClassRow[]>('/academics/classes', as(ADMIN));
   const formClassIds = new Set(
-    classes.data.filter((entry) => entry.formTeacherId === staffId).map((entry) => entry.id),
+    classes.data.filter((entry) => entry.formTeacherIds.includes(staffId!)).map((entry) => entry.id),
   );
 
   return { staffId: staffId!, pairs: staff.data.teachingAssignments, formClassIds };
@@ -120,5 +121,23 @@ describe("a teacher's timetable is scoped to their own load", () => {
     // The admin sees strictly at least as much as the teacher, and (given the
     // seed data) genuinely more.
     expect(whole.data.entries.length).toBeGreaterThan(mine.data.entries.length);
+  });
+
+  /**
+   * Timetable entries are seeded before a persona's staff record is renamed
+   * to its real login name — the same staleness lesson notes had. Own
+   * periods should carry the teacher's real name, not the seed name their
+   * staff record started with.
+   */
+  it('shows the teacher their own real name on their own periods, not a stale seed name', async () => {
+    const { staffId } = await teacherPairsAndFormClasses();
+    const session = await get<{ user: { displayName: string } }>('/auth/session', as(TEACHER));
+    const realName = session.data.user.displayName;
+    expect(realName).toBe('Funmilayo Adeyemi');
+
+    const mine = await get<TimetableRow>('/timetables/current', as(TEACHER));
+    const own = mine.data.entries.filter((entry) => entry.teacherId === staffId);
+    expect(own.length).toBeGreaterThan(0);
+    for (const entry of own) expect(entry.teacherName).toBe(realName);
   });
 });

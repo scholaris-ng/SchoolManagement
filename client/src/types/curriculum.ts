@@ -116,6 +116,8 @@ export interface SchemeOfWork {
   curriculumId: string;
   status: SchemeStatus;
   weeks: SchemeWeek[];
+  /** Who wrote it — the same ownership check curricula use to gate visibility. */
+  createdById: string;
   createdByName: string;
   approvedByName?: string | null;
   approvedAt?: string | null;

@@ -50,7 +50,7 @@ describe('class and subject pickers', () => {
     // Their teaching list, plus any class they are form teacher of.
     const allowed = new Set([
       ...staff.classIds,
-      ...db.classes.filter((entry) => entry.formTeacherId === staff.id).map((entry) => entry.id),
+      ...db.classes.filter((entry) => entry.formTeacherIds.includes(staff.id)).map((entry) => entry.id),
     ]);
     for (const row of classes.data) expect(allowed.has(row.id)).toBe(true);
     for (const row of subjects.data) expect(staff.subjectIds).toContain(row.id);

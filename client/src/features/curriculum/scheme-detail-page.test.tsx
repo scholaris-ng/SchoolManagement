@@ -33,6 +33,7 @@ function scheme(): SchemeOfWork {
     sessionName: '2026/2027',
     curriculumId: 'cur_1',
     status: 'DRAFT',
+    createdById: 'usr_1',
     createdByName: 'Funmilayo Adeyemi',
     version: 1,
     weeks: [

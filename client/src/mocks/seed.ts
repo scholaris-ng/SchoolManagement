@@ -404,8 +404,8 @@ function seedAcademicStructure(
         code: `${levelBlueprint.code}${arm}`,
         capacity: 30,
         enrolledCount: 0,
-        formTeacherId: null,
-        formTeacherName: null,
+        formTeacherIds: [],
+        formTeacherNames: [],
         roomId: null,
         isActive: true,
       });
@@ -528,8 +528,8 @@ function seedStaff(db: MockDb, schoolId: string): void {
     });
 
     if (isFormTeacher && classes[index]) {
-      classes[index].formTeacherId = staffId;
-      classes[index].formTeacherName = `${firstName} ${lastName}`;
+      classes[index].formTeacherIds = [staffId];
+      classes[index].formTeacherNames = [`${firstName} ${lastName}`];
     }
   }
 }
@@ -988,6 +988,9 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
         sessionName: currentTerm.sessionName,
         curriculumId,
         status: random.pick(['DRAFT', 'SUBMITTED', 'APPROVED'] as const),
+        // Rewritten to the persona's user id in `seedUsers` for staff who have
+        // a portal login, same as the curriculum it was generated from.
+        createdById: teacher.id,
         createdByName: teacher.fullName,
         approvedByName: null,
         approvedAt: null,
@@ -1496,7 +1499,7 @@ function seedResults(db: MockDb, schoolId: string): void {
         gradingSchemeId: scheme.id,
         components: scheme.components,
         status: status as ScoreSheet['status'],
-        submittedByName: status === 'DRAFT' ? null : schoolClass.formTeacherName,
+        submittedByName: status === 'DRAFT' ? null : (schoolClass.formTeacherNames[0] ?? null),
         submittedAt: status === 'DRAFT' ? null : addDays(TODAY, -random.int(3, 14)).toISOString(),
         approvedByName: status === 'APPROVED' || status === 'PUBLISHED' ? 'Dr Emeka Nwosu' : null,
         approvedAt:
@@ -2303,6 +2306,31 @@ function seedUsers(db: MockDb): void {
           curriculum.createdById = userId;
           curriculum.createdByName = persona.name;
         });
+      db.schemes
+        .filter((scheme) => scheme.createdById === member.id)
+        .forEach((scheme) => {
+          scheme.createdById = userId;
+          scheme.createdByName = persona.name;
+        });
+      // Lesson notes key on the staff id itself, not a login id — nothing to
+      // rewrite there — but the display name was still snapshotted from the
+      // random seed name before this login existed, and lesson notes are now
+      // scoped to exactly one teacher's own, so a stale name on every single
+      // row would look exactly like someone else's notes.
+      db.lessonNotes
+        .filter((note) => note.teacherId === member.id)
+        .forEach((note) => {
+          note.teacherName = persona.name;
+        });
+      // Same staleness, same reason, for the teacher's own periods on the
+      // timetable.
+      db.timetables.forEach((timetable) => {
+        timetable.entries
+          .filter((entry) => entry.teacherId === member.id)
+          .forEach((entry) => {
+            entry.teacherName = persona.name;
+          });
+      });
     }
 
     const membership: SchoolMembership = {

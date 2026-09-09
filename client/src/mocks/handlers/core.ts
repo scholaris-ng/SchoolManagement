@@ -27,6 +27,14 @@ const base = '/api/v1';
 let sequence = 100_000;
 const nextId = (prefix: string) => `${prefix}_${(sequence += 1).toString(36)}`;
 
+/** Staff records for the ids a class's form-teacher field was set to, dropping any that don't resolve. */
+function resolveTeachers(ids: unknown): (typeof db.staff)[number][] {
+  if (!Array.isArray(ids)) return [];
+  return ids
+    .map((id) => db.staff.find((entry) => entry.id === id))
+    .filter((entry): entry is (typeof db.staff)[number] => Boolean(entry));
+}
+
 /** Session, school settings, academic structure and roles. */
 export const coreHandlers = [
   http.get(`${base}/auth/session`, async ({ request }) => {
@@ -542,9 +550,7 @@ export const coreHandlers = [
     }
     const level = scoped(db.levels, context.schoolId).find((entry) => entry.id === body.levelId);
     if (!level) return errors.notFound('Level');
-    const teacher = body.formTeacherId
-      ? db.staff.find((entry) => entry.id === body.formTeacherId)
-      : null;
+    const teachers = resolveTeachers(body.formTeacherIds);
 
     const schoolClass: SchoolClass = {
       id: nextId('cls'),
@@ -556,8 +562,8 @@ export const coreHandlers = [
       code: `${level.code}-${(scoped(db.classes, context.schoolId).length + 1).toString().padStart(2, '0')}`,
       capacity: body.capacity ?? 40,
       enrolledCount: 0,
-      formTeacherId: teacher?.id ?? null,
-      formTeacherName: teacher?.fullName ?? null,
+      formTeacherIds: teachers.map((entry) => entry.id),
+      formTeacherNames: teachers.map((entry) => entry.fullName),
       roomId: null,
       isActive: true,
     };
@@ -582,14 +588,12 @@ export const coreHandlers = [
     const level = body.levelId
       ? scoped(db.levels, context.schoolId).find((entry) => entry.id === body.levelId)
       : undefined;
-    const teacherPatched = Object.prototype.hasOwnProperty.call(body, 'formTeacherId');
-    const teacher = teacherPatched
-      ? db.staff.find((entry) => entry.id === body.formTeacherId)
-      : undefined;
+    const teacherPatched = Object.prototype.hasOwnProperty.call(body, 'formTeacherIds');
+    const teachers = teacherPatched ? resolveTeachers(body.formTeacherIds) : undefined;
 
     Object.assign(schoolClass, body, {
       levelName: level?.name ?? schoolClass.levelName,
-      formTeacherName: teacherPatched ? (teacher?.fullName ?? null) : schoolClass.formTeacherName,
+      formTeacherNames: teachers ? teachers.map((entry) => entry.fullName) : schoolClass.formTeacherNames,
     });
 
     return ok(schoolClass, 'Class updated');

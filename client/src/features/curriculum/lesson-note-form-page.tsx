@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, Send, ShieldCheck, Undo2 } from 'lucide-react';
+import { Save, Send, ShieldCheck, Trash2, Undo2 } from 'lucide-react';
 import { formatDateTime, toDateInputValue } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useCurrentTerm, useSubjects } from '@/features/academics/api';
-import { useLessonNote, useSaveLessonNote } from './api';
+import { useDeleteLessonNote, useLessonNote, useSaveLessonNote } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, CardHeader, CardTitle, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, LoadingState } from '@/components/ui/feedback';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { RichTextEditor } from '@/components/forms/rich-text-editor';
 
@@ -52,11 +53,13 @@ const emptyDraft: NoteDraft = {
 export function LessonNoteFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, membership } = useAuth();
   const isEdit = Boolean(id) && id !== 'new';
 
   const existing = useLessonNote(isEdit ? id : undefined);
   const save = useSaveLessonNote(isEdit ? id : undefined);
+  const deleteNote = useDeleteLessonNote();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const classes = useClasses();
   const currentTerm = useCurrentTerm();
@@ -145,6 +148,13 @@ export function LessonNoteFormPage() {
   const note = existing.data;
   const editable = !note || note.status === 'DRAFT' || note.status === 'RETURNED';
   const canReview = Boolean(note && note.status === 'SUBMITTED' && can('lessonnote.approve'));
+  // Stricter than editing: the author, or a coordinator — the same line
+  // curricula draw between "may change it" and "may remove it outright".
+  const canDelete = Boolean(
+    note &&
+      can('lessonnote.manage') &&
+      (can('academics.manage') || note.teacherId === membership?.staffId),
+  );
 
   return (
     <PageContainer width="narrow">
@@ -174,6 +184,16 @@ export function LessonNoteFormPage() {
         }
         actions={
           <>
+            {canDelete && (
+              <Button
+                variant="outline"
+                className="text-danger hover:text-danger"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+            )}
             {editable && can('lessonnote.manage') && (
               <>
                 <Button
@@ -397,6 +417,22 @@ export function LessonNoteFormPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this lesson note?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteNote.isPending}
+        onConfirm={async () => {
+          if (!note) return;
+          await deleteNote.mutateAsync(note.id);
+          setDirty(false);
+          navigate('/lesson-notes');
+        }}
+      />
     </PageContainer>
   );
 }

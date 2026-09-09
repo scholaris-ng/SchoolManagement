@@ -48,8 +48,8 @@ export interface SchoolClass {
   code: string;
   capacity: number;
   enrolledCount: number;
-  formTeacherId?: string | null;
-  formTeacherName?: string | null;
+  formTeacherIds: string[];
+  formTeacherNames: string[];
   roomId?: string | null;
   isActive: boolean;
 }

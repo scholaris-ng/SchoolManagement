@@ -122,7 +122,7 @@ export const dashboardHandlers = [
     );
 
     const myClasses = staffId
-      ? scoped(db.classes, context.schoolId).filter((c) => c.formTeacherId === staffId)
+      ? scoped(db.classes, context.schoolId).filter((c) => c.formTeacherIds.includes(staffId))
       : scoped(db.classes, context.schoolId).slice(0, 3);
 
     const sheets = scoped(db.scoreSheets, context.schoolId)

@@ -398,7 +398,7 @@ export function AcademicsSettingsPage() {
           <CardHeader>
             <CardTitle>Classes</CardTitle>
             <CardDescription>
-              Each class belongs to a level and has a form teacher who takes its register.
+              Each class belongs to a level and has form teachers who take its register.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -413,7 +413,10 @@ export function AcademicsSettingsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{schoolClass.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {schoolClass.levelName} · {schoolClass.formTeacherName ?? 'No form teacher'}
+                        {schoolClass.levelName} ·{' '}
+                        {schoolClass.formTeacherNames.length > 0
+                          ? schoolClass.formTeacherNames.join(', ')
+                          : 'No form teacher'}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
@@ -1100,7 +1103,16 @@ function ClassDialog({
   const [levelId, setLevelId] = useState(state.schoolClass?.levelId ?? levels[0]?.value ?? '');
   const [arm, setArm] = useState(state.schoolClass?.arm ?? '');
   const [capacity, setCapacity] = useState(String(state.schoolClass?.capacity ?? 40));
-  const [formTeacherId, setFormTeacherId] = useState(state.schoolClass?.formTeacherId ?? '');
+  const [formTeacherIds, setFormTeacherIds] = useState<string[]>(
+    state.schoolClass?.formTeacherIds ?? [],
+  );
+
+  const toggleTeacher = (teacherId: string) =>
+    setFormTeacherIds((current) =>
+      current.includes(teacherId)
+        ? current.filter((id) => id !== teacherId)
+        : [...current, teacherId],
+    );
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -1155,21 +1167,28 @@ function ClassDialog({
               onChange={(event) => setCapacity(event.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="class-teacher">Form teacher</Label>
-            <NativeSelect
-              id="class-teacher"
-              value={formTeacherId}
-              onChange={(event) => setFormTeacherId(event.target.value)}
-            >
-              <option value="">Not assigned</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.value} value={teacher.value}>
-                  {teacher.label}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
+          <fieldset className="space-y-1.5 sm:col-span-2">
+            <legend className="text-sm font-medium">Form teachers</legend>
+            {teachers.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+                No teachers to assign yet.
+              </p>
+            ) : (
+              <div className="scrollbar-thin grid max-h-40 gap-2 overflow-y-auto rounded-md border border-input p-3 sm:grid-cols-2">
+                {teachers.map((teacher) => (
+                  <label key={teacher.value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formTeacherIds.includes(teacher.value)}
+                      onChange={() => toggleTeacher(teacher.value)}
+                      className="size-4 rounded border-input"
+                    />
+                    {teacher.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
         </DialogBody>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -1187,7 +1206,7 @@ function ClassDialog({
                     levelId,
                     arm: arm.trim() || null,
                     capacity: Number(capacity),
-                    formTeacherId: formTeacherId || null,
+                    formTeacherIds,
                   },
                 })
                 .then(onClose)

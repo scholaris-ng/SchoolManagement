@@ -49,7 +49,7 @@ const TEACHER = 'teacher@brightfield.edu.ng';
 describe('attendance is scoped to the form teacher, not every teacher', () => {
   it('offers only the teacher’s own form class in the register class picker', async () => {
     const allClasses = await get<{ id: string }[]>('/academics/classes', as(ADMIN));
-    const myFormClasses = await get<{ id: string; formTeacherId: string | null }[]>(
+    const myFormClasses = await get<{ id: string; formTeacherIds: string[] }[]>(
       '/academics/classes?formTeacherOnly=true',
       as(TEACHER),
     );

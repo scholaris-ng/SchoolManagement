@@ -1,16 +1,18 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { NotebookPen, Plus } from 'lucide-react';
+import { NotebookPen, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/format';
 import { useListQuery } from '@/hooks/use-list-query';
+import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useSubjects } from '@/features/academics/api';
-import { useLessonNotes } from './api';
+import { useBulkDeleteLessonNotes, useLessonNotes } from './api';
 import type { LessonNote } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
-import { FilterBar } from '@/components/data/filter-bar';
+import { FilterBar, SelectionBar } from '@/components/data/filter-bar';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/guards/permission-gate';
 
 const STATUS_OPTIONS = [
@@ -22,6 +24,7 @@ const STATUS_OPTIONS = [
 
 export function LessonNotesPage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const list = useListQuery({
     filterKeys: ['classId', 'subjectId', 'status'],
     defaultSortBy: 'date',
@@ -30,6 +33,11 @@ export function LessonNotesPage() {
   const notes = useLessonNotes(list.query);
   const classes = useClasses();
   const subjects = useSubjects();
+  const bulkDelete = useBulkDeleteLessonNotes();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const canDelete = can('lessonnote.manage');
 
   const columns = useMemo<Column<LessonNote>[]>(
     () => [
@@ -128,6 +136,20 @@ export function LessonNotesPage() {
         ]}
       />
 
+      {canDelete && (
+        <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-danger hover:text-danger"
+            onClick={() => setConfirmBulkDelete(true)}
+          >
+            <Trash2 />
+            Delete selected
+          </Button>
+        </SelectionBar>
+      )}
+
       <DataTable
         caption="Lesson notes with class, subject, teacher and review status"
         data={notes.data?.items}
@@ -143,6 +165,8 @@ export function LessonNotesPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
+        selectedIds={canDelete ? selectedIds : undefined}
+        onSelectionChange={canDelete ? setSelectedIds : undefined}
         onRowClick={(note) => navigate(`/lesson-notes/${note.id}`)}
         emptyIcon={<NotebookPen />}
         emptyTitle={list.isFiltered ? 'No lesson notes match those filters' : 'No lesson notes yet'}
@@ -151,6 +175,21 @@ export function LessonNotesPage() {
             ? 'Try clearing the filters.'
             : 'Notes record what was taught and what students found hard — the detail a head of department cannot get from a timetable.'
         }
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onOpenChange={setConfirmBulkDelete}
+        title={`Delete ${selectedIds.length} lesson note${selectedIds.length === 1 ? '' : 's'}?`}
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        tone="danger"
+        loading={bulkDelete.isPending}
+        onConfirm={async () => {
+          await bulkDelete.mutateAsync(selectedIds);
+          setSelectedIds([]);
+          setConfirmBulkDelete(false);
+        }}
       />
     </PageContainer>
   );

@@ -322,3 +322,32 @@ export function useSaveLessonNote(id?: string) {
     },
   });
 }
+
+export function useDeleteLessonNote() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => http.delete<void>(`/lesson-notes/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
+      toast.success('Lesson note deleted');
+    },
+  });
+}
+
+export function useBulkDeleteLessonNotes() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      http.post<{ deleted: number }>('/lesson-notes/bulk-delete', { ids }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.curriculum.lessonNotes(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.teacher(schoolId) });
+      toast.success(`${result.deleted} lesson note${result.deleted === 1 ? '' : 's'} deleted`);
+    },
+  });
+}

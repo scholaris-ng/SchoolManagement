@@ -262,20 +262,25 @@ describe('academic setup admin API', () => {
     expect(editedLevel.data.name).toBe('JSS 4 (Renamed)');
 
     const staff = await get<{ items: { id: string; fullName: string }[] }>(
-      '/staff?pageSize=1',
+      '/staff?pageSize=2',
       as(ADMIN),
     );
-    const teacher = staff.data.items[0];
+    const [teacherA, teacherB] = staff.data.items;
 
-    const schoolClass = await send<{ id: string; levelName: string; formTeacherName: string | null }>(
+    const schoolClass = await send<{ id: string; levelName: string; formTeacherNames: string[] }>(
       'POST',
       '/academics/classes',
-      { name: 'JSS 4 Diamond', levelId: level.data.id, capacity: 35, formTeacherId: teacher.id },
+      {
+        name: 'JSS 4 Diamond',
+        levelId: level.data.id,
+        capacity: 35,
+        formTeacherIds: [teacherA.id, teacherB.id],
+      },
       as(ADMIN),
     );
     expect(schoolClass.status).toBe(201);
     expect(schoolClass.data.levelName).toBe('JSS 4 (Renamed)');
-    expect(schoolClass.data.formTeacherName).toBe(teacher.fullName);
+    expect(schoolClass.data.formTeacherNames).toEqual([teacherA.fullName, teacherB.fullName]);
 
     const levelAfterClass = await get<{ id: string; classCount: number }[]>(
       '/academics/levels',
@@ -283,13 +288,13 @@ describe('academic setup admin API', () => {
     );
     expect(levelAfterClass.data.find((entry) => entry.id === level.data.id)?.classCount).toBe(1);
 
-    const unassigned = await send<{ formTeacherName: string | null }>(
+    const unassigned = await send<{ formTeacherNames: string[] }>(
       'PATCH',
       `/academics/classes/${schoolClass.data.id}`,
-      { formTeacherId: null },
+      { formTeacherIds: [] },
       as(ADMIN),
     );
-    expect(unassigned.data.formTeacherName).toBeNull();
+    expect(unassigned.data.formTeacherNames).toEqual([]);
 
     const subject = await send<{ id: string; levelNames: string[] }>(
       'POST',

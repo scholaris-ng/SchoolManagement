@@ -191,7 +191,7 @@ export function academicScope(context: RequestContext): AcademicScope {
   // A form teacher's own class counts even when nobody remembered to add it to
   // the teaching list.
   const formClassIds = scoped(db.classes, context.schoolId)
-    .filter((entry) => entry.formTeacherId === staff.id)
+    .filter((entry) => entry.formTeacherIds.includes(staff.id))
     .map((entry) => entry.id);
 
   return {
@@ -251,6 +251,6 @@ export function formTeacherClassIds(context: RequestContext): string[] | null {
   if (!teachingOnly) return null;
 
   return scoped(db.classes, context.schoolId)
-    .filter((entry) => entry.formTeacherId === staffId)
+    .filter((entry) => entry.formTeacherIds.includes(staffId))
     .map((entry) => entry.id);
 }

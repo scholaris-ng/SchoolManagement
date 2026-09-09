@@ -24,6 +24,8 @@ import type {
   CurriculumCoverage,
   CurriculumTopic,
   LearningObjective,
+  LessonNote,
+  SchemeOfWork,
   TimetableConflict,
   Weekday,
 } from '@/types/curriculum';
@@ -68,6 +70,45 @@ function canEditCurriculum(context: RequestContext, curriculum: Curriculum): boo
 
 const NOT_YOURS =
   'This curriculum belongs to another teacher. Ask a coordinator if it needs to change.';
+
+/**
+ * Whether this caller may see or change a scheme of work — the same rule as
+ * a curriculum: wrote it, or is currently assigned to teach its class and
+ * subject. A scheme is generated *from* a curriculum but tracked as its own
+ * record with its own author, so it needs its own check rather than
+ * borrowing the curriculum's.
+ */
+function canEditScheme(context: RequestContext, scheme: SchemeOfWork): boolean {
+  if (context.can('academics.manage')) return true;
+  if (scheme.createdById === context.user.id) return true;
+  return scopeAllows(academicScope(context), {
+    classId: scheme.classId,
+    subjectId: scheme.subjectId,
+  });
+}
+
+const SCHEME_NOT_YOURS =
+  'This scheme of work belongs to another teacher. Ask a coordinator if it needs to change.';
+
+/**
+ * Whether this caller may see or change a lesson note.
+ *
+ * Unlike a curriculum or a scheme of work — shared planning documents a
+ * colleague may need to take over — a lesson note is one teacher's personal
+ * record of what they actually taught that day. Teaching the same class and
+ * subject somewhere else does not entitle a teacher to read a colleague's
+ * daily log of it, so this deliberately does not fall back to
+ * `academicScope`/`scopeAllows` the way curricula and schemes do: it is
+ * "your own" or "you review these," full stop.
+ */
+function canEditLessonNote(context: RequestContext, note: LessonNote): boolean {
+  if (context.can('academics.manage')) return true;
+  if (context.can('lessonnote.approve')) return true;
+  return note.teacherId === context.membership.staffId;
+}
+
+const LESSON_NOTE_NOT_YOURS =
+  'This lesson note belongs to another teacher. Ask a coordinator if it needs to change.';
 
 /** Curriculum, schemes of work, lesson notes, timetable, calendar and CBT. */
 export const academicsExtraHandlers = [
@@ -621,13 +662,19 @@ export const academicsExtraHandlers = [
     const classId = url.searchParams.get('classId');
     const subjectId = url.searchParams.get('subjectId');
     const status = url.searchParams.get('status');
+    const createdById = url.searchParams.get('createdById');
 
+    // A teacher's list is the schemes for the classes and subjects they
+    // teach, or the ones they wrote themselves — the same boundary curricula
+    // already enforce.
     const rows = scoped(db.schemes, context.schoolId)
       .filter(
         (scheme) =>
           (!classId || scheme.classId === classId) &&
           (!subjectId || scheme.subjectId === subjectId) &&
-          (!status || scheme.status === status),
+          (!status || scheme.status === status) &&
+          (!createdById || scheme.createdById === createdById) &&
+          canEditScheme(context, scheme),
       )
       .map(({ weeks: _weeks, ...rest }) => ({ ...rest, weeks: [], weekCount: _weeks.length }));
 
@@ -638,8 +685,14 @@ export const academicsExtraHandlers = [
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
+    if (!context.can('scheme.read')) return errors.forbidden();
     const scheme = scoped(db.schemes, context.schoolId).find((entry) => entry.id === params.id);
-    return scheme ? ok(scheme) : errors.notFound('Scheme of work');
+    if (!scheme) return errors.notFound('Scheme of work');
+    // The list already hides a scheme outside a teacher's classes and
+    // subjects; a link followed straight to it must refuse the same way, or
+    // the list's filtering is theatre.
+    if (!canEditScheme(context, scheme)) return errors.notFound('Scheme of work');
+    return ok(scheme);
   }),
 
   http.post(`${base}/schemes/generate`, async ({ request }) => {
@@ -659,6 +712,11 @@ export const academicsExtraHandlers = [
     );
     const term = db.terms.find((entry) => entry.id === body.termId);
     if (!curriculum || !term) return errors.validation('Choose a curriculum and a term.');
+
+    // A scheme of work is a term-by-term spread of someone else's curriculum —
+    // generating one is a form of editing that curriculum, so the same rule
+    // applies: your own, or a class and subject you are actually assigned to.
+    if (!canEditCurriculum(context, curriculum)) return errors.forbidden(NOT_YOURS);
 
     // The class comes from the curriculum. A scheme for a class the plan was
     // not written for is the bug this replaced.
@@ -699,6 +757,7 @@ export const academicsExtraHandlers = [
       sessionName: term.sessionName,
       curriculumId: curriculum.id,
       status: 'DRAFT' as const,
+      createdById: context.user.id,
       createdByName: context.user.displayName,
       approvedByName: null,
       approvedAt: null,
@@ -739,6 +798,7 @@ export const academicsExtraHandlers = [
 
     const scheme = scoped(db.schemes, context.schoolId).find((entry) => entry.id === params.id);
     if (!scheme) return errors.notFound('Scheme of work');
+    if (!canEditScheme(context, scheme)) return errors.forbidden(SCHEME_NOT_YOURS);
 
     const ifMatch = request.headers.get('if-match');
     if (ifMatch && Number(ifMatch) !== scheme.version) return errors.versionConflict();
@@ -767,13 +827,16 @@ export const academicsExtraHandlers = [
     const classId = url.searchParams.get('classId');
     const subjectId = url.searchParams.get('subjectId');
 
+    // A plain teacher's list is their own lesson notes; a reviewer's is
+    // everyone's, because reviewing is the point of holding that permission.
     const rows = scoped(db.lessonNotes, context.schoolId)
       .filter(
         (note) =>
           (!status || note.status === status) &&
           (!classId || note.classId === classId) &&
           (!subjectId || note.subjectId === subjectId) &&
-          matchesSearch([note.topic, note.teacherName, note.className, note.subjectName], search),
+          matchesSearch([note.topic, note.teacherName, note.className, note.subjectName], search) &&
+          canEditLessonNote(context, note),
       )
       .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -784,8 +847,14 @@ export const academicsExtraHandlers = [
     await delay(latency());
     const context = resolveContext(request);
     if (!context) return errors.unauthenticated();
+    if (!context.can('lessonnote.read')) return errors.forbidden();
     const note = scoped(db.lessonNotes, context.schoolId).find((entry) => entry.id === params.id);
-    return note ? ok(note) : errors.notFound('Lesson note');
+    if (!note) return errors.notFound('Lesson note');
+    // The list already hides another teacher's notes; a link followed
+    // straight to one must refuse the same way, or the list's filtering is
+    // theatre.
+    if (!canEditLessonNote(context, note)) return errors.notFound('Lesson note');
+    return ok(note);
   }),
 
   http.post(`${base}/lesson-notes`, async ({ request }) => {
@@ -848,6 +917,10 @@ export const academicsExtraHandlers = [
     if (!context.can('lessonnote.manage') && !context.can('lessonnote.approve')) {
       return errors.forbidden();
     }
+    // `lessonnote.manage` on its own is a school-wide permission, but editing
+    // someone else's note is not what it is for — that needs authorship or a
+    // reviewer's standing, same as reading one.
+    if (!canEditLessonNote(context, note)) return errors.forbidden(LESSON_NOTE_NOT_YOURS);
 
     Object.assign(note, body, { version: note.version + 1 });
     if (body.status === 'APPROVED' || body.status === 'RETURNED') {
@@ -856,6 +929,65 @@ export const academicsExtraHandlers = [
     }
 
     return ok(note, 'Lesson note updated');
+  }),
+
+  http.delete(`${base}/lesson-notes/:id`, async ({ request, params }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('lessonnote.manage')) return errors.forbidden();
+
+    const note = scoped(db.lessonNotes, context.schoolId).find((entry) => entry.id === params.id);
+    if (!note) return errors.notFound('Lesson note');
+
+    // Deleting is stricter than editing: a reviewer may return or approve a
+    // note without owning it, but removing someone else's record outright
+    // needs authorship or a coordinator, the same line curricula draw.
+    if (!context.can('academics.manage') && note.teacherId !== context.membership.staffId) {
+      return errors.forbidden(
+        'Only the teacher who wrote this note, or a coordinator, can delete it.',
+      );
+    }
+
+    db.lessonNotes = db.lessonNotes.filter((entry) => entry.id !== note.id);
+    return noContent();
+  }),
+
+  http.post(`${base}/lesson-notes/bulk-delete`, async ({ request }) => {
+    await delay(latency());
+    const context = resolveContext(request);
+    if (!context) return errors.unauthenticated();
+    if (!context.can('lessonnote.manage')) return errors.forbidden();
+
+    const body = (await request.json()) as { ids?: string[] };
+    const requestedIds = Array.from(new Set(body.ids ?? []));
+    if (requestedIds.length === 0) {
+      return errors.validation('Select at least one lesson note to delete.');
+    }
+
+    const notes = scoped(db.lessonNotes, context.schoolId).filter((entry) =>
+      requestedIds.includes(entry.id),
+    );
+    // Same rule as a single delete, checked for every note in the batch
+    // before any of them are removed — a selection that mixes in someone
+    // else's note is refused whole, not partly actioned.
+    const unauthorized = notes.filter(
+      (note) => !context.can('academics.manage') && note.teacherId !== context.membership.staffId,
+    );
+    if (unauthorized.length > 0) {
+      return errors.forbidden(
+        unauthorized.length === 1
+          ? 'One of the selected notes belongs to another teacher and cannot be deleted.'
+          : `${unauthorized.length} of the selected notes belong to another teacher and cannot be deleted.`,
+      );
+    }
+
+    const deletableIds = new Set(notes.map((note) => note.id));
+    db.lessonNotes = db.lessonNotes.filter((entry) => !deletableIds.has(entry.id));
+    return ok(
+      { deleted: deletableIds.size },
+      `${deletableIds.size} lesson note${deletableIds.size === 1 ? '' : 's'} deleted`,
+    );
   }),
 
   /* ---------------------------------------------------------------------- */
