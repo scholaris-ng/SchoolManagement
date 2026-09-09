@@ -326,29 +326,18 @@ export function LessonNoteFormPage() {
             </>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="note-date" required>
-                Date taught
-              </Label>
-              <Input
-                id="note-date"
-                type="date"
-                value={draft.date}
-                disabled={!editable}
-                onChange={(event) => update({ date: event.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="note-assignment">Assignment set</Label>
-              <Textarea
-                id="note-assignment"
-                rows={1}
-                value={draft.assignment}
-                disabled={!editable}
-                onChange={(event) => update({ assignment: event.target.value })}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="note-date" required>
+              Date taught
+            </Label>
+            <Input
+              id="note-date"
+              type="date"
+              className="max-w-xs"
+              value={draft.date}
+              disabled={!editable}
+              onChange={(event) => update({ date: event.target.value })}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -362,6 +351,18 @@ export function LessonNoteFormPage() {
               readOnly={!editable}
               onChange={(html) => update({ content: html })}
               placeholder="The lesson itself: explanation, examples, board work, experiments."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="note-assignment">Assignment set</Label>
+            <RichTextEditor
+              key={contentKey}
+              id="note-assignment"
+              defaultValue={draft.assignment}
+              readOnly={!editable}
+              onChange={(html) => update({ assignment: html })}
+              placeholder="What you're asking students to do before the next lesson."
             />
           </div>
         </CardContent>
@@ -378,23 +379,23 @@ export function LessonNoteFormPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="note-challenges">Challenges you met</Label>
-            <Textarea
+            <RichTextEditor
+              key={contentKey}
               id="note-challenges"
-              rows={4}
-              value={draft.challenges}
-              disabled={!editable}
-              onChange={(event) => update({ challenges: event.target.value })}
+              defaultValue={draft.challenges}
+              readOnly={!editable}
+              onChange={(html) => update({ challenges: html })}
               placeholder="Not enough apparatus, class too large, power cut during the video…"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="note-difficulties">Where students struggled</Label>
-            <Textarea
+            <RichTextEditor
+              key={contentKey}
               id="note-difficulties"
-              rows={4}
-              value={draft.studentDifficulties}
-              disabled={!editable}
-              onChange={(event) => update({ studentDifficulties: event.target.value })}
+              defaultValue={draft.studentDifficulties}
+              readOnly={!editable}
+              onChange={(html) => update({ studentDifficulties: html })}
               placeholder="Which concept, and roughly how many of the class."
             />
           </div>
