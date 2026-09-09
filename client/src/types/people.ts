@@ -116,6 +116,14 @@ export interface StaffMember {
   subjectNames: string[];
   classIds: string[];
   classNames: string[];
+  /**
+   * The exact class/subject combinations this teacher is assigned — not
+   * every pairing `classIds` × `subjectIds` implies. A teacher who teaches
+   * Biology to JSS 1 and Mathematics to SSS 1 must not thereby appear to
+   * teach Mathematics to JSS 1, which is what a plain cross-product of the
+   * two flat lists would suggest.
+   */
+  teachingAssignments: { classId: string; subjectId: string }[];
   isFormTeacher: boolean;
   createdAt: string;
   version: number;

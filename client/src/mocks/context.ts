@@ -128,9 +128,21 @@ export function visibleStudentIds(context: RequestContext): string[] | null {
 export interface AcademicScope {
   classIds: string[] | null;
   subjectIds: string[] | null;
+  /**
+   * Verified (class, subject) pairs — the ground truth for "does this person
+   * teach this subject in this class". `classIds` and `subjectIds` are only
+   * a flattening of those pairs for simple single-field filters (a class
+   * picker, a subject picker); they must never be checked independently to
+   * answer a paired question. A teacher who teaches Biology to JSS 1 and
+   * Mathematics to SSS 1 has both "Biology" and "Mathematics" in
+   * `subjectIds` and both "JSS 1" and "SSS 1" in `classIds`, but that must
+   * not be read as "teaches Mathematics to JSS 1" — `pairs` is what actually
+   * answers that. `null` means unrestricted, same as the other fields.
+   */
+  pairs: { classId: string; subjectId: string }[] | null;
 }
 
-const UNRESTRICTED: AcademicScope = { classIds: null, subjectIds: null };
+const UNRESTRICTED: AcademicScope = { classIds: null, subjectIds: null, pairs: null };
 
 /** Roles whose remit is their own timetable rather than the whole school. */
 const TEACHING_ONLY_ROLES = new Set(['TEACHER', 'FORM_TEACHER']);
@@ -155,6 +167,11 @@ export function academicScope(context: RequestContext): AcademicScope {
       subjectIds: scoped(db.subjects, context.schoolId)
         .filter((subject) => subject.levelIds.some((levelId) => levelIds.has(levelId)))
         .map((subject) => subject.id),
+      // A student genuinely takes every subject offered at their level, so
+      // there is no narrower pairing to enforce — leaving this null falls
+      // back to the independent classId/subjectId checks above, which is the
+      // correct (and only) relationship here.
+      pairs: null,
     };
   }
 
@@ -180,14 +197,36 @@ export function academicScope(context: RequestContext): AcademicScope {
   return {
     classIds: Array.from(new Set([...staff.classIds, ...formClassIds])),
     subjectIds: Array.from(new Set(staff.subjectIds)),
+    // Deliberately built from teachingAssignments alone, not from classIds ×
+    // subjectIds — that cross-product is exactly the bug this field exists
+    // to prevent. The form teacher's own class is left out too: it only
+    // widens `classIds` above, so it can't combine with some unrelated
+    // subject the teacher happens to teach elsewhere into a pairing nobody
+    // actually assigned.
+    pairs: staff.teachingAssignments.map((entry) => ({
+      classId: entry.classId,
+      subjectId: entry.subjectId,
+    })),
   };
 }
 
-/** True when `scope` permits the given class (and subject, when named). */
+/**
+ * True when `scope` permits the given class (and subject, when named).
+ *
+ * When both a class and a subject are named and `scope` carries verified
+ * pairs, membership is checked as a pair, not as two independent set
+ * memberships — "teaches this class" and "teaches this subject somewhere"
+ * do not add up to "teaches this subject in this class".
+ */
 export function scopeAllows(
   scope: AcademicScope,
   target: { classId?: string | null; subjectId?: string | null },
 ): boolean {
+  if (target.classId && target.subjectId && scope.pairs) {
+    return scope.pairs.some(
+      (pair) => pair.classId === target.classId && pair.subjectId === target.subjectId,
+    );
+  }
   if (target.classId && scope.classIds && !scope.classIds.includes(target.classId)) return false;
   if (target.subjectId && scope.subjectIds && !scope.subjectIds.includes(target.subjectId)) {
     return false;

@@ -107,6 +107,38 @@ describe('curriculum management', () => {
     throw new Error('No free subject/class combination for a new curriculum');
   }
 
+  /**
+   * A subject/class pair a teacher is genuinely assigned to teach, that has
+   * no curriculum yet. Deliberately not `pickFreePair` above: picking a
+   * class from the teacher's classes and a subject from their subjects
+   * independently would rebuild the exact cross-product bug this scoping is
+   * meant to prevent — a teacher assigned Biology in JSS 1 and Mathematics
+   * in SSS 1 must not appear eligible for Mathematics in JSS 1.
+   */
+  async function pickFreePairForTeacher(
+    email: string,
+  ): Promise<{ subjectId: string; classId: string }> {
+    const session = await call<{
+      user: { memberships: { staffId?: string | null }[] };
+    }>('GET', '/auth/session', as(email));
+    const staffId = session.data.user.memberships.find((entry) => entry.staffId)?.staffId;
+    expect(staffId).toBeTruthy();
+
+    const staff = await call<{ teachingAssignments: { classId: string; subjectId: string }[] }>(
+      'GET',
+      `/staff/${staffId}`,
+      as(email),
+    );
+    const existing = await call<CurriculumRow[]>('GET', '/curricula', as(email));
+    const taken = new Set(existing.data.map((c) => `${c.subjectId}:${c.classId}`));
+
+    const free = staff.data.teachingAssignments.find(
+      (pair) => !taken.has(`${pair.subjectId}:${pair.classId}`),
+    );
+    if (!free) throw new Error(`${email} has no free assigned (class, subject) pair to test with`);
+    return free;
+  }
+
   it('creates, edits and deletes a curriculum for one class', async () => {
     const { subjectId, classId } = await pickFreePair();
 
@@ -295,7 +327,7 @@ describe('curriculum management', () => {
   });
 
   it('lets a teacher write a curriculum for a class they teach', async () => {
-    const { subjectId, classId } = await pickFreePair(TEACHER);
+    const { subjectId, classId } = await pickFreePairForTeacher(TEACHER);
 
     const res = await call<CurriculumRow>('POST', '/curricula', as(TEACHER), {
       subjectId,
@@ -331,6 +363,122 @@ describe('curriculum management', () => {
       classId: foreign!.id,
     });
     expect(res.status).toBe(403);
+  });
+
+  /**
+   * A teacher who teaches Biology in JSS 1 and Mathematics in SSS 1 must not
+   * thereby see a colleague's Mathematics/JSS 1 curriculum — that would be
+   * treating "teaches this class" and "teaches this subject somewhere" as
+   * independent facts that add up to "teaches this subject in this class",
+   * which they do not. Regression test for exactly that report.
+   */
+  it("does not show a teacher another teacher's curriculum for a class and subject they each teach separately", async () => {
+    const session = await call<{
+      user: { memberships: { staffId?: string | null }[] };
+    }>('GET', '/auth/session', as(TEACHER));
+    const staffId = session.data.user.memberships.find((entry) => entry.staffId)?.staffId;
+    expect(staffId).toBeTruthy();
+
+    const staff = await call<{ teachingAssignments: { classId: string; subjectId: string }[] }>(
+      'GET',
+      `/staff/${staffId}`,
+      as(TEACHER),
+    );
+    const pairs = staff.data.teachingAssignments;
+    const taughtClassIds = Array.from(new Set(pairs.map((pair) => pair.classId)));
+    const taughtSubjectIds = Array.from(new Set(pairs.map((pair) => pair.subjectId)));
+
+    // Find a (class, subject) combination built from two things the teacher
+    // separately teaches, but never together — the exact shape of the bug.
+    let mismatch: { classId: string; subjectId: string } | undefined;
+    outer: for (const classId of taughtClassIds) {
+      for (const subjectId of taughtSubjectIds) {
+        if (!pairs.some((pair) => pair.classId === classId && pair.subjectId === subjectId)) {
+          mismatch = { classId, subjectId };
+          break outer;
+        }
+      }
+    }
+    if (!mismatch) {
+      throw new Error(
+        `${TEACHER} teaches only one (class, subject) combination in this fixture — no mismatch available to test with`,
+      );
+    }
+
+    // Someone else — a coordinator — writes it, same as an admin filling a
+    // gap for a teacher who has not gotten to it yet.
+    const theirs = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), mismatch);
+    expect(theirs.status).toBe(201);
+
+    const list = await call<CurriculumRow[]>('GET', '/curricula', as(TEACHER));
+    expect(list.data.some((c) => c.id === theirs.data.id)).toBe(false);
+
+    const detail = await call('GET', `/curricula/${theirs.data.id}/topics`, as(TEACHER));
+    expect(detail.status).toBe(404);
+
+    await call('DELETE', `/curricula/${theirs.data.id}`, as(ADMIN));
+  });
+
+  /**
+   * The list already hides a curriculum outside a teacher's classes and
+   * subjects; the detail view — its actual topics and objectives — has to
+   * refuse the same way for a link followed straight to it, or the list's
+   * filtering is theatre rather than a real boundary.
+   */
+  it('refuses a teacher the topics of a curriculum outside their classes, even by direct link', async () => {
+    const allClasses = await call<ClassRow[]>('GET', '/academics/classes', as(ADMIN));
+    const mineClasses = await call<ClassRow[]>('GET', '/academics/classes', as(TEACHER));
+    const mineIds = new Set(mineClasses.data.map((entry) => entry.id));
+    const foreign = allClasses.data.find((entry) => !mineIds.has(entry.id));
+    expect(foreign).toBeTruthy();
+
+    const subjects = await call<SubjectRow[]>(
+      'GET',
+      `/academics/subjects?levelId=${foreign!.levelId}`,
+      as(ADMIN),
+    );
+    const existingForClass = await call<CurriculumRow[]>(
+      'GET',
+      `/curricula?classId=${foreign!.id}&sessionId=ALL`,
+      as(ADMIN),
+    );
+    const takenSubjectIds = new Set(existingForClass.data.map((entry) => entry.subjectId));
+    const freeSubject = subjects.data.find((subject) => !takenSubjectIds.has(subject.id));
+    expect(freeSubject).toBeTruthy();
+
+    const curriculum = await call<CurriculumRow>('POST', '/curricula', as(ADMIN), {
+      subjectId: freeSubject!.id,
+      classId: foreign!.id,
+    });
+    expect(curriculum.status).toBe(201);
+
+    const topicAsOwner = await call<TopicRow>(
+      'POST',
+      `/curricula/${curriculum.data.id}/topics`,
+      as(ADMIN),
+      { title: 'A topic the teacher must not see' },
+    );
+    expect(topicAsOwner.status).toBe(201);
+
+    // Not in the list either — the same guarantee, checked the other way.
+    const list = await call<CurriculumRow[]>('GET', '/curricula?sessionId=ALL', as(TEACHER));
+    expect(list.data.some((entry) => entry.id === curriculum.data.id)).toBe(false);
+
+    const topicsAsTeacher = await call<TopicRow[]>(
+      'GET',
+      `/curricula/${curriculum.data.id}/topics`,
+      as(TEACHER),
+    );
+    expect(topicsAsTeacher.status).toBe(404);
+
+    // The owner still sees it, so this is scoping, not a broken endpoint.
+    const topicsAsOwner = await call<TopicRow[]>(
+      'GET',
+      `/curricula/${curriculum.data.id}/topics`,
+      as(ADMIN),
+    );
+    expect(topicsAsOwner.status).toBe(200);
+    expect(topicsAsOwner.data).toHaveLength(1);
   });
 
   it('refuses a bursar, who has no curriculum permission at all', async () => {
@@ -429,7 +577,7 @@ describe('curriculum management', () => {
   });
 
   it('lets a coordinator delete a curriculum a teacher wrote', async () => {
-    const { subjectId, classId } = await pickFreePair(TEACHER);
+    const { subjectId, classId } = await pickFreePairForTeacher(TEACHER);
     const mine = await call<CurriculumRow>('POST', '/curricula', as(TEACHER), {
       subjectId,
       classId,

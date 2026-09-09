@@ -173,7 +173,7 @@ export function TimetablePage() {
         description={
           canManage
             ? 'Who teaches what, where and when. Drag a lesson onto an empty period to move it — clashes are refused rather than warned about.'
-            : 'Who teaches what, where and when. Clashes are refused rather than warned about.'
+            : 'The classes and subjects you teach, plus your form class in full if you have one.'
         }
         breadcrumbs={[{ label: 'Teaching' }, { label: 'Timetable' }]}
         actions={

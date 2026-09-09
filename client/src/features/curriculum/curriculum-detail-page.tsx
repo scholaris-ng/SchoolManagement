@@ -28,6 +28,14 @@ import {
   useSaveObjective,
   useSaveTopic,
 } from './api';
+import {
+  BLOOM_LEVELS,
+  BLOOM_UNSET,
+  bloom,
+  bloomBreakdown,
+  bloomLabel,
+  type BloomLevel,
+} from './bloom';
 import type { CurriculumTopic, LearningObjective } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -42,7 +50,7 @@ import {
   Progress,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect, Textarea } from '@/components/ui/input';
+import { Input, Select, Textarea } from '@/components/ui/input';
 import {
   ConfirmDialog,
   Dialog,
@@ -53,16 +61,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatCard } from '@/components/data/stat-card';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 
-const BLOOM_LEVELS = [
-  'REMEMBER',
-  'UNDERSTAND',
-  'APPLY',
-  'ANALYSE',
-  'EVALUATE',
-  'CREATE',
-] as const;
 
 /**
  * One curriculum, down to the objective.
@@ -95,6 +95,15 @@ export function CurriculumDetailPage() {
     topicId?: string;
     objective?: LearningObjective;
   }>({ open: false });
+  // Keying the dialogs below on `topic?.id`/`objective?.id` alone remounts
+  // them when switching between two *different* records, but every "Add
+  // topic" (or "Add objective" on the same topic) shares the same "new"
+  // identity — so without this, reopening either dialog reused the same
+  // component instance and its state, leaving whatever was typed (or
+  // discarded) last time still sitting in the field. Bumped on every open,
+  // add or edit alike, so each open is a genuinely fresh form.
+  const [topicDialogSeq, setTopicDialogSeq] = useState(0);
+  const [objectiveDialogSeq, setObjectiveDialogSeq] = useState(0);
   const [pendingDeleteTopic, setPendingDeleteTopic] = useState<CurriculumTopic | null>(null);
   const [pendingDeleteObjective, setPendingDeleteObjective] = useState<{
     topicId: string;
@@ -111,9 +120,13 @@ export function CurriculumDetailPage() {
   // wrote, so anything reachable here is theirs to maintain.
   const canManage = can('curriculum.manage');
 
-  const allObjectiveIds = useMemo(
-    () => (topics.data ?? []).flatMap((topic) => topic.objectives.map((o) => o.id)),
+  const allObjectives = useMemo(
+    () => (topics.data ?? []).flatMap((topic) => topic.objectives),
     [topics.data],
+  );
+  const allObjectiveIds = useMemo(
+    () => allObjectives.map((objective) => objective.id),
+    [allObjectives],
   );
 
   const selectedObjectives = useMemo(() => {
@@ -170,7 +183,12 @@ export function CurriculumDetailPage() {
         ]}
         actions={
           canManage && (
-            <Button onClick={() => setTopicDialog({ open: true })}>
+            <Button
+              onClick={() => {
+                setTopicDialogSeq((n) => n + 1);
+                setTopicDialog({ open: true });
+              }}
+            >
               <Plus />
               Add topic
             </Button>
@@ -236,52 +254,68 @@ export function CurriculumDetailPage() {
         />
       </div>
 
+      <ThinkingDemandCard objectives={allObjectives} />
+
       {selected.length > 0 && canManage && (
         <div className="sticky top-16 z-20 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary-subtle px-3 py-2">
           <p className="text-sm font-medium text-primary">
             {selected.length} objective{selected.length === 1 ? '' : 's'} selected
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              onClick={() => void applyCoverage({ taught: true })}
-              loading={markCoverage.isPending}
-            >
-              <Check />
-              Mark as taught
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void applyCoverage({ taught: false })}
-              loading={markCoverage.isPending}
-            >
-              <X />
-              Mark as not taught
-            </Button>
-            <Button
-              size="sm"
-              disabled={!canMarkAssessed}
-              title={
+            <Tooltip content="Records that the selected objectives have been covered in class.">
+              <Button
+                size="sm"
+                onClick={() => void applyCoverage({ taught: true })}
+                loading={markCoverage.isPending}
+              >
+                <Check />
+                Mark as taught
+              </Button>
+            </Tooltip>
+            <Tooltip content="Reverses 'taught' — use this to correct a mark made by mistake.">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void applyCoverage({ taught: false })}
+                loading={markCoverage.isPending}
+              >
+                <X />
+                Mark as not taught
+              </Button>
+            </Tooltip>
+            <Tooltip
+              content={
                 canMarkAssessed
-                  ? undefined
+                  ? 'Records that students have been tested on the selected objectives, not just taught them.'
                   : 'Mark the selection as taught first — an objective cannot be assessed before it is taught.'
               }
-              onClick={() => void applyCoverage({ assessed: true })}
-              loading={markCoverage.isPending}
             >
-              <ClipboardCheck />
-              Mark as assessed
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void applyCoverage({ assessed: false })}
-              loading={markCoverage.isPending}
-            >
-              <ClipboardX />
-              Mark as not assessed
-            </Button>
+              <Button
+                size="sm"
+                disabled={!canMarkAssessed}
+                title={
+                  canMarkAssessed
+                    ? undefined
+                    : 'Mark the selection as taught first — an objective cannot be assessed before it is taught.'
+                }
+                onClick={() => void applyCoverage({ assessed: true })}
+                loading={markCoverage.isPending}
+              >
+                <ClipboardCheck />
+                Mark as assessed
+              </Button>
+            </Tooltip>
+            <Tooltip content="Reverses 'assessed' — use this to correct a mark made by mistake.">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void applyCoverage({ assessed: false })}
+                loading={markCoverage.isPending}
+              >
+                <ClipboardX />
+                Mark as not assessed
+              </Button>
+            </Tooltip>
           </div>
           <Button
             variant="ghost"
@@ -376,7 +410,10 @@ export function CurriculumDetailPage() {
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Edit ${topic.title}`}
-                          onClick={() => setTopicDialog({ open: true, topic })}
+                          onClick={() => {
+                            setTopicDialogSeq((n) => n + 1);
+                            setTopicDialog({ open: true, topic });
+                          }}
                         >
                           <Pencil />
                         </Button>
@@ -404,7 +441,10 @@ export function CurriculumDetailPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setObjectiveDialog({ open: true, topicId: topic.id })}
+                          onClick={() => {
+                            setObjectiveDialogSeq((n) => n + 1);
+                            setObjectiveDialog({ open: true, topicId: topic.id });
+                          }}
                         >
                           <Plus />
                           Add objective
@@ -447,7 +487,12 @@ export function CurriculumDetailPage() {
                             </div>
                             <div className="flex shrink-0 flex-wrap gap-1.5">
                               {objective.bloomLevel && (
-                                <Badge tone="outline">{objective.bloomLevel.toLowerCase()}</Badge>
+                                <Badge
+                                  tone="outline"
+                                  title={bloom(objective.bloomLevel)?.hint}
+                                >
+                                  {bloomLabel(objective.bloomLevel)}
+                                </Badge>
                               )}
                               <Badge tone={objective.taught ? 'success' : 'neutral'}>
                                 {objective.taught ? 'Taught' : 'Not taught'}
@@ -466,13 +511,14 @@ export function CurriculumDetailPage() {
                                   variant="ghost"
                                   size="icon-sm"
                                   aria-label={`Edit ${objective.code}`}
-                                  onClick={() =>
+                                  onClick={() => {
+                                    setObjectiveDialogSeq((n) => n + 1);
                                     setObjectiveDialog({
                                       open: true,
                                       topicId: topic.id,
                                       objective,
-                                    })
-                                  }
+                                    });
+                                  }}
                                 >
                                   <Pencil />
                                 </Button>
@@ -502,14 +548,14 @@ export function CurriculumDetailPage() {
       )}
 
       <TopicDialog
-        key={topicDialog.topic?.id ?? 'new-topic'}
+        key={`${topicDialog.topic?.id ?? 'new-topic'}-${topicDialogSeq}`}
         state={topicDialog}
         save={saveTopic}
         nextSequence={(topics.data?.length ?? 0) + 1}
         onClose={() => setTopicDialog({ open: false })}
       />
       <ObjectiveDialog
-        key={`${objectiveDialog.topicId ?? 'none'}-${objectiveDialog.objective?.id ?? 'new'}`}
+        key={`${objectiveDialog.topicId ?? 'none'}-${objectiveDialog.objective?.id ?? 'new'}-${objectiveDialogSeq}`}
         state={objectiveDialog}
         save={saveObjective}
         onClose={() => setObjectiveDialog({ open: false })}
@@ -646,6 +692,95 @@ function TopicDialog({
   );
 }
 
+/**
+ * How the objectives are spread across the six Bloom levels.
+ *
+ * Coverage answers "did we teach it?". This answers the question a coverage
+ * percentage cannot: "what were we asking them to do?" A syllabus fully taught
+ * but written entirely at Remember and Understand looks finished and is not,
+ * and the exam is the wrong place to discover that.
+ */
+function ThinkingDemandCard({ objectives }: { objectives: LearningObjective[] }) {
+  const breakdown = useMemo(() => bloomBreakdown(objectives), [objectives]);
+  if (breakdown.total === 0) return null;
+
+  const busiest = Math.max(...breakdown.counts.map((entry) => entry.count), 1);
+  const everythingUntagged = breakdown.tagged === 0;
+
+  return (
+    <Card>
+      <CardHeader className="flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+        <div>
+          <CardTitle className="text-base">Thinking demand</CardTitle>
+          <CardDescription>
+            What these objectives ask a child to do, from recalling a fact to building
+            something new.
+          </CardDescription>
+        </div>
+        {!everythingUntagged && (
+          <Badge
+            tone={
+              breakdown.higherOrderShare >= 30
+                ? 'success'
+                : breakdown.higherOrderShare > 0
+                  ? 'warning'
+                  : 'danger'
+            }
+          >
+            {Math.round(breakdown.higherOrderShare)}% higher order
+          </Badge>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {everythingUntagged ? (
+          <p className="text-sm text-muted-foreground">
+            None of the {breakdown.total} objectives carry a thinking level yet. Set one while
+            editing an objective and this fills in.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {breakdown.counts.map(({ definition, count, share }) => (
+              <li key={definition.value} className="flex items-center gap-3 text-sm">
+                <span className="w-24 shrink-0 truncate" title={definition.hint}>
+                  {definition.label}
+                </span>
+                {/* A bar against the busiest level rather than the total, so
+                    the smaller levels stay visible instead of vanishing. */}
+                <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className={cn(
+                      'block h-full rounded-full',
+                      definition.higherOrder ? 'bg-primary' : 'bg-muted-foreground/40',
+                    )}
+                    style={{ width: `${(count / busiest) * 100}%` }}
+                  />
+                </span>
+                <span className="w-24 shrink-0 text-right tabular-nums text-muted-foreground">
+                  {count} · {Math.round(share)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!everythingUntagged && breakdown.higherOrder === 0 && (
+          <p className="text-sm text-warning">
+            Every tagged objective sits at Remember, Understand or Apply. Nothing here asks a
+            child to compare, judge or design, which is what the harder exam questions want.
+          </p>
+        )}
+
+        {breakdown.untagged > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {breakdown.untagged} of {breakdown.total} objectives are not tagged yet, so the
+            shares above are of the {breakdown.tagged} that are.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ObjectiveDialog({
   state,
   save,
@@ -656,7 +791,11 @@ function ObjectiveDialog({
   onClose: () => void;
 }) {
   const [statement, setStatement] = useState(state.objective?.statement ?? '');
-  const [bloomLevel, setBloomLevel] = useState<string>(state.objective?.bloomLevel ?? '');
+  const [bloomLevel, setBloomLevel] = useState<string>(
+    state.objective?.bloomLevel ?? BLOOM_UNSET,
+  );
+
+  const chosen = bloomLevel === BLOOM_UNSET ? null : bloom(bloomLevel as BloomLevel);
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -677,19 +816,40 @@ function ObjectiveDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="objective-bloom">Bloom level</Label>
-            <NativeSelect
+            <Label htmlFor="objective-bloom">Thinking level</Label>
+            <Select
               id="objective-bloom"
               value={bloomLevel}
-              onChange={(event) => setBloomLevel(event.target.value)}
-            >
-              <option value="">Not set</option>
-              {BLOOM_LEVELS.map((level) => (
-                <option key={level} value={level}>
-                  {level.charAt(0) + level.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </NativeSelect>
+              onValueChange={setBloomLevel}
+              aria-label="Thinking level"
+              options={[
+                {
+                  value: BLOOM_UNSET,
+                  label: 'Not set',
+                  description: 'Decide later',
+                },
+                ...BLOOM_LEVELS.map((level) => ({
+                  value: level.value,
+                  label: level.label,
+                  description: level.hint,
+                })),
+              ]}
+            />
+            {/* The verbs are what a teacher actually recognises their own
+                objective by, so they matter more here than the definition. */}
+            <p className="text-xs text-muted-foreground">
+              {chosen ? (
+                <>
+                  How hard this makes a child think. Usually written as{' '}
+                  <span className="font-medium text-foreground">
+                    {chosen.verbs.slice(0, 3).join(', ')}
+                  </span>
+                  . For example: {chosen.example}
+                </>
+              ) : (
+                'Optional. Tagging how hard each objective makes a child think is what shows whether a syllabus trains recall or reasoning.'
+              )}
+            </p>
           </div>
         </DialogBody>
         <DialogFooter>
@@ -707,7 +867,10 @@ function ObjectiveDialog({
                   id: state.objective?.id,
                   values: {
                     statement: statement.trim(),
-                    bloomLevel: (bloomLevel || null) as LearningObjective['bloomLevel'],
+                    bloomLevel:
+                      bloomLevel === BLOOM_UNSET
+                        ? null
+                        : (bloomLevel as LearningObjective['bloomLevel']),
                   },
                 })
                 .then(onClose)

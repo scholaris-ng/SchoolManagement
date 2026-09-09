@@ -3,6 +3,7 @@ import {
   academicScope,
   currentSession,
   db,
+  formTeacherClassIds,
   resolveContext,
   scopeAllows,
   scoped,
@@ -311,6 +312,11 @@ export const academicsExtraHandlers = [
       (entry) => entry.id === params.id,
     );
     if (!curriculum) return errors.notFound('Curriculum');
+    // The list already hides curricula outside a teacher's classes and
+    // subjects; the detail view — the actual topics and objectives — must
+    // refuse the same way for a link followed straight to it, or the list's
+    // filtering is theatre.
+    if (!canEditCurriculum(context, curriculum)) return errors.notFound('Curriculum');
 
     return ok(db.topics.filter((topic) => topic.curriculumId === curriculum.id));
   }),
@@ -877,13 +883,28 @@ export const academicsExtraHandlers = [
     const teacherId = url.searchParams.get('teacherId');
     const subjectId = url.searchParams.get('subjectId');
 
+    // A teacher's own timetable is the classes and subjects they are
+    // actually assigned to, not the whole school's schedule with a filter
+    // they have to remember to apply — the same boundary curriculum and
+    // attendance already enforce. A form teacher additionally sees the whole
+    // of their own form class's schedule (every subject in it, not just the
+    // ones they personally teach), same as the daily register — overseeing
+    // that one class is the point of the role. Anyone who may manage the
+    // timetable still needs the full picture to build it, so they are exempt.
+    const scope = academicScope(context);
+    const ownFormClassIds = formTeacherClassIds(context) ?? [];
+    const canSeeEverything = context.can('timetable.manage');
+
     return ok({
       ...timetable,
       entries: timetable.entries.filter(
         (entry) =>
           (!classId || entry.classId === classId) &&
           (!teacherId || entry.teacherId === teacherId) &&
-          (!subjectId || entry.subjectId === subjectId),
+          (!subjectId || entry.subjectId === subjectId) &&
+          (canSeeEverything ||
+            ownFormClassIds.includes(entry.classId) ||
+            scopeAllows(scope, { classId: entry.classId, subjectId: entry.subjectId })),
       ),
     });
   }),

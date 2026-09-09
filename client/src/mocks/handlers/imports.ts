@@ -330,6 +330,7 @@ function processStaffRow(
             subjectNames: [],
             classIds: [],
             classNames: [],
+            teachingAssignments: [],
             isFormTeacher: false,
             createdAt: now,
             version: 1,

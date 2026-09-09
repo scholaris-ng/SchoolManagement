@@ -477,8 +477,26 @@ function seedStaff(db: MockDb, schoolId: string): void {
     const firstName = random.pick(gender === 'MALE' ? MALE_FIRST_NAMES : FEMALE_FIRST_NAMES);
     const lastName = random.pick(SURNAMES);
     const staffId = id('staff');
-    const taughtSubjects = random.pickMany(subjects, random.int(1, 3));
+    // Build genuine (class, subject) pairs rather than drawing the two lists
+    // independently — an independent cross-product would claim a teacher
+    // teaches every subject they hold in every class they're near, which is
+    // exactly the bug that let one teacher's curriculum leak into another's
+    // view. Each assigned class gets its own 1-2 subjects taught there.
     const taughtClasses = random.pickMany(classes, random.int(1, 4));
+    const teachingAssignments = taughtClasses.flatMap((schoolClass) =>
+      random.pickMany(subjects, random.int(1, 2)).map((subject) => ({
+        classId: schoolClass.id,
+        subjectId: subject.id,
+      })),
+    );
+    const taughtSubjectIds = Array.from(new Set(teachingAssignments.map((entry) => entry.subjectId)));
+    const taughtClassIds = Array.from(new Set(teachingAssignments.map((entry) => entry.classId)));
+    const taughtSubjects = taughtSubjectIds
+      .map((subjectId) => subjects.find((subject) => subject.id === subjectId))
+      .filter((subject): subject is (typeof subjects)[number] => Boolean(subject));
+    const taughtClassesDeduped = taughtClassIds
+      .map((classId) => classes.find((schoolClass) => schoolClass.id === classId))
+      .filter((schoolClass): schoolClass is (typeof classes)[number] => Boolean(schoolClass));
     const isFormTeacher = index < classes.length;
 
     db.staff.push({
@@ -501,8 +519,9 @@ function seedStaff(db: MockDb, schoolId: string): void {
       roleNames: isFormTeacher ? ['Form teacher'] : ['Teacher'],
       subjectIds: taughtSubjects.map((subject) => subject.id),
       subjectNames: taughtSubjects.map((subject) => subject.name),
-      classIds: taughtClasses.map((schoolClass) => schoolClass.id),
-      classNames: taughtClasses.map((schoolClass) => schoolClass.name),
+      classIds: taughtClassesDeduped.map((schoolClass) => schoolClass.id),
+      classNames: taughtClassesDeduped.map((schoolClass) => schoolClass.name),
+      teachingAssignments,
       isFormTeacher,
       createdAt: new Date(CURRENT_YEAR - 1, 7, 1).toISOString(),
       version: 1,
@@ -867,7 +886,17 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
       authorIndex += 1;
 
       // The author has to actually teach this, or the API would hide their own
-      // work from them.
+      // work from them. Recording it only on the flat subjectIds/classIds
+      // lists would be exactly the independent-set bug this pairing field
+      // exists to avoid — push the verified pair itself, not just its two
+      // halves separately.
+      if (
+        !teacher.teachingAssignments.some(
+          (entry) => entry.classId === schoolClass.id && entry.subjectId === subject.id,
+        )
+      ) {
+        teacher.teachingAssignments.push({ classId: schoolClass.id, subjectId: subject.id });
+      }
       if (!teacher.subjectIds.includes(subject.id)) {
         teacher.subjectIds.push(subject.id);
         teacher.subjectNames.push(subject.name);
@@ -924,7 +953,18 @@ function seedCurriculum(db: MockDb, schoolId: string): void {
               code: `${subject.code}.${topicIndex + 1}.${objectiveIndex + 1}`,
               statement,
               sequence: objectiveIndex + 1,
-              bloomLevel: random.pick(['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYSE'] as const),
+              // Weighted low on purpose. Real syllabuses lean heavily on recall
+              // and explanation, and the thinking-demand breakdown is only
+              // worth showing if the demo data has the imbalance it exists to
+              // catch.
+              bloomLevel: random.pick([
+                'REMEMBER', 'REMEMBER', 'REMEMBER',
+                'UNDERSTAND', 'UNDERSTAND', 'UNDERSTAND',
+                'APPLY', 'APPLY',
+                'ANALYSE',
+                'EVALUATE',
+                'CREATE',
+              ] as const),
               taught,
               assessed: taught && random.bool(0.55),
               taughtOn: taught ? isoDate(addDays(TODAY, -random.int(1, 60))) : null,

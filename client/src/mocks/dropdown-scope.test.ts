@@ -114,4 +114,26 @@ describe('class and subject pickers', () => {
     );
     expect(forClass.data.map((row) => row.id)).toEqual(forLevel.data.map((row) => row.id));
   });
+
+  /**
+   * A teacher who teaches Biology in JSS 1 and Mathematics in SSS 1 must not
+   * be offered Mathematics when picking a subject *for JSS 1* — that offer
+   * used to fall back to "any subject at JSS 1's level that I teach
+   * anywhere", the same independent-set mistake curriculum visibility had,
+   * and picking it produced a confusing "you don't have permission" once the
+   * write-side check was tightened without the picker following suit.
+   */
+  it('narrows a teacher’s own subjects to what is actually paired with the named class', async () => {
+    const staff = db.staff.find((member) => member.email === TEACHER)!;
+
+    for (const classId of staff.classIds) {
+      const forClass = await get<Row[]>(`/academics/subjects?classId=${classId}`, TEACHER);
+      const expected = new Set(
+        staff.teachingAssignments
+          .filter((pair) => pair.classId === classId)
+          .map((pair) => pair.subjectId),
+      );
+      expect(new Set(forClass.data.map((row) => row.id))).toEqual(expected);
+    }
+  });
 });

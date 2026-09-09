@@ -646,6 +646,14 @@ export const peopleHandlers = [
       subjectNames: subjects.map((subject) => subject.name),
       classIds: classes.map((schoolClass) => schoolClass.id),
       classNames: classes.map((schoolClass) => schoolClass.name),
+      // The form assigns classes and subjects as two separate lists rather
+      // than named pairs, so every combination is taken as an assignment —
+      // an approximation, but a deliberate one an admin actually made, not
+      // random noise from two unrelated lists (research: curriculum
+      // visibility must not cross-contaminate class and subject scope).
+      teachingAssignments: classes.flatMap((schoolClass) =>
+        subjects.map((subject) => ({ classId: schoolClass.id, subjectId: subject.id })),
+      ),
       isFormTeacher: Boolean(body.isFormTeacher),
       createdAt: new Date().toISOString(),
       version: 1,
@@ -679,6 +687,18 @@ export const peopleHandlers = [
       .map((entryId) => db.classes.find((schoolClass) => schoolClass.id === entryId))
       .filter(Boolean) as typeof db.classes;
 
+    // Only recompute the pairing when the admin actually touched the class
+    // or subject lists in this edit — otherwise an unrelated change (e.g. a
+    // phone number) would blow away precise, deliberately-seeded pairs and
+    // fall back to a blunt cross-product of whatever happened to be on the
+    // record already.
+    const teachingAssignments =
+      body.subjectIds !== undefined || body.classIds !== undefined
+        ? classes.flatMap((schoolClass) =>
+            subjects.map((subject) => ({ classId: schoolClass.id, subjectId: subject.id })),
+          )
+        : member.teachingAssignments;
+
     Object.assign(member, body, {
       fullName: [body.firstName ?? member.firstName, body.lastName ?? member.lastName]
         .filter(Boolean)
@@ -687,6 +707,7 @@ export const peopleHandlers = [
       subjectNames: subjects.map((subject) => subject.name),
       classIds: classes.map((schoolClass) => schoolClass.id),
       classNames: classes.map((schoolClass) => schoolClass.name),
+      teachingAssignments,
       version: member.version + 1,
     });
 

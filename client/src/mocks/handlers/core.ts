@@ -5,6 +5,7 @@ import {
   findMembership,
   formTeacherClassIds,
   resolveContext,
+  scopeAllows,
   scoped,
   staffBlockReason,
 } from '../context';
@@ -610,7 +611,15 @@ export const coreHandlers = [
     const rows = scoped(db.subjects, context.schoolId).filter(
       (subject) =>
         (!levelId || subject.levelIds.includes(levelId)) &&
-        (!scope.subjectIds || scope.subjectIds.includes(subject.id)),
+        // Asked for a specific class: answer with the subjects actually
+        // paired with that class, not "any subject at its level that this
+        // teacher happens to teach somewhere" — the same independent-set
+        // mistake curriculum visibility had. Without a class in the
+        // question there is no pair to check, so the flat list still
+        // answers "what do I teach at all" for a school-wide picker.
+        (classId
+          ? scopeAllows(scope, { classId, subjectId: subject.id })
+          : !scope.subjectIds || scope.subjectIds.includes(subject.id)),
     );
     return ok(rows);
   }),
