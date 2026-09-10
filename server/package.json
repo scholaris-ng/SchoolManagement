@@ -19,7 +19,8 @@
     "schema:log": "tsx typeorm.cli.ts schema:log -d src/infrastructure/database/dataSource.ts",
     "seed": "tsx src/infrastructure/database/seeds/run-seed.ts",
     "postman": "node postman/build.mjs",
-    "firebase:verify": "tsx src/infrastructure/firebase/verify.ts"
+    "firebase:verify": "tsx src/infrastructure/firebase/verify.ts",
+    "check:live-routes": "tsx scripts/check-live-routes.ts"
   },
   "dependencies": {
     "compression": "^1.7.5",

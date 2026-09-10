@@ -68,6 +68,14 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       css: false,
+      env: {
+        // Never pass requests through to a real API in tests. The specs under
+        // src/mocks exist to verify the mock API's own behaviour, and a
+        // passthrough there reaches for a server that is not running — the
+        // request fails instead of being answered. Tests are always fully
+        // mocked; the live seam is exercised by cypress/e2e/live.
+        VITE_USE_LIVE_ENDPOINTS: 'false',
+      },
     },
   };
 });

@@ -5,6 +5,20 @@ import { SchoolRepository } from '../repositories/school.repository';
 import type { School } from '../entities/school.entity';
 import type { UpdateSchoolInput } from '../validators/school.schema';
 
+/**
+ * What the client's `School` type expects — deliberately not the entity.
+ *
+ * `deletedAt` is a soft-delete marker that exists for the repository's benefit;
+ * it is not part of the contract and has no meaning to a settings screen.
+ * Returning the entity directly is how internal columns leak into an API.
+ */
+export type SchoolDTO = Omit<School, 'deletedAt'>;
+
+function toSchoolDTO(school: School): SchoolDTO {
+  const { deletedAt: _deletedAt, ...rest } = school;
+  return rest;
+}
+
 export class SchoolService {
   static Instance = new SchoolService();
 
@@ -13,10 +27,10 @@ export class SchoolService {
     private readonly audit = AuditService.Instance,
   ) {}
 
-  async getCurrent(context: RequestContext): Promise<School> {
+  async getCurrent(context: RequestContext): Promise<SchoolDTO> {
     const school = await this.schools.findById(context.schoolId);
     if (!school) throw AppError.notFound('School');
-    return school;
+    return toSchoolDTO(school);
   }
 
   /**
@@ -31,7 +45,7 @@ export class SchoolService {
     context: RequestContext,
     patch: UpdateSchoolInput,
     expectedVersion: number | undefined,
-  ): Promise<School> {
+  ): Promise<SchoolDTO> {
     const school = await this.schools.findById(context.schoolId);
     if (!school) throw AppError.notFound('School');
 
@@ -64,6 +78,6 @@ export class SchoolService {
       severity: 'WARNING',
     });
 
-    return updated;
+    return toSchoolDTO(updated);
   }
 }

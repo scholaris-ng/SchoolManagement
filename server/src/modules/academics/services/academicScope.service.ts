@@ -45,10 +45,48 @@ export class AcademicScopeService {
     const { staffId, studentId, guardianId, roles } = context.membership;
 
     if (studentId || guardianId) {
-      // Narrowed to the child's own class once the students table lands in
-      // phase 2 (spec section 51). Until then a parent or pupil membership is
-      // scoped to nothing rather than to everything — failing closed.
-      return { classIds: [], subjectIds: [], pairs: [] };
+      // A pupil sees their own class; a parent, their children's. Subjects
+      // follow from the level those classes sit at.
+      const rows: { classId: string; levelId: string }[] = await AppDataSource.query(
+        `SELECT DISTINCT s.current_class_id AS "classId", c.level_id AS "levelId"
+         FROM students s
+         JOIN school_classes c ON c.id = s.current_class_id AND c.deleted_at IS NULL
+         WHERE s.school_id = $1
+           AND s.deleted_at IS NULL
+           AND s.current_class_id IS NOT NULL
+           AND (
+             s.id = $2
+             OR EXISTS (
+               SELECT 1 FROM student_guardians sg
+               WHERE sg.student_id = s.id AND sg.guardian_id = $3
+             )
+           )`,
+        [context.schoolId, studentId, guardianId],
+      );
+
+      const classIds = [...new Set(rows.map((row) => row.classId))];
+      const levelIds = [...new Set(rows.map((row) => row.levelId))];
+
+      const subjects: { id: string }[] =
+        levelIds.length === 0
+          ? []
+          : await AppDataSource.query(
+              `SELECT DISTINCT sub.id
+               FROM subjects sub
+               JOIN subject_levels sl ON sl.subject_id = sub.id
+               WHERE sub.school_id = $1 AND sub.deleted_at IS NULL
+                 AND sl.level_id = ANY($2::uuid[])`,
+              [context.schoolId, levelIds],
+            );
+
+      return {
+        classIds,
+        subjectIds: subjects.map((row) => row.id),
+        // A pupil genuinely takes every subject offered at their level, so
+        // there is no narrower pairing to enforce. Leaving this null falls back
+        // to the independent checks above, which is the correct relationship.
+        pairs: null,
+      };
     }
 
     if (!staffId) return UNRESTRICTED;

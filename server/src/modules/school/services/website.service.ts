@@ -3,8 +3,26 @@ import type { RequestContext } from '../../../shared/types/context';
 import { AuditService } from '../../audit/services/audit.service';
 import { SchoolRepository } from '../repositories/school.repository';
 import { WebsiteRepository } from '../repositories/website.repository';
+import type { SchoolBranding } from '../entities/school.entity';
 import type { WebsiteContent } from '../entities/websiteContent.entity';
 import type { UpdateWebsiteInput } from '../validators/school.schema';
+
+/**
+ * The public prospectus payload, matching the client's `PublicSchoolPage` in
+ * `client/src/features/public/public.endpoints.ts`.
+ */
+export interface PublicSchoolPageDTO {
+  school: {
+    name: string;
+    shortName: string;
+    branding: SchoolBranding;
+    city: string;
+    state: string;
+  };
+  website: WebsiteContent;
+  news: unknown[];
+  events: unknown[];
+}
 
 export class WebsiteService {
   static Instance = new WebsiteService();
@@ -61,10 +79,42 @@ export class WebsiteService {
     return updated;
   }
 
-  /** Unauthenticated. Returns only what a published page is meant to show. */
-  async getPublicBySlug(slug: string): Promise<WebsiteContent> {
-    const content = await this.website.findPublishedBySlug(slug);
-    if (!content) throw AppError.notFound('School');
-    return content;
+  /**
+   * Unauthenticated. Returns only what a published page is meant to show.
+   *
+   * The shape is the client's `PublicSchoolPage`, not a bare website record:
+   * the marketing page renders the school's identity, its copy, recent public
+   * news and upcoming public events together, and one request is what a cold
+   * visitor on a slow connection should pay for.
+   *
+   * `news` and `events` are empty until those modules land in phase 5. They are
+   * present rather than omitted so the client's parser never sees a missing
+   * field, and so filling them in later is not a breaking change.
+   *
+   * Note what is absent: no student names, no photographs, no counts that
+   * could identify a child (spec section 41). A published page is the one
+   * surface with no session behind it.
+   */
+  async getPublicBySlug(slug: string): Promise<PublicSchoolPageDTO> {
+    const website = await this.website.findPublishedBySlug(slug);
+    if (!website) throw AppError.notFound('School');
+
+    const school = await this.schools.findById(website.schoolId);
+    // A published page whose school has been soft-deleted is not found rather
+    // than half-rendered.
+    if (!school) throw AppError.notFound('School');
+
+    return {
+      school: {
+        name: school.name,
+        shortName: school.shortName,
+        branding: school.branding,
+        city: school.city,
+        state: school.state,
+      },
+      website,
+      news: [],
+      events: [],
+    };
   }
 }

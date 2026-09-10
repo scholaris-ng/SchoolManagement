@@ -17,6 +17,7 @@ const schema = z.object({
   VITE_APP_URL: z.string().default(''),
   VITE_USE_MOCK_API: booleanish.default(false),
   VITE_USE_MOCK_AUTH: booleanish.default(false),
+  VITE_USE_LIVE_ENDPOINTS: booleanish.default(true),
   VITE_DEMO_MODE: booleanish.default(false),
   VITE_FIREBASE_API_KEY: z.string().default(''),
   VITE_FIREBASE_AUTH_DOMAIN: z.string().default(''),
@@ -60,6 +61,16 @@ export const env = {
   // configured separately — otherwise the deployment is just a broken portal.
   useMockApi: isDemoBuild || (mockingAllowed && raw.VITE_USE_MOCK_API),
   useMockAuth: isDemoBuild || (mockingAllowed && raw.VITE_USE_MOCK_AUTH),
+  /**
+   * While the API is built in phases, endpoints that exist for real are let
+   * through to the server and the rest stay mocked (`src/mocks/live-routes.ts`).
+   *
+   * Never in a demo build: that deployment has no API behind it, so a
+   * passthrough would be a broken screen rather than a real one. Set
+   * `VITE_USE_LIVE_ENDPOINTS=false` to go back to fully mocked, which is what
+   * you want when working on the interface with no server running.
+   */
+  useLiveEndpoints: !isDemoBuild && raw.VITE_USE_LIVE_ENDPOINTS,
   firebase: {
     apiKey: raw.VITE_FIREBASE_API_KEY,
     authDomain: raw.VITE_FIREBASE_AUTH_DOMAIN,

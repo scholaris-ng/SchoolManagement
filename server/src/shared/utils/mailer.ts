@@ -158,6 +158,49 @@ export async function sendVerificationEmail(params: {
 }
 
 /**
+ * Recipient: a parent or guardian a school has just invited. Trigger:
+ * `POST /guardians/:id/invite`. Tone: transactional — no emoji.
+ *
+ * Carries the same six-digit code as ordinary verification, because an invited
+ * account is created by the school and must still be claimed by the person who
+ * controls the address. Without that step, anyone who guessed the email could
+ * sign up and inherit access to a child's records.
+ */
+export async function sendGuardianInviteEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  childNames: string[];
+  code: string;
+  expiresInMinutes: number;
+}): Promise<void> {
+  const { to, firstName, schoolName, childNames, code, expiresInMinutes } = params;
+  const children =
+    childNames.length > 0 ? childNames.join(', ') : 'your child';
+
+  const body = [
+    heading(`${schoolName} has invited you to the parent portal`),
+    paragraph(
+      `Hello ${firstName}, you can now follow attendance, results, fees and messages for <strong>${children}</strong> online.`,
+    ),
+    paragraph('Enter this code to confirm your email address and set a password:'),
+    codeBox(code),
+    paragraph(`The code expires in ${expiresInMinutes} minutes.`),
+    button('Open the parent portal', `${env.appUrl}/sign-in`),
+    footnote(
+      `If you were not expecting this, please contact ${schoolName} directly — no account can be used until this code is entered.`,
+    ),
+  ].join('');
+
+  await send({
+    to,
+    subject: `Parent portal invitation — ${schoolName} — Scholaris`,
+    html: emailLayout(body),
+    text: `Hello ${firstName}, ${schoolName} has invited you to the Scholaris parent portal for ${children}. Your code is ${code}; it expires in ${expiresInMinutes} minutes. Open ${env.appUrl}/sign-in to continue.`,
+  });
+}
+
+/**
  * Recipient: the school administrator, once verified. Trigger: a successful
  * `POST /auth/verify-email`. Tone: celebratory — emoji permitted in the heading.
  */

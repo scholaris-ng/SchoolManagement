@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw';
+import { liveRouteHandlers, LIVE_ROUTE_COUNT } from '../live-routes';
 import { coreHandlers } from './core';
 import { peopleHandlers } from './people';
 import { academicsExtraHandlers } from './academics-extra';
@@ -20,6 +21,11 @@ import { importsHandlers } from './imports';
  * `env.useMockApi` is forced off in production builds, so none of this can ship.
  */
 export const handlers = [
+  // FIRST, deliberately. MSW resolves in order, so these decline to mock the
+  // endpoints Express really implements and let them reach the server. A mock
+  // registered before them would win and the real API would never be called.
+  ...liveRouteHandlers,
+
   ...coreHandlers,
   ...peopleHandlers,
   ...academicsExtraHandlers,
@@ -33,7 +39,11 @@ export const handlers = [
   // silent 404 from a passthrough — make it loud during development.
   http.all('/api/*', ({ request }) => {
     const { method, url } = request;
-    console.warn(`[mock-api] Unhandled ${method} ${url}`);
+    console.warn(
+      `[mock-api] Unhandled ${method} ${url}\n` +
+        `  Neither a mock handler nor one of the ${LIVE_ROUTE_COUNT} live routes matched.\n` +
+        `  If the server implements this now, add it to src/mocks/live-routes.ts.`,
+    );
     return HttpResponse.json(
       {
         success: false,

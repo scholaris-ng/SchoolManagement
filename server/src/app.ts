@@ -17,6 +17,8 @@ import schoolRoutes from './modules/school/routes/school.routes';
 import roleRoutes from './modules/rbac/routes/role.routes';
 import auditRoutes from './modules/audit/routes/audit.routes';
 import academicsRoutes from './modules/academics/routes/academics.routes';
+import studentsRoutes from './modules/students/routes/students.routes';
+import guardiansRoutes from './modules/guardians/routes/guardians.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -40,7 +42,15 @@ export function createApp(): Express {
 
   app.use(env.apiPrefix, apiRateLimiter);
 
-  const api = [authRoutes, schoolRoutes, roleRoutes, auditRoutes, academicsRoutes];
+  const api = [
+    authRoutes,
+    schoolRoutes,
+    roleRoutes,
+    auditRoutes,
+    academicsRoutes,
+    studentsRoutes,
+    guardiansRoutes,
+  ];
   api.forEach((routes) => app.use(env.apiPrefix, routes));
 
   // Anything under /api that matched no route answers as JSON. Registered here,
