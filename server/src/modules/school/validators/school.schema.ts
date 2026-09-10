@@ -40,15 +40,66 @@ const settingsSchema = z
 export const updateSchoolSchema = z.object({
   body: z
     .object({
-      name: z.string().trim().min(2).max(200).optional(),
-      shortName: z.string().trim().min(1).max(60).optional(),
-      email: z.string().trim().email().max(160).optional(),
-      phone: z.string().trim().min(6).max(40).optional(),
-      website: z.string().trim().url().max(200).nullable().optional(),
-      addressLine1: z.string().trim().min(1).max(200).optional(),
-      addressLine2: z.string().trim().max(200).nullable().optional(),
-      city: z.string().trim().min(1).max(80).optional(),
-      state: z.string().trim().min(1).max(80).optional(),
+      name: z
+        .string()
+        .trim()
+        .min(2, 'Enter the school name.')
+        .max(200, 'The school name is too long. Use 200 characters or fewer.')
+        .optional(),
+      shortName: z
+        .string()
+        .trim()
+        .min(1, 'Enter a short name, or leave the field empty to keep the current one.')
+        .max(60, 'The short name is too long. Use 60 characters or fewer.')
+        .optional(),
+      email: z
+        .string()
+        .trim()
+        .email('Enter a valid email address, such as office@yourschool.edu.ng')
+        .max(160, 'That email address is too long.')
+        .optional(),
+      // A bare empty string is accepted alongside the real pattern, distinct
+      // from the field being absent altogether: absent means "don't touch
+      // this", `''` means the administrator deliberately cleared a wrong
+      // entry. Both are legitimate; only a too-short garbage value is not.
+      phone: z
+        .string()
+        .trim()
+        .min(6, 'Enter a full phone number, including the area or country code.')
+        .max(40, 'That phone number is too long.')
+        .optional()
+        .or(z.literal('')),
+      website: z
+        .string()
+        .trim()
+        .url('Enter the full web address, starting with https://')
+        .max(200, 'That web address is too long.')
+        .nullable()
+        .optional(),
+      addressLine1: z
+        .string()
+        .trim()
+        .max(200, 'That address line is too long. Use 200 characters or fewer.')
+        .optional()
+        .or(z.literal('')),
+      addressLine2: z
+        .string()
+        .trim()
+        .max(200, 'That address line is too long. Use 200 characters or fewer.')
+        .nullable()
+        .optional(),
+      city: z
+        .string()
+        .trim()
+        .max(80, 'That town or city name is too long.')
+        .optional()
+        .or(z.literal('')),
+      state: z
+        .string()
+        .trim()
+        .max(80, 'That state or region name is too long.')
+        .optional()
+        .or(z.literal('')),
       branding: brandingSchema.optional(),
       settings: settingsSchema.optional(),
     })

@@ -112,27 +112,57 @@ export function FormError({
     );
   }
 
+  const details = isApiError(error) ? error.details : [];
+
+  /*
+    A validation failure is the one case where the reader is better served by
+    less. The fields carry their own messages, so repeating all of them here
+    produces a wall of text listing internal field names — "addressLine1: String
+    must contain at least 1 character(s)" — which reads as a crash rather than
+    as three boxes needing attention. Point at the form and let the form speak.
+
+    Anything with no field to attach to still has to be shown here, because
+    otherwise it would appear nowhere at all.
+  */
+  if (isApiError(error) && error.isValidation) {
+    /*
+      A field-level message has a path that points inside the payload, such as
+      `body.phone`. One that stops at the root — `body` on its own, which is
+      what a whole-object complaint produces — belongs to no input on the
+      screen, so it must be printed here or it would be shown nowhere.
+    */
+    const unattached = details.filter((detail) => !detail.path?.includes('.'));
+    const attached = details.length - unattached.length;
+
+    return (
+      <Alert tone="danger" title="Could not save" data-cy={dataCy}>
+        <p>
+          {attached === 0
+            ? 'Please check the details you entered and try again.'
+            : attached === 1
+              ? 'One field needs your attention. It is marked below.'
+              : `${attached} fields need your attention. They are marked below.`}
+        </p>
+        {unattached.length > 0 && (
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+            {unattached.map((detail, index) => (
+              <li key={index}>{detail.message}</li>
+            ))}
+          </ul>
+        )}
+      </Alert>
+    );
+  }
+
   const message = isApiError(error)
     ? error.message
     : error instanceof Error
       ? error.message
       : 'Something went wrong. Please try again.';
 
-  const details = isApiError(error) ? error.details : [];
-
   return (
     <Alert tone="danger" title="Could not save" data-cy={dataCy}>
       <p>{message}</p>
-      {details.length > 0 && (
-        <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
-          {details.map((detail, index) => (
-            <li key={index}>
-              {detail.field ? <strong>{detail.field}: </strong> : null}
-              {detail.message}
-            </li>
-          ))}
-        </ul>
-      )}
     </Alert>
   );
 }

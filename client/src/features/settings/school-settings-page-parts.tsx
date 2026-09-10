@@ -11,12 +11,15 @@ import {
 export function Field({
   label,
   hint,
+  error,
   required,
   className,
   children,
 }: {
   label: string;
   hint?: string;
+  /** Server-side message for this field, shown in place of the hint. */
+  error?: string;
   required?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -25,7 +28,19 @@ export function Field({
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label required={required}>{label}</Label>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {/*
+        The error replaces the hint rather than stacking under it. Once a field
+        is wrong, telling the reader what to fix matters more than repeating
+        what the field is for, and two lines of small print under one input is
+        harder to scan than one.
+      */}
+      {error ? (
+        <p role="alert" className="text-xs font-medium text-danger">
+          {error}
+        </p>
+      ) : (
+        hint && <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { useSchool, useUpdateSchool } from './api';
+import { isApiError } from '@/lib/api-error';
 import type { School } from '@/types/tenant';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -17,6 +18,7 @@ import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SettingsTabs } from './settings-tabs';
 import { Field, Toggle } from './school-settings-page-parts';
+import { validateSchoolDraft } from './school-settings.schema';
 
 const CURRENCIES = [
   { code: 'NGN', symbol: '₦', label: 'Nigerian naira' },
@@ -48,6 +50,7 @@ export function SchoolSettingsPage() {
 
   const [draft, setDraft] = useState<Partial<School> | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (school.data) {
@@ -75,6 +78,14 @@ export function SchoolSettingsPage() {
   const set = (patch: Partial<School>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setDirty(true);
+    const touched = Object.keys(patch);
+    if (touched.some((key) => key in validationErrors)) {
+      setValidationErrors((current) => {
+        const next = { ...current };
+        for (const key of touched) delete next[key];
+        return next;
+      });
+    }
   };
 
   const setBranding = (patch: Partial<School['branding']>) => {
@@ -94,8 +105,26 @@ export function SchoolSettingsPage() {
   };
 
   const save = async () => {
-    await update.mutateAsync({ values: draft, version: school.data?.version ?? 0 });
+    const errors = validateSchoolDraft(draft);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
+    await update.mutateAsync({
+      values: editableFields(draft),
+      version: school.data?.version ?? 0,
+    });
     setDirty(false);
+  };
+
+  // Server-side messages, keyed by the field they belong to, so each one is
+  // shown under the box it is about rather than only as a list at the top.
+  // Validation caught before the request ever went out takes precedence over
+  // whatever the last save attempt reported for the same field.
+  const fieldErrors = {
+    ...(isApiError(update.error) ? update.error.fieldErrors() : {}),
+    ...validationErrors,
   };
 
   return (
@@ -123,28 +152,33 @@ export function SchoolSettingsPage() {
           <CardTitle>Identity</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="School name" required>
+          <Field label="School name" required error={fieldErrors.name}>
             <Input
               data-cy="school-settings-name"
               value={draft.name ?? ''}
               onChange={(event) => set({ name: event.target.value })}
             />
           </Field>
-          <Field label="Short name" hint="Used in the sidebar and on documents.">
+          <Field label="Short name" hint="Used in the sidebar and on documents." error={fieldErrors.shortName}>
             <Input
               data-cy="school-settings-short-name"
               value={draft.shortName ?? ''}
               onChange={(event) => set({ shortName: event.target.value })}
             />
           </Field>
-          <Field label="School code" hint="Prefixes verification codes.">
-            <Input
-              data-cy="school-settings-code"
-              value={draft.code ?? ''}
-              onChange={(event) => set({ code: event.target.value.toUpperCase() })}
-            />
+          {/*
+            Read-only on purpose. The code prefixes every verification code the
+            school has ever issued, so changing it would orphan certificates
+            already in circulation — the API refuses it for that reason, and an
+            editable box here only invited a change that could not be saved.
+          */}
+          <Field
+            label="School code"
+            hint="Prefixes verification codes, so it cannot be changed once issued."
+          >
+            <Input data-cy="school-settings-code" value={draft.code ?? ''} readOnly disabled />
           </Field>
-          <Field label="Website">
+          <Field label="Website" error={fieldErrors.website}>
             <Input
               data-cy="school-settings-website"
               type="url"
@@ -153,7 +187,7 @@ export function SchoolSettingsPage() {
               placeholder="https://"
             />
           </Field>
-          <Field label="Email" required>
+          <Field label="Email" required error={fieldErrors.email}>
             <Input
               data-cy="school-settings-email"
               type="email"
@@ -161,7 +195,7 @@ export function SchoolSettingsPage() {
               onChange={(event) => set({ email: event.target.value })}
             />
           </Field>
-          <Field label="Phone" required>
+          <Field label="Phone" required error={fieldErrors.phone}>
             <Input
               data-cy="school-settings-phone"
               type="tel"
@@ -169,21 +203,26 @@ export function SchoolSettingsPage() {
               onChange={(event) => set({ phone: event.target.value })}
             />
           </Field>
-          <Field label="Address" className="sm:col-span-2">
+          <Field
+            label="Address"
+            required
+            className="sm:col-span-2"
+            error={fieldErrors.addressLine1}
+          >
             <Input
               data-cy="school-settings-address-line1"
               value={draft.addressLine1 ?? ''}
               onChange={(event) => set({ addressLine1: event.target.value })}
             />
           </Field>
-          <Field label="City">
+          <Field label="City" required error={fieldErrors.city}>
             <Input
               data-cy="school-settings-city"
               value={draft.city ?? ''}
               onChange={(event) => set({ city: event.target.value })}
             />
           </Field>
-          <Field label="State">
+          <Field label="State" required error={fieldErrors.state}>
             <Input
               data-cy="school-settings-state"
               value={draft.state ?? ''}
@@ -366,4 +405,44 @@ export function SchoolSettingsPage() {
       </Card>
     </PageContainer>
   );
+}
+
+/**
+ * The fields this endpoint actually accepts.
+ *
+ * The draft is seeded from the whole school record so the form can display it,
+ * but a record is not a patch: sending it back includes `id`, `code`, `status`,
+ * `version` and the timestamps, none of which an administrator may edit. The
+ * API refuses the lot, and the page then reported a validation failure for a
+ * form the user had filled in correctly.
+ *
+ * Blank optional fields are dropped rather than sent as empty strings. Leaving
+ * the short-name box empty means "no change", not "erase it" — `phone`,
+ * `addressLine1`, `city` and `state` never reach this blank, since
+ * `validateSchoolDraft` blocks the save first if any of those are empty.
+ */
+function editableFields(draft: Partial<School>): Partial<School> {
+  const values: Partial<School> = {};
+
+  const text = [
+    'name',
+    'shortName',
+    'email',
+    'phone',
+    'website',
+    'addressLine1',
+    'addressLine2',
+    'city',
+    'state',
+  ] as const;
+
+  for (const key of text) {
+    const value = draft[key];
+    if (typeof value === 'string' && value.trim() !== '') values[key] = value.trim();
+  }
+
+  if (draft.branding) values.branding = draft.branding;
+  if (draft.settings) values.settings = draft.settings;
+
+  return values;
 }

@@ -46,8 +46,33 @@ export function formatZodErrors(error: ZodError): ErrorDetail[] {
     return {
       field: path || issue.path.join('.'),
       path: issue.path.join('.'),
-      message: issue.message,
+      message: humanise(issue),
       code: issue.code,
     };
   });
+}
+
+/**
+ * Every message here reaches a school administrator, not a developer.
+ *
+ * Schemas carry their own wording for the rules a person can act on ("Enter the
+ * street address"), and that is used as written. What is replaced are Zod's
+ * structural defaults, which describe the request rather than the form: nobody
+ * filling in a settings page can act on "Unrecognized key(s) in object" or
+ * "Expected string, received number".
+ */
+function humanise(issue: ZodError['errors'][number]): string {
+  switch (issue.code) {
+    case 'unrecognized_keys':
+      // The caller sent fields this endpoint does not accept — a whole record
+      // echoed back instead of the edited fields, most often. It is a bug in
+      // the caller, so the message says what to do rather than naming keys.
+      return 'This form sent details the server does not accept. Reload the page and try again.';
+    case 'invalid_type':
+      return issue.received === 'undefined'
+        ? 'This is required.'
+        : 'That value is not in the format this field expects.';
+    default:
+      return issue.message;
+  }
 }
