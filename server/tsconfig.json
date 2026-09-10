@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    // `nodenext` rather than the old `node`/`node10`, which TypeScript 7.0 drops.
+    // The package has no `"type": "module"`, so every file here is CommonJS and
+    // imports still compile to `require` — but subpath imports such as
+    // `firebase-admin/app` now resolve through the package's real `exports` map
+    // instead of node10's directory-guessing fallback.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rootDir": ".",
+    "outDir": "dist",
+    // No `baseUrl`: also dropped in TypeScript 7.0. Since 5.0 a `paths` entry
+    // resolves relative to this file, which is all the alias needed.
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+
+    // Required by ts-jest alongside a hybrid module kind, and honest about how
+    // this code is actually built: both tsx and ts-jest compile one file at a
+    // time with no cross-file type information. It is why every type-only
+    // import here is written as `import type`.
+    "isolatedModules": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*.ts", "*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

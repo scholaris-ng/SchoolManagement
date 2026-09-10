@@ -1,0 +1,122 @@
+# Firebase App Hosting (spec section 46).
+#
+# The build produces both halves: the React bundle in client/dist and the
+# Express API run through tsx. The API registers /api/* before any SPA
+# fallback, so an API route can never return React's index.html — the failure
+# mode section 46 calls out by name.
+
+runConfig:
+  runtime: nodejs20
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 4
+  concurrency: 80
+
+env:
+  - variable: NODE_ENV
+    value: production
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: API_PREFIX
+    value: /api/v1
+    availability:
+      - RUNTIME
+
+  # Public URL of the deployed app. Also the default CORS origin.
+  - variable: APP_URL
+    value: https://scholaris.example.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: CORS_ORIGINS
+    value: https://scholaris.example.com
+    availability:
+      - RUNTIME
+
+  # --- PostgreSQL ---------------------------------------------------------
+  # Held in Secret Manager, never in this file. Grant the App Hosting backend's
+  # service account roles/secretmanager.secretAccessor on each one.
+  - variable: DATABASE_URL
+    secret: scholaris-database-url
+    availability:
+      - RUNTIME
+
+  - variable: DB_SSL
+    value: "true"
+    availability:
+      - RUNTIME
+
+  - variable: DB_POOL_SIZE
+    value: "10"
+    availability:
+      - RUNTIME
+
+  # --- Firebase Admin -----------------------------------------------------
+  # Deliberately absent. On App Hosting the runtime service account supplies
+  # Application Default Credentials through the metadata server, so no key file
+  # or secret is needed. Grant that account roles/datastore.user for Firestore.
+  - variable: FIREBASE_PROJECT_ID
+    value: scholaris-production
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: scholaris-production.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # --- Payments -----------------------------------------------------------
+  - variable: PAYSTACK_SECRET_KEY
+    secret: scholaris-paystack-secret
+    availability:
+      - RUNTIME
+
+  # --- Client build-time configuration ------------------------------------
+  # Only VITE_-prefixed values reach the browser bundle. The Firebase web
+  # config is public by design: Firestore access is gated by security rules,
+  # not by hiding these.
+  - variable: VITE_API_BASE_URL
+    value: /api/v1
+    availability:
+      - BUILD
+
+  - variable: VITE_USE_MOCK_API
+    value: "false"
+    availability:
+      - BUILD
+
+  - variable: VITE_USE_MOCK_AUTH
+    value: "false"
+    availability:
+      - BUILD
+
+  - variable: VITE_DEMO_MODE
+    value: "false"
+    availability:
+      - BUILD
+
+  - variable: VITE_FIREBASE_API_KEY
+    value: ""
+    availability:
+      - BUILD
+
+  - variable: VITE_FIREBASE_AUTH_DOMAIN
+    value: scholaris-production.firebaseapp.com
+    availability:
+      - BUILD
+
+  - variable: VITE_FIREBASE_PROJECT_ID
+    value: scholaris-production
+    availability:
+      - BUILD
+
+  - variable: VITE_FIREBASE_STORAGE_BUCKET
+    value: scholaris-production.firebasestorage.app
+    availability:
+      - BUILD

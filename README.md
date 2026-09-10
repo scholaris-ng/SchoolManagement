@@ -6,15 +6,21 @@ behaviour and safeguarding, and parent communication — built for schools with
 unreliable connectivity.
 
 > **Status.** The React client is complete and builds clean. The Express/TypeORM
-> API is not yet implemented (`server/` is empty). Until it exists, the client
-> runs against an in-browser mock API that mirrors the specified contract —
-> see [Running without a backend](#running-without-a-backend).
+> API is scaffolded and phase 1 of the implementation order is done: tenancy,
+> identity, RBAC, audit, school settings, the public website and the academic
+> structure — 44 endpoints. Students, guardians, attendance, results and finance
+> follow. Screens whose endpoints do not exist yet still run against the
+> in-browser mock API, see [Running without a backend](#running-without-a-backend).
 
 ## Repository layout
 
+This is an npm workspace, so dependencies install once at the root and both
+packages resolve up into the shared `node_modules`.
+
 ```
 client/    React + TypeScript + Vite frontend
-server/    Express + TypeORM API              (not yet implemented)
+server/    Express + TypeORM + PostgreSQL API
+apphosting.yaml    Firebase App Hosting build and runtime configuration
 ARCHITECTURE.md    Layering, data ownership and adapter boundaries
 DEPLOYMENT.md      Firebase App Hosting + PostgreSQL checklist
 PRODUCT_ROADMAP.md Feature phases
@@ -24,30 +30,57 @@ PRODUCT_ROADMAP.md Feature phases
 
 - Node.js 20 or newer
 - npm
+- PostgreSQL 14 or newer for the API, local or managed
 - For production: a Firebase project (Auth, Firestore, Storage, Cloud
   Messaging) and a PostgreSQL database
 
 ## Getting started
 
+Install once, from the repository root:
+
 ```bash
-cd client && npm install && cp .env.example .env && npm run dev
+npm install
 ```
 
-The app runs at <http://localhost:5173>. With the default `.env` it starts
-against the mock API and mock authentication, so no Firebase project or
-database is needed to work on the interface.
+**Interface only**, no database or Firebase project needed:
 
-### Scripts (run inside `client/`)
+```bash
+cp client/.env.example client/.env
+npm run dev:client
+```
+
+The app runs at <http://localhost:5173> against the mock API and mock
+authentication.
+
+**Full stack**, against a real database:
+
+```bash
+cp server/.env.example server/.env     # point DB_* (or DATABASE_URL) at PostgreSQL
+npm run migration:run
+npm run seed -w @school/api
+npm run dev:api                        # http://localhost:4000/api/v1
+```
+
+Then set `VITE_USE_MOCK_API=false` in `client/.env` and run `npm run dev:client`.
+The client already proxies `/api` to port 4000. With `DEV_AUTH_ENABLED=true` on
+the server, sign in as a seeded persona with no Firebase project — see
+[server/README.md](server/README.md).
+
+### Scripts (run from the repository root)
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Vite dev server with `/api` proxied to `VITE_DEV_API_PROXY` |
-| `npm run build` | Type-checks the project and produces `dist/` |
-| `npm run preview` | Serves the built output |
-| `npm run lint` | ESLint, warnings treated as errors |
-| `npm run typecheck` | `tsc -b --noEmit` across app and tests |
-| `npm test` | Vitest, single run |
-| `npm run test:watch` | Vitest in watch mode |
+| `npm run dev:client` | Vite dev server with `/api` proxied to `VITE_DEV_API_PROXY` |
+| `npm run dev:api` | API in watch mode |
+| `npm run build` | Builds both packages |
+| `npm run lint` | ESLint across both, warnings treated as errors |
+| `npm run typecheck` | `tsc --noEmit` across both |
+| `npm test` | Vitest for the client, Jest for the API |
+| `npm run migration:run` | Applies pending database migrations |
+| `npm run migration:revert` | Rolls the last migration back |
+
+Add `-w @school/client` or `-w @school/api` to run a package's own scripts, for
+example `npm run test:watch -w @school/client` or `npm run seed -w @school/api`.
 
 ## Running without a backend
 

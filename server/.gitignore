@@ -1,0 +1,15 @@
+node_modules
+dist
+*.tsbuildinfo
+
+# Environment. Every .env variant is ignored except the committed template.
+.env
+.env.*
+!.env.example
+
+# Service account keys must never reach the repository.
+*serviceAccount*.json
+*firebase-adminsdk*.json
+
+*.log
+coverage

@@ -1,0 +1,25 @@
+{
+  "name": "scholaris",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-tenant school management platform — React client and Express/TypeORM API.",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev:client": "npm run dev -w @school/client",
+    "dev:api": "npm run dev -w @school/api",
+    "build": "npm run build -w @school/client && npm run build -w @school/api",
+    "start": "npm run start -w @school/api",
+    "lint": "npm run lint -w @school/client && npm run lint -w @school/api",
+    "typecheck": "npm run typecheck -w @school/client && npm run typecheck -w @school/api",
+    "test": "npm test -w @school/client && npm test -w @school/api",
+    "migration:run": "npm run migration:run -w @school/api",
+    "migration:revert": "npm run migration:revert -w @school/api",
+    "migration:generate": "npm run migration:generate -w @school/api"
+  }
+}
