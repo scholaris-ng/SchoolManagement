@@ -281,4 +281,17 @@ export const ErrorCode = {
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 export const DEFAULT_PAGE_SIZE = 25;
-export const MAX_PAGE_SIZE = 100;
+
+/**
+ * The ceiling exists to stop a caller pulling an unbounded page, not to force
+ * pickers to paginate. Several screens legitimately want a whole list in one
+ * request — the teacher dropdown, the guardian dropdown, a class roster during
+ * promotion, a batch of report cards — and each asks for 200. Refusing them at
+ * 100 turned a full dropdown into a validation error rather than a short list,
+ * which is the worse failure of the two.
+ *
+ * Note this still truncates silently for a school with more than 200 staff,
+ * guardians or pupils in one class. A picker that must be complete needs its
+ * own typeahead endpoint, the way `/students/search` already does.
+ */
+export const MAX_PAGE_SIZE = 200;

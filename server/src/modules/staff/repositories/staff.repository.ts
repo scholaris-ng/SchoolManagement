@@ -1,10 +1,106 @@
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
+import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
+import type { Paginated } from '../../../shared/response/apiResponse';
 import { Staff } from '../entities/staff.entity';
+import type { StaffMemberDTO } from '../dto/staff.dto';
+
+/** One employee, as the staff-performance analytics needs them. */
+export interface StaffRosterRow {
+  staffId: string;
+  staffName: string;
+  designation: string;
+  classCount: number;
+}
 
 /**
- * The staff module has no service or routes yet — this exists so the admin
- * dashboard can count employees without reaching into another module's table.
- * It will grow into the full repository when staff management lands.
+ * The projection the client's `StaffMember` type expects.
+ *
+ * Roles, subjects, classes and the exact teaching assignments are all
+ * one-to-many, and every one of them is aggregated in a lateral subquery rather
+ * than fetched per employee. A staff list is small today and will not be in a
+ * secondary school, and the N+1 habit does not announce itself when it starts
+ * (spec section 43).
+ *
+ * `teachingAssignments` is sent as the real pairs, not as two flat lists the
+ * client would have to cross-product — the client type says exactly why.
+ */
+const PROJECTION = `
+  s.id, s.school_id AS "schoolId", s.user_id AS "userId",
+  s.staff_no AS "staffNo",
+  s.first_name AS "firstName", s.last_name AS "lastName",
+  concat_ws(' ', s.first_name, s.last_name) AS "fullName",
+  s.email, s.phone, s.gender,
+  s.photo_url AS "photoUrl",
+  s.designation, s.department,
+  s.employment_type AS "employmentType",
+  to_char(s.employment_date, 'YYYY-MM-DD') AS "employmentDate",
+  s.status,
+  COALESCE(r.names,  '{}') AS "roleNames",
+  COALESCE(t.subject_ids,   '{}') AS "subjectIds",
+  COALESCE(t.subject_names, '{}') AS "subjectNames",
+  COALESCE(t.class_ids,     '{}') AS "classIds",
+  COALESCE(t.class_names,   '{}') AS "classNames",
+  COALESCE(t.pairs, '[]'::json) AS "teachingAssignments",
+  COALESCE(ft.total, 0) > 0 AS "isFormTeacher",
+  s.created_at AS "createdAt", s.version
+`;
+
+const JOINS = `
+  LEFT JOIN LATERAL (
+    SELECT array_agg(DISTINCT ro.name) AS names
+    FROM school_memberships sm
+    JOIN membership_roles mr ON mr.membership_id = sm.id
+    JOIN roles ro            ON ro.id = mr.role_id
+    WHERE sm.user_id = s.user_id AND sm.school_id = s.school_id
+  ) r ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT
+      array_agg(DISTINCT ta.subject_id)  AS subject_ids,
+      array_agg(DISTINCT sub.name)       AS subject_names,
+      array_agg(DISTINCT ta.class_id)    AS class_ids,
+      array_agg(DISTINCT cl.name)        AS class_names,
+      json_agg(DISTINCT jsonb_build_object('classId', ta.class_id, 'subjectId', ta.subject_id))
+                                         AS pairs
+    FROM teaching_assignments ta
+    JOIN subjects       sub ON sub.id = ta.subject_id AND sub.deleted_at IS NULL
+    JOIN school_classes cl  ON cl.id  = ta.class_id   AND cl.deleted_at IS NULL
+    WHERE ta.staff_id = s.id AND ta.school_id = s.school_id
+  ) t ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS total
+    FROM class_form_teachers cft
+    JOIN school_classes c ON c.id = cft.class_id AND c.deleted_at IS NULL
+    WHERE cft.staff_id = s.id
+  ) ft ON TRUE
+`;
+
+/** Only indexed columns, so a sort cannot turn a list into a table scan. */
+const SORTABLE: Record<string, string> = {
+  fullName: 's.last_name',
+  lastName: 's.last_name',
+  staffNo: 's.staff_no',
+  designation: 's.designation',
+  department: 's.department',
+  status: 's.status',
+  employmentDate: 's.employment_date',
+  createdAt: 's.created_at',
+};
+
+export interface StaffFilter {
+  page: number;
+  pageSize: number;
+  search?: string;
+  sortBy?: string;
+  sortDir: 'asc' | 'desc';
+  status?: string;
+  employmentType?: string;
+  department?: string;
+}
+
+/**
+ * The staff module has no write path yet — this reads the roster and one
+ * record, which is what the staff list, the staff profile and the analytics
+ * screen ask for. Creating and updating employees comes with the rest of HR.
  */
 export class StaffRepository extends TenantRepository<Staff> {
   static Instance = new StaffRepository();
@@ -26,4 +122,106 @@ export class StaffRepository extends TenantRepository<Staff> {
     );
     return Number(row?.total ?? 0);
   }
+
+  async fetchPaginated(schoolId: string, filter: StaffFilter): Promise<Paginated<StaffMemberDTO>> {
+    const params: unknown[] = [schoolId];
+    const where: string[] = ['s.school_id = $1', 's.deleted_at IS NULL'];
+
+    const add = (clause: (index: number) => string, value: unknown) => {
+      params.push(value);
+      where.push(clause(params.length));
+    };
+
+    if (filter.status) add((i) => `s.status = $${i}`, filter.status);
+    if (filter.employmentType) add((i) => `s.employment_type = $${i}`, filter.employmentType);
+    if (filter.department) add((i) => `s.department = $${i}`, filter.department);
+
+    if (filter.search) {
+      params.push(`%${filter.search}%`);
+      const i = params.length;
+      where.push(
+        `(s.first_name ILIKE $${i} OR s.last_name ILIKE $${i}
+          OR s.staff_no ILIKE $${i} OR s.email ILIKE $${i} OR s.designation ILIKE $${i})`,
+      );
+    }
+
+    const whereSql = where.join(' AND ');
+    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'lastName');
+    const direction = filter.sortDir === 'desc' ? 'DESC' : 'ASC';
+
+    // Counted without the lateral joins: they only widen each row, never
+    // multiply them, so joining for a COUNT would be work with no effect.
+    const [countRow] = await this.repo.query(
+      `SELECT COUNT(*)::int AS total FROM staff s WHERE ${whereSql}`,
+      params,
+    );
+    const total = Number(countRow?.total ?? 0);
+
+    const rows: StaffMemberDTO[] = await this.repo.query(
+      `SELECT ${PROJECTION}
+       FROM staff s ${JOINS}
+       WHERE ${whereSql}
+       ORDER BY ${SORTABLE[orderBy]} ${direction}, s.id ASC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
+    );
+
+    return paginatedResult(rows.map(normalise), filter.page, filter.pageSize, total);
+  }
+
+  async findOneDTO(schoolId: string, id: string): Promise<StaffMemberDTO | null> {
+    const rows: StaffMemberDTO[] = await this.repo.query(
+      `SELECT ${PROJECTION}
+       FROM staff s ${JOINS}
+       WHERE s.school_id = $1 AND s.id = $2 AND s.deleted_at IS NULL`,
+      [schoolId, id],
+    );
+    const row = rows[0];
+    return row ? normalise(row) : null;
+  }
+
+  /**
+   * The active roster with each person's form-teacher load, for the staff
+   * analytics table. Deliberately narrower than the list above: that screen
+   * ranks people by compliance and has no use for contact details.
+   */
+  async fetchRoster(schoolId: string): Promise<StaffRosterRow[]> {
+    return this.repo.query(
+      `SELECT
+         s.id                                AS "staffId",
+         s.first_name || ' ' || s.last_name  AS "staffName",
+         s.designation,
+         COALESCE(ft.total, 0)::int          AS "classCount"
+       FROM staff s
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS total
+         FROM class_form_teachers cft
+         JOIN school_classes c ON c.id = cft.class_id AND c.deleted_at IS NULL
+         WHERE cft.staff_id = s.id
+       ) ft ON TRUE
+       WHERE s.school_id = $1 AND s.status = 'ACTIVE' AND s.deleted_at IS NULL
+       ORDER BY s.last_name, s.first_name`,
+      [schoolId],
+    );
+  }
+}
+
+/**
+ * An employee with no user account has no membership, so the roles aggregate
+ * comes back as a single NULL element rather than an empty array. The same is
+ * true of every other `array_agg` here when the teacher has no assignments.
+ */
+function normalise(row: StaffMemberDTO): StaffMemberDTO {
+  const clean = <T>(values: (T | null)[] | null): T[] =>
+    (values ?? []).filter((value): value is T => value !== null);
+
+  return {
+    ...row,
+    roleNames: clean(row.roleNames),
+    subjectIds: clean(row.subjectIds),
+    subjectNames: clean(row.subjectNames),
+    classIds: clean(row.classIds),
+    classNames: clean(row.classNames),
+    teachingAssignments: clean(row.teachingAssignments).filter((pair) => pair.classId !== null),
+  };
 }

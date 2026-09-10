@@ -21,6 +21,18 @@ import studentsRoutes from './modules/students/routes/students.routes';
 import guardiansRoutes from './modules/guardians/routes/guardians.routes';
 import notificationsRoutes from './modules/notifications/routes/notifications.routes';
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
+import analyticsRoutes from './modules/analytics/routes/analytics.routes';
+import staffRoutes from './modules/staff/routes/staff.routes';
+import admissionsRoutes from './modules/admissions/routes/admissions.routes';
+import importsRoutes from './modules/imports/routes/imports.routes';
+import curriculumRoutes from './modules/curriculum/routes/curriculum.routes';
+import calendarRoutes from './modules/calendar/routes/calendar.routes';
+import financeRoutes from './modules/finance/routes/finance.routes';
+import assessmentRoutes from './modules/assessment/routes/assessment.routes';
+import behaviourRoutes from './modules/behaviour/routes/behaviour.routes';
+import disciplineRoutes from './modules/discipline/routes/discipline.routes';
+import engagementRoutes from './modules/engagement/routes/engagement.routes';
+import timetableRoutes from './modules/timetable/routes/timetable.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -54,6 +66,18 @@ export function createApp(): Express {
     guardiansRoutes,
     notificationsRoutes,
     dashboardRoutes,
+    analyticsRoutes,
+    staffRoutes,
+    admissionsRoutes,
+    importsRoutes,
+    curriculumRoutes,
+    calendarRoutes,
+    financeRoutes,
+    assessmentRoutes,
+    behaviourRoutes,
+    disciplineRoutes,
+    engagementRoutes,
+    timetableRoutes,
   ];
   api.forEach((routes) => app.use(env.apiPrefix, routes));
 

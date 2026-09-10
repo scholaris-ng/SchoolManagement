@@ -15,12 +15,18 @@ import { StudentEndpoints } from './students.endpoints';
  * from a previous school can never be read back into this one.
  */
 
-export function useStudents(query: ListQuery) {
+/**
+ * `enabled` lets a caller hold the register back until it has something to ask
+ * for — a class picker with nothing picked yet, say. Passing a page size of
+ * zero to mean the same thing does not work: the request still goes, and the
+ * API rejects it as the invalid page size it is.
+ */
+export function useStudents(query: ListQuery, options: { enabled?: boolean } = {}) {
   const schoolId = useSchoolId();
   return useQuery({
     queryKey: queryKeys.students.list(schoolId, query),
     queryFn: () => StudentEndpoints.fetchAll(query),
-    enabled: Boolean(schoolId),
+    enabled: Boolean(schoolId) && options.enabled !== false,
     // Keeps the previous page visible while the next one loads, so paging a
     // large register does not flash an empty table.
     placeholderData: keepPreviousData,

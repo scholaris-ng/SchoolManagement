@@ -48,11 +48,28 @@ export class RoomRepository extends TenantRepository<Room> {
  * phase 2. Both are projected as their empty values for now so the client
  * contract is complete; the subqueries go in with that migration.
  */
+/**
+ * The captain's name and the membership count are correlated subqueries rather
+ * than joins, so a house row stays one row: joining pupils in would multiply
+ * the house by its members and make the points column meaningless.
+ *
+ * Members are counted as pupils currently in the house, not as everyone ever
+ * placed in it — a house of forty that has graduated thirty is a house of ten,
+ * and the leaderboard's per-pupil average depends on getting that right.
+ */
 const HOUSE_PROJECTION = `
   h.id, h.school_id AS "schoolId", h.name, h.color, h.motto,
   h.captain_student_id AS "captainStudentId",
-  NULL::text AS "captainName",
-  0 AS "memberCount",
+  (
+    SELECT concat_ws(' ', cs.first_name, cs.last_name)
+    FROM students cs
+    WHERE cs.id = h.captain_student_id AND cs.deleted_at IS NULL
+  ) AS "captainName",
+  (
+    SELECT COUNT(*)::int
+    FROM students ms
+    WHERE ms.house_id = h.id AND ms.status = 'ACTIVE' AND ms.deleted_at IS NULL
+  ) AS "memberCount",
   h.points
 `;
 

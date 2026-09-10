@@ -56,8 +56,11 @@ export function PromoteStudentsDialog({
   const repeatIds = form.watch('repeatStudentIds');
   const graduateIds = form.watch('graduateStudentIds');
 
+  // Until a class is chosen there is no roster to ask for, so the request is
+  // not made at all rather than sent with an empty page.
   const roster = useStudents(
-    fromClassId ? { classId: fromClassId, status: 'ACTIVE', pageSize: 200 } : { pageSize: 0 },
+    { classId: fromClassId, status: 'ACTIVE', pageSize: 200 },
+    { enabled: Boolean(fromClassId) },
   );
 
   useEffect(() => {
