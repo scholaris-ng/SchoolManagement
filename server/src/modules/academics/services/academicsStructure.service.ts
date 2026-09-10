@@ -2,6 +2,7 @@ import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import { teachingWeeksBetween } from '../../../shared/utils/weekdays';
 import { AuditService } from '../../audit/services/audit.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { SessionRepository } from '../repositories/session.repository';
 import { TermRepository } from '../repositories/term.repository';
 import { LevelRepository } from '../repositories/level.repository';
@@ -37,6 +38,7 @@ export class AcademicsStructureService {
     private readonly levels = LevelRepository.Instance,
     private readonly scope = AcademicScopeService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly notifications = NotificationsService.Instance,
   ) {}
 
   // ─── Sessions ──────────────────────────────────────────────────────────────
@@ -239,6 +241,20 @@ export class AcademicsStructureService {
       entityLabel: term.name,
       after: { termId: term.id, sessionId: term.sessionId },
       severity: 'WARNING',
+    });
+
+    // Everything scoped by term now reports on a different one, so the people
+    // running the school should not have to discover that from a changed
+    // figure on a report.
+    void this.notifications.notifySchoolAdmins(context.schoolId, {
+      category: 'CALENDAR',
+      title: 'Current term changed',
+      body: `${term.name} is now the current term. Attendance, results and reports follow it from here.`,
+      actionUrl: '/settings/academics',
+      severity: 'WARNING',
+      entityType: 'Term',
+      entityId: term.id,
+      exceptUserId: context.user.id,
     });
 
     const dto = await this.terms.findOneDTO(context.schoolId, term.id);

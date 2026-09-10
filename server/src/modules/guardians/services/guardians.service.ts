@@ -3,6 +3,7 @@ import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { EmailVerificationRepository } from '../../auth/repositories/emailVerification.repository';
 import { sendGuardianInviteEmail } from '../../../shared/utils/mailer';
 import { env } from '../../../config/env';
@@ -31,6 +32,7 @@ export class GuardiansService {
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly verifications = EmailVerificationRepository.Instance,
+    private readonly notifications = NotificationsService.Instance,
   ) {}
 
   async fetchGuardians(
@@ -330,6 +332,21 @@ export class GuardiansService {
         code,
         expiresInMinutes: env.verificationCodeTtlMinutes,
       }).catch(console.error);
+
+      // Waiting for them in the portal the first time they sign in. The email
+      // above can be lost or filtered; this cannot.
+      void this.notifications.notifyUser(context.schoolId, invitedUserId, {
+        category: 'SYSTEM',
+        title: `Welcome to ${context.membership.schoolName}`,
+        body:
+          children.length > 0
+            ? `Your parent portal is open. You can follow ${children.map((link) => link.studentName).join(', ')} from here.`
+            : 'Your parent portal is open.',
+        actionUrl: '/family',
+        severity: 'SUCCESS',
+        entityType: 'Guardian',
+        entityId: guardianId,
+      });
     }
 
     await this.audit.record(context, {

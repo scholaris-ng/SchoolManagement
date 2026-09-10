@@ -132,4 +132,14 @@ export class ClassRepository extends TenantRepository<SchoolClass> {
     );
     return rows.map((row) => row.id);
   }
+
+  /** Active classes, for the dashboard's "how much of the school is running" figures. */
+  async countActive(schoolId: string): Promise<number> {
+    const [row] = await this.repo.query(
+      `SELECT COUNT(*)::int AS total FROM school_classes
+        WHERE school_id = $1 AND is_active = TRUE AND deleted_at IS NULL`,
+      [schoolId],
+    );
+    return Number(row?.total ?? 0);
+  }
 }

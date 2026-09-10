@@ -3,6 +3,7 @@ import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { StudentRepository } from '../repositories/student.repository';
 import { StudentAccessService } from './studentAccess.service';
 import { Student } from '../entities/student.entity';
@@ -30,6 +31,7 @@ export class StudentsService {
     private readonly students = StudentRepository.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly notifications = NotificationsService.Instance,
   ) {}
 
   async fetchStudents(
@@ -141,6 +143,19 @@ export class StudentsService {
       entityId: created.id,
       entityLabel: `${created.firstName} ${created.lastName}`,
       after: { admissionNo: created.admissionNo, classId: created.currentClassId },
+    });
+
+    // Not awaited on the critical path's behalf: the child is admitted either
+    // way, and `notifyUsers` swallows its own failures.
+    void this.notifications.notifySchoolAdmins(context.schoolId, {
+      category: 'ADMISSION',
+      title: 'New student admitted',
+      body: `${created.firstName} ${created.lastName} (${created.admissionNo}) joined ${schoolClass.name}.`,
+      actionUrl: `/students/${created.id}`,
+      severity: 'SUCCESS',
+      entityType: 'Student',
+      entityId: created.id,
+      exceptUserId: context.user.id,
     });
 
     const dto = await this.students.findOneDTO(context.schoolId, created.id);

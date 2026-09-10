@@ -82,4 +82,29 @@ export class MembershipRepository {
       [userId],
     );
   }
+
+  /**
+   * Everyone at a school holding any of these roles — the recipient list for a
+   * notification aimed at a job rather than a person ("the administrators").
+   *
+   * Suspended and invited memberships are left out: someone who cannot sign in
+   * yet, or has been suspended, should not be accumulating an inbox.
+   */
+  async findUserIdsByRoleKeys(schoolId: string, roleKeys: string[]): Promise<string[]> {
+    if (roleKeys.length === 0) return [];
+    const rows: { userId: string }[] = await this.repo.query(
+      `
+      SELECT DISTINCT m.user_id AS "userId"
+      FROM school_memberships m
+      JOIN membership_roles mr ON mr.membership_id = m.id
+      JOIN roles ro            ON ro.id = mr.role_id AND ro.deleted_at IS NULL
+      WHERE m.school_id = $1
+        AND m.status = 'ACTIVE'
+        AND m.deleted_at IS NULL
+        AND ro.key = ANY($2::text[])
+      `,
+      [schoolId, roleKeys],
+    );
+    return rows.map((row) => row.userId);
+  }
 }

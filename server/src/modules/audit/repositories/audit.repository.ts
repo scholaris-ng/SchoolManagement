@@ -58,4 +58,33 @@ export class AuditRepository {
     const [items, total] = await qb.getManyAndCount();
     return paginatedResult(items, page, pageSize, total);
   }
+
+  /**
+   * The newest entries, for the dashboard's activity feed.
+   *
+   * Ordered newest-first here because the client renders the list as given and
+   * does not sort it.
+   */
+  async recentForSchool(schoolId: string, limit: number): Promise<RecentActivityRow[]> {
+    return this.repo.query(
+      `SELECT id,
+              actor_name   AS "actorName",
+              action,
+              entity_label AS "entityLabel",
+              occurred_at  AS "occurredAt"
+         FROM audit_logs
+        WHERE school_id = $1
+        ORDER BY occurred_at DESC
+        LIMIT $2`,
+      [schoolId, limit],
+    );
+  }
+}
+
+export interface RecentActivityRow {
+  id: string;
+  actorName: string;
+  action: string;
+  entityLabel: string | null;
+  occurredAt: string;
 }

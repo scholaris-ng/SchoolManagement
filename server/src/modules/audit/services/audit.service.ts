@@ -1,4 +1,5 @@
 import type { RequestContext } from '../../../shared/types/context';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { AuditRepository, type AuditQuery } from '../repositories/audit.repository';
 import type { AuditLog } from '../entities/auditLog.entity';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -41,6 +42,7 @@ export class AuditService implements IAuditService {
     } catch (error) {
       console.error(`[${context.requestId}] Audit write failed for ${event.action}:`, error);
     }
+    this.announceIfCritical(context, event);
   }
 
   async recordMany(context: RequestContext, events: AuditEvent[]): Promise<void> {
@@ -50,6 +52,33 @@ export class AuditService implements IAuditService {
     } catch (error) {
       console.error(`[${context.requestId}] Batched audit write failed:`, error);
     }
+    events.forEach((event) => this.announceIfCritical(context, event));
+  }
+
+  /**
+   * A critical entry is one somebody needs to know about, not merely one worth
+   * keeping — so the administrators are told, and are told by the same call
+   * that already decided the event was critical. As later modules start writing
+   * audit entries this keeps working with no further wiring.
+   *
+   * Deliberately fire-and-forget: `notifySchoolAdmins` swallows its own
+   * failures, and an audit call must stay as unfailing as it was before.
+   */
+  private announceIfCritical(context: RequestContext, event: AuditEvent): void {
+    if (event.severity !== 'CRITICAL') return;
+
+    void NotificationsService.Instance.notifySchoolAdmins(context.schoolId, {
+      category: 'SYSTEM',
+      title: 'Critical change recorded',
+      body: `${context.user.displayName} performed ${event.action}${
+        event.entityLabel ? ` on ${event.entityLabel}` : ''
+      }.`,
+      actionUrl: '/audit',
+      severity: 'CRITICAL',
+      entityType: event.entityType,
+      entityId: event.entityId,
+      exceptUserId: context.user.id,
+    });
   }
 
   async fetch(context: RequestContext, query: AuditQuery): Promise<Paginated<AuditLog>> {

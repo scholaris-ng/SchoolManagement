@@ -30,6 +30,9 @@ import { StudentDocument } from '../../modules/students/entities/studentDocument
 import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
+import { Notification } from '../../modules/notifications/entities/notification.entity';
+import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
+import { PushToken } from '../../modules/notifications/entities/pushToken.entity';
 
 /**
  * Entities are listed explicitly rather than glob-loaded: a glob resolves
@@ -63,6 +66,9 @@ export const entities = [
   StudentDocument,
   Guardian,
   StudentGuardian,
+  Notification,
+  NotificationPreference,
+  PushToken,
 ];
 
 /**

@@ -206,4 +206,61 @@ export class StudentRepository extends TenantRepository<Student> {
     );
     return rows.map((row) => row.studentId);
   }
+
+  // ─── Aggregates for the admin dashboard ────────────────────────────────────
+
+  async countActive(schoolId: string): Promise<number> {
+    const [row] = await this.repo.query(
+      `SELECT COUNT(*)::int AS total FROM students
+        WHERE school_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL`,
+      [schoolId],
+    );
+    return Number(row?.total ?? 0);
+  }
+
+  /**
+   * How many of today's active students were already here `days` ago.
+   *
+   * There is no historical snapshot table, so growth is derived from admission
+   * dates: the difference against the current total is the number admitted
+   * inside the window. It undercounts churn — a child who left in that period
+   * is in neither figure — so it answers "how many did we take on", which is
+   * what the dashboard's delta claims.
+   */
+  async countActiveAdmittedBefore(schoolId: string, days: number): Promise<number> {
+    const [row] = await this.repo.query(
+      `SELECT COUNT(*)::int AS total FROM students
+        WHERE school_id = $1
+          AND status = 'ACTIVE'
+          AND deleted_at IS NULL
+          AND admission_date <= (CURRENT_DATE - ($2::int * INTERVAL '1 day'))`,
+      [schoolId, days],
+    );
+    return Number(row?.total ?? 0);
+  }
+
+  /**
+   * Active students per level, through the class they are currently in.
+   *
+   * Levels with nobody in them are included — an empty level is a real fact
+   * about a school's shape, and dropping it would silently distort the chart.
+   */
+  async countActiveByLevel(schoolId: string): Promise<{ levelName: string; students: number }[]> {
+    return this.repo.query(
+      `SELECT l.name AS "levelName",
+              COUNT(s.id)::int AS students
+         FROM school_levels l
+         LEFT JOIN school_classes c
+                ON c.level_id = l.id AND c.deleted_at IS NULL
+         LEFT JOIN students s
+                ON s.current_class_id = c.id
+               AND s.school_id = l.school_id
+               AND s.status = 'ACTIVE'
+               AND s.deleted_at IS NULL
+        WHERE l.school_id = $1 AND l.deleted_at IS NULL
+        GROUP BY l.id, l.name, l.sequence
+        ORDER BY l.sequence ASC, l.name ASC`,
+      [schoolId],
+    );
+  }
 }

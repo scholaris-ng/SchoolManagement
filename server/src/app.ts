@@ -19,6 +19,8 @@ import auditRoutes from './modules/audit/routes/audit.routes';
 import academicsRoutes from './modules/academics/routes/academics.routes';
 import studentsRoutes from './modules/students/routes/students.routes';
 import guardiansRoutes from './modules/guardians/routes/guardians.routes';
+import notificationsRoutes from './modules/notifications/routes/notifications.routes';
+import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -50,6 +52,8 @@ export function createApp(): Express {
     academicsRoutes,
     studentsRoutes,
     guardiansRoutes,
+    notificationsRoutes,
+    dashboardRoutes,
   ];
   api.forEach((routes) => app.use(env.apiPrefix, routes));
 
