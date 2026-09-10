@@ -12,7 +12,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDate, formatPercent } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useStudent } from './api';
 import { StudentOverviewTab } from './tabs/overview-tab';
@@ -194,21 +194,3 @@ export function StudentDetailPage() {
 }
 
 /** Shared by several tabs: a labelled read-only value. */
-export function DetailRow({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn('flex flex-col gap-0.5 py-2', className)}>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-sm text-foreground">{value || <span className="text-muted-foreground">—</span>}</dd>
-    </div>
-  );
-}
-
-export { formatPercent };

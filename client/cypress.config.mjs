@@ -3,10 +3,19 @@ import { defineConfig } from 'cypress';
 /**
  * E2E configuration.
  *
+ * Deliberately `.mjs` rather than `.ts`: this package is `"type": "module"`,
+ * and Cypress transpiles a `.ts` config through ts-node using the nearest
+ * `tsconfig.json` — which here is a references-only solution file with no
+ * `compilerOptions`. ts-node then falls back to CommonJS and the config throws
+ * `exports is not defined in ES module scope`. Plain ESM sidesteps that; the
+ * specs themselves are still TypeScript, checked by `cypress/tsconfig.json`.
+ *
  * `baseUrl` points at the app started with `npm run dev:e2e`, which loads
  * `.env.e2e`. That mode proxies `/api` to a dead local port on purpose: a
  * request a spec forgot to stub is refused instantly rather than reaching a
  * real API or database. See `cypress/README.md`.
+ *
+ * @type {import('cypress').ConfigOptions}
  */
 export default defineConfig({
   e2e: {

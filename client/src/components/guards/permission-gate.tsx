@@ -53,6 +53,7 @@ export function RequirePermission({
     <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
       <EmptyState
         icon={<Lock />}
+        data-cy="access-denied"
         title="You do not have access to this page"
         description="Your role in this school does not include this area. Ask a school administrator if you think that is wrong."
       />

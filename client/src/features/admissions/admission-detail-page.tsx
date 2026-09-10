@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
+import { Field } from './admission-detail-page-parts';
 
 /** Which statuses may follow the current one, in the order staff work through. */
 const NEXT_STATUSES: Record<ApplicationStatus, ApplicationStatus[]> = {
@@ -438,14 +439,5 @@ export function AdmissionDetailPage() {
         onOpenChange={setConvertOpen}
       />
     </PageContainer>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 break-words">{value}</dd>
-    </div>
   );
 }

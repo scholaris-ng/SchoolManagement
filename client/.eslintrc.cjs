@@ -20,10 +20,15 @@ module.exports = {
     {
       // Cypress specs and support files run in the runner, not the browser
       // bundle: they get Mocha's globals and the `cy` / `Cypress` objects.
-      files: ['cypress/**/*.ts', 'cypress.config.ts'],
-      env: { 'cypress/globals': true },
+      files: ['cypress/**/*.ts', 'cypress.config.mjs'],
+      env: { 'cypress/globals': true, node: true },
       plugins: ['cypress'],
       extends: ['plugin:cypress/recommended'],
+    },
+    {
+      // Build/test tooling: Node scripts, not browser code.
+      files: ['scripts/*.mjs'],
+      env: { node: true, browser: false },
     },
   ],
 };

@@ -9,8 +9,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Label,
-  Switch,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
@@ -18,6 +16,7 @@ import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SettingsTabs } from './settings-tabs';
+import { Field, Toggle } from './school-settings-page-parts';
 
 const CURRENCIES = [
   { code: 'NGN', symbol: '₦', label: 'Nigerian naira' },
@@ -366,54 +365,5 @@ export function SchoolSettingsPage() {
         </CardContent>
       </Card>
     </PageContainer>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  required,
-  className,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  required?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label required={required}>{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-function Toggle({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description?: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border py-3 last:border-0">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-      </div>
-      <Switch
-        data-cy={`toggle-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-        checked={checked}
-        onCheckedChange={onChange}
-        aria-label={label}
-      />
-    </div>
   );
 }

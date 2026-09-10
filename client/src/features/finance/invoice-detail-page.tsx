@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import { Field, Row } from './invoice-detail-page-parts';
 
 export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -174,39 +175,5 @@ export function InvoiceDetailPage() {
         </CardContent>
       </Card>
     </PageContainer>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="truncate font-medium">{value}</dd>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  emphasis,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  hint?: string;
-  tone?: 'danger' | 'success';
-}) {
-  const toneClass = tone === 'danger' ? 'text-danger' : tone === 'success' ? 'text-success' : '';
-  return (
-    <div className={`flex items-baseline justify-between gap-4 ${emphasis ? 'font-semibold' : ''}`}>
-      <dt className={emphasis ? '' : 'text-muted-foreground'}>
-        {label}
-        {hint && <span className="block text-xs font-normal text-muted-foreground">{hint}</span>}
-      </dt>
-      <dd className={`tabular-nums ${toneClass}`}>{value}</dd>
-    </div>
   );
 }

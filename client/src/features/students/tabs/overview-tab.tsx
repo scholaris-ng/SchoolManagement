@@ -2,7 +2,7 @@ import { AlertTriangle, GraduationCap } from 'lucide-react';
 import { formatDate } from '@/lib/format';
 import type { Student } from '@/types/people';
 import { useStudentEnrollments } from '../api';
-import { DetailRow } from '../student-detail-page';
+import { DetailRow } from '../student-detail-page-parts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, EmptyState, LoadingState } from '@/components/ui/feedback';

@@ -7,6 +7,21 @@ import { ok, fail, validationFailure } from '../../support/api';
  * rejection that must not look like a success.
  */
 describe('Create a student', () => {
+  /**
+   * Every field `studentFormSchema` marks required. Filling fewer would leave
+   * the form blocked on validation, and a spec waiting on a request the app was
+   * right not to send looks like an app bug rather than a test bug.
+   */
+  const fillRequiredFields = (admissionNo = 'BFA/2026/117') => {
+    cy.dataCy('field-admissionNo').type(admissionNo);
+    cy.dataCy('field-gender').select('FEMALE');
+    cy.dataCy('field-firstName').type('Chidi');
+    cy.dataCy('field-lastName').type('Nwankwo');
+    cy.dataCy('field-dateOfBirth').type('2013-05-14');
+    cy.dataCy('field-currentClassId').select('e2e-class-1');
+    cy.dataCy('field-admissionDate').type('2026-09-01');
+  };
+
   beforeEach(() => {
     cy.visit('/sign-in');
     cy.login('admin');
@@ -16,7 +31,13 @@ describe('Create a student', () => {
       '/academics/classes*',
       {
         body: ok([
-          { id: 'e2e-class-1', name: 'JSS 1 Gold', levelId: 'e2e-level-1', levelName: 'JSS 1', enrolledCount: 32 },
+          {
+            id: 'e2e-class-1',
+            name: 'JSS 1 Gold',
+            levelId: 'e2e-level-1',
+            levelName: 'JSS 1',
+            enrolledCount: 32,
+          },
         ]),
       },
       'classes',
@@ -24,7 +45,7 @@ describe('Create a student', () => {
     cy.interceptApi('GET', '/academics/houses', { body: ok([]) }, 'houses');
 
     cy.visit('/students/new');
-    cy.waitForLoader();
+    cy.wait('@classes');
   });
 
   it('creates the student and opens the new record', () => {
@@ -41,11 +62,7 @@ describe('Create a student', () => {
       'createStudent',
     );
 
-    cy.dataCy('field-firstName').type('Chidi');
-    cy.dataCy('field-lastName').type('Nwankwo');
-    cy.dataCy('field-admissionNo').type('BFA/2026/117');
-    cy.dataCy('field-dateOfBirth').type('2013-05-14');
-
+    fillRequiredFields();
     cy.dataCy('form-submit').click();
 
     cy.wait('@createStudent').its('request.body.firstName').should('eq', 'Chidi');
@@ -75,11 +92,7 @@ describe('Create a student', () => {
       'rejectedStudent',
     );
 
-    cy.dataCy('field-firstName').type('Chidi');
-    cy.dataCy('field-lastName').type('Nwankwo');
-    cy.dataCy('field-admissionNo').type('BFA/2024/001');
-    cy.dataCy('field-dateOfBirth').type('2013-05-14');
-
+    fillRequiredFields('BFA/2024/001');
     cy.dataCy('form-submit').click();
 
     cy.wait('@rejectedStudent');
@@ -97,11 +110,7 @@ describe('Create a student', () => {
       'brokenCreate',
     );
 
-    cy.dataCy('field-firstName').type('Chidi');
-    cy.dataCy('field-lastName').type('Nwankwo');
-    cy.dataCy('field-admissionNo').type('BFA/2026/118');
-    cy.dataCy('field-dateOfBirth').type('2013-05-14');
-
+    fillRequiredFields('BFA/2026/118');
     cy.dataCy('form-submit').click();
 
     cy.wait('@brokenCreate');

@@ -2,25 +2,10 @@ import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ListQuery, SortDirection } from '@/types/api';
 import { useDebouncedValue } from './use-debounced-value';
+import { useListQueryActions } from './use-list-query-actions';
+import type { ListQueryState } from './use-list-query.types';
 
-export interface ListQueryState {
-  /** Ready to hand straight to an API client. */
-  query: ListQuery;
-  page: number;
-  pageSize: number;
-  search: string;
-  sortBy?: string;
-  sortDir?: SortDirection;
-  filters: Record<string, string | undefined>;
-  setPage: (page: number) => void;
-  setPageSize: (pageSize: number) => void;
-  setSearch: (search: string) => void;
-  setSort: (sortBy: string, sortDir: SortDirection) => void;
-  setFilter: (key: string, value: string | undefined) => void;
-  reset: () => void;
-  isFiltered: boolean;
-}
-
+export type { ListQueryState } from './use-list-query.types';
 /**
  * List state lives in the URL.
  *
@@ -66,84 +51,13 @@ export function useListQuery(options: {
     return result;
   }, [filterKeys, params, nameOf]);
 
-  const update = useCallback(
-    (mutate: (next: URLSearchParams) => void, { resetPage = true } = {}) => {
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          mutate(next);
-          if (resetPage) next.delete(nameOf('page'));
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setParams, nameOf],
+  const { setPage, setPageSize, setSearch, setSort, setFilter, reset } = useListQueryActions(
+    setParams,
+    nameOf,
+    defaultPageSize,
+    filterKeys,
   );
 
-  const setPage = useCallback(
-    (value: number) =>
-      update(
-        (next) => {
-          if (value <= 1) next.delete(nameOf('page'));
-          else next.set(nameOf('page'), String(value));
-        },
-        { resetPage: false },
-      ),
-    [update, nameOf],
-  );
-
-  const setPageSize = useCallback(
-    (value: number) =>
-      update((next) => {
-        if (value === defaultPageSize) next.delete(nameOf('size'));
-        else next.set(nameOf('size'), String(value));
-      }),
-    [update, nameOf, defaultPageSize],
-  );
-
-  const setSearch = useCallback(
-    (value: string) =>
-      update((next) => {
-        if (!value) next.delete(nameOf('q'));
-        else next.set(nameOf('q'), value);
-      }),
-    [update, nameOf],
-  );
-
-  const setSort = useCallback(
-    (nextSortBy: string, nextSortDir: SortDirection) =>
-      update(
-        (next) => {
-          next.set(nameOf('sort'), nextSortBy);
-          next.set(nameOf('dir'), nextSortDir);
-        },
-        { resetPage: false },
-      ),
-    [update, nameOf],
-  );
-
-  const setFilter = useCallback(
-    (key: string, value: string | undefined) =>
-      update((next) => {
-        if (!value) next.delete(nameOf(key));
-        else next.set(nameOf(key), value);
-      }),
-    [update, nameOf],
-  );
-
-  const reset = useCallback(
-    () =>
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          [...filterKeys, 'q', 'page', 'sort', 'dir'].forEach((key) => next.delete(nameOf(key)));
-          return next;
-        },
-        { replace: true },
-      ),
-    [setParams, filterKeys, nameOf],
-  );
 
   const query = useMemo<ListQuery>(() => {
     const result: ListQuery = { page, pageSize };

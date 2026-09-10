@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Field } from './incident-detail-page-parts';
 
 const NEXT_STATUSES: Record<IncidentStatus, IncidentStatus[]> = {
   REPORTED: ['REFERRED', 'DISMISSED'],
@@ -426,14 +427,5 @@ export function IncidentDetailPage() {
         </DialogContent>
       </Dialog>
     </PageContainer>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="truncate font-medium">{value}</dd>
-    </div>
   );
 }

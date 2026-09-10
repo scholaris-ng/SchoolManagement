@@ -80,7 +80,11 @@ needs no new attributes at all:
 | Component | Yields |
 | --- | --- |
 | `TextField`, `NumberField`, `SelectField`, … | `field-<name>` — the react-hook-form path |
-| `<DataTable data-cy="students-table">` | `students-table`, `-row` (one per row, each with `data-row-id`), `-empty`, `-error`, `-error-retry`, `-sort-<column>`, `-select-all`, `-select-<rowId>` |
+| `<DataTable data-cy="students-table">` | `students-table`, `-row` (one per desktop row, each with `data-row-id`), `-card` (the same rows in the mobile layout), `-empty`, `-error`, `-error-retry`, `-sort-<column>`, `-select-all`, `-select-<rowId>` |
+
+> Both table layouts are in the DOM at once — a breakpoint hides one — so
+> `-row` and `-card` are separate selectors. At the default viewport assert on
+> `-row`; only a spec that resizes to a phone should use `-card`.
 | `<FilterBar>` | `filter-search`, `filter-<key>`, `filter-chip-remove-<key>`, `filter-reset` |
 | `<Pagination>` | `pagination-first`, `-prev`, `-next`, `-last`, `-page-<n>`, `-size` |
 | `<FormActions>` | `form-submit`, `form-cancel` |

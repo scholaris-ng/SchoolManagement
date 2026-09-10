@@ -92,17 +92,34 @@ describe('Students list', () => {
       cy.dataCy('students-list-promote-class').should('not.exist');
     });
 
-    it('keeps a parent out of the register entirely', () => {
+    it('shows the access-denied state to a role without student.read', () => {
       cy.visit('/sign-in');
-      cy.login('parent');
-      cy.interceptApi('GET', '/dashboard/parent', { body: ok({}) }, 'parentDashboard');
+      cy.login('student');
 
       cy.visit('/students');
 
-      // A parent has `student.read` only for their own children, which the
-      // register route does not grant: the guard redirects rather than
-      // rendering a page the API would refuse to fill.
-      cy.location('pathname').should('not.eq', '/students');
+      // The guard renders in place rather than redirecting, so the user is told
+      // why they cannot see the page instead of being bounced somewhere else.
+      cy.dataCy('access-denied').should('be.visible');
+      cy.dataCy('students-table').should('not.exist');
+    });
+
+    it('lets a parent open the register — the API scopes it to their children', () => {
+      cy.visit('/sign-in');
+      cy.login('parent');
+      stubSupporting();
+      cy.fixture('students/list').then((rows) => {
+        // A parent holds `student.read`, so the route opens. What keeps them
+        // from seeing the whole school is server-side scoping, not the guard:
+        // the API returns only their own children.
+        cy.interceptApi('GET', '/students*', { body: paged([rows[0]]) }, 'ownChildren');
+      });
+
+      cy.visit('/students');
+      cy.wait('@ownChildren');
+
+      cy.dataCy('students-table-row').should('have.length', 1);
+      cy.dataCy('students-list-add-student').should('not.exist');
     });
   });
 });

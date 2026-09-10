@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { QrCode } from '@/components/data/qr-code';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Field } from './transcript-page-parts';
 
 /**
  * A student's full academic history.
@@ -189,14 +190,5 @@ export function TranscriptPage() {
         </footer>
       </div>
     </PageContainer>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="truncate font-medium">{value}</dd>
-    </div>
   );
 }

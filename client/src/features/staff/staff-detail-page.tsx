@@ -12,12 +12,12 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Progress,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import { Row, Metric } from './staff-detail-page-parts';
 
 export function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -186,43 +186,5 @@ export function StaffDetailPage() {
         </Card>
       </div>
     </PageContainer>
-  );
-}
-
-function Row({
-  icon,
-  label,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <span className="mt-0.5 shrink-0 text-muted-foreground [&_svg]:size-4" aria-hidden="true">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        <div className="min-w-0">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium tabular-nums">{formatPercent(value, 0)}</span>
-      </div>
-      <Progress
-        className="mt-1"
-        value={value}
-        tone={value >= 85 ? 'success' : value >= 60 ? 'warning' : 'danger'}
-      />
-    </div>
   );
 }

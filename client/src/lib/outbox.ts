@@ -1,14 +1,19 @@
-import { http } from './http';
 import { ApiError, isApiError } from './api-error';
 import { localStore, storageKeys } from './storage';
+import { send, createId } from './outbox-transport';
+import { MAX_ATTEMPTS } from './outbox.types';
+import type { InvalidateFn, Listener, OutboxEntry, OutboxState } from './outbox.types';
+
+export type {
+  InvalidateFn,
+  Listener,
+  OutboxEntry,
+  OutboxEntryStatus,
+  OutboxState,
+} from './outbox.types';
 
 /**
  * Offline mutation outbox (spec section 39).
- *
- * Nigerian schools lose connectivity and power routinely, and the workflows
- * that suffer most — attendance, score entry, exam answers — are exactly the
- * ones a teacher cannot simply redo. Mutations are therefore persisted to disk
- * the moment they are attempted and replayed when the network returns.
  *
  * Two rules keep this honest:
  *   1. A queued item is never reported to the user as "saved". Its state is
@@ -16,37 +21,6 @@ import { localStore, storageKeys } from './storage';
  *   2. Every entry carries an idempotency key so replay after an ambiguous
  *      failure cannot double-post a payment or duplicate a register.
  */
-
-export type OutboxEntryStatus = 'pending' | 'sending' | 'failed' | 'conflict';
-
-export interface OutboxEntry {
-  id: string;
-  /** Human label shown in the sync tray, e.g. "Attendance — JSS 1A, 12 May". */
-  label: string;
-  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  path: string;
-  body?: unknown;
-  idempotencyKey: string;
-  /** Query keys to invalidate once this entry succeeds. */
-  invalidate: string[][];
-  schoolId: string | null;
-  createdAt: number;
-  attempts: number;
-  lastError?: string;
-  status: OutboxEntryStatus;
-}
-
-export interface OutboxState {
-  entries: OutboxEntry[];
-  isOnline: boolean;
-  isFlushing: boolean;
-}
-
-type Listener = (state: OutboxState) => void;
-type InvalidateFn = (keys: string[][]) => void;
-
-const MAX_ATTEMPTS = 8;
-
 class Outbox {
   private entries: OutboxEntry[] = [];
   private listeners = new Set<Listener>();
@@ -241,25 +215,6 @@ class Outbox {
     const state = this.snapshot();
     this.listeners.forEach((listener) => listener(state));
   }
-}
-
-function send(entry: OutboxEntry): Promise<unknown> {
-  const options = { headers: { 'Idempotency-Key': entry.idempotencyKey } };
-  switch (entry.method) {
-    case 'POST':
-      return http.post(entry.path, entry.body, options);
-    case 'PATCH':
-      return http.patch(entry.path, entry.body, options);
-    case 'PUT':
-      return http.put(entry.path, entry.body, options);
-    case 'DELETE':
-      return http.delete(entry.path, options);
-  }
-}
-
-function createId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `ob_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export const outbox = new Outbox();

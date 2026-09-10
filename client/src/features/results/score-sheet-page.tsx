@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCheck, CloudOff, Save, Send, ShieldCheck, Undo2, Upload } from 'lucide-react';
+import { CloudOff, Save, Send, ShieldCheck, Undo2, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDateTime, formatPercent } from '@/lib/format';
 import { localStore, storageKeys } from '@/lib/storage';
@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { ConfirmDialog } from '@/components/ui/dialog';
+import { gradeFor, Stat, Step } from './score-sheet-page-parts';
 
 /** Local edits keyed `studentId:componentId`, held until the server takes them. */
 type Draft = Record<string, number | null>;
@@ -475,45 +476,5 @@ export function ScoreSheetPage() {
         }}
       />
     </PageContainer>
-  );
-}
-
-function gradeFor(total: number, sheet: { components: { maxScore: number }[] }): string {
-  const max = sheet.components.reduce((sum, component) => sum + component.maxScore, 0);
-  const percent = max === 0 ? 0 : (total / max) * 100;
-  if (percent >= 70) return 'A';
-  if (percent >= 60) return 'B';
-  if (percent >= 50) return 'C';
-  if (percent >= 45) return 'D';
-  if (percent >= 40) return 'E';
-  return 'F';
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function Step({ label, done, detail }: { label: string; done: boolean; detail?: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span
-        className={cn(
-          'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full',
-          done ? 'bg-success text-success-foreground' : 'border border-border',
-        )}
-        aria-hidden="true"
-      >
-        {done && <CheckCheck className="size-2.5" />}
-      </span>
-      <div className="min-w-0">
-        <p className={cn(done ? 'font-medium' : 'text-muted-foreground')}>{label}</p>
-        {detail && <p className="truncate text-xs text-muted-foreground">{detail}</p>}
-      </div>
-    </div>
   );
 }

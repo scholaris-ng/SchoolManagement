@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, SearchInput, Textarea } from '@/components/ui/input';
 import { Alert } from '@/components/ui/feedback';
 import { FormError } from '@/components/forms/form-actions';
+import { Row } from './invoice-form-page-parts';
 
 interface LineDraft {
   feeItemId: string;
@@ -373,22 +374,5 @@ export function InvoiceFormPage() {
         </Button>
       </div>
     </PageContainer>
-  );
-}
-
-function Row({
-  label,
-  value,
-  emphasis,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-}) {
-  return (
-    <div className={`flex items-baseline justify-between ${emphasis ? 'font-semibold' : ''}`}>
-      <dt className={emphasis ? '' : 'text-muted-foreground'}>{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
   );
 }
