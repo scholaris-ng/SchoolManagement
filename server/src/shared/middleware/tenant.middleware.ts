@@ -24,6 +24,9 @@ export async function tenantMiddleware(
 
     const service = SessionService.Instance;
     const user = await service.ensureUser(identity);
+    // Checked on every request, not only at sign-in: an account that registered
+    // but never verified must not reach a school's data by any route.
+    service.assertEmailVerified(user);
     const rows = await service.loadMemberships(user.id);
 
     const requested = readSchoolIdHeader(req);

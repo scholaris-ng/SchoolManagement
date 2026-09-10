@@ -61,6 +61,17 @@ const schema = z.object({
    */
   DEV_AUTH_ENABLED: booleanish,
 
+  // Outbound mail. Absent in local development, where verification codes are
+  // logged to the console instead of sent.
+  EMAIL_HOST: z.string().default('smtp.gmail.com'),
+  EMAIL_PORT: z.coerce.number().int().default(465),
+  EMAIL_USER: z.string().optional(),
+  EMAIL_PASSWORD: z.string().optional(),
+  EMAIL_FROM_NAME: z.string().default('Scholaris'),
+
+  /** How long an email verification code stays valid. */
+  VERIFICATION_CODE_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().default(300),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(20),
@@ -130,6 +141,18 @@ export const env = {
   },
 
   devAuthEnabled: raw.DEV_AUTH_ENABLED,
+
+  email: {
+    host: raw.EMAIL_HOST,
+    port: raw.EMAIL_PORT,
+    user: raw.EMAIL_USER,
+    password: raw.EMAIL_PASSWORD,
+    fromName: raw.EMAIL_FROM_NAME,
+    /** Without both a user and a password there is nothing to authenticate with. */
+    configured: Boolean(raw.EMAIL_USER && raw.EMAIL_PASSWORD),
+  },
+
+  verificationCodeTtlMinutes: raw.VERIFICATION_CODE_TTL_MINUTES,
 
   rateLimit: {
     windowMs: raw.RATE_LIMIT_WINDOW_MS,

@@ -47,13 +47,37 @@ export class SessionService {
       );
     }
 
+    const displayName = identity.displayName?.trim() || identity.email.split('@')[0];
+    const { firstName, lastName } = splitName(displayName);
+
     return this.users.create({
       firebaseUid: identity.firebaseUid,
       email: identity.email,
-      displayName: identity.displayName?.trim() || identity.email.split('@')[0],
+      firstName,
+      lastName,
+      displayName,
+      // This path is for someone a school invited, whose address Firebase has
+      // already confirmed. Self-registration sets this false and proves it with
+      // its own code — see `RegistrationService`.
+      emailVerified: identity.emailVerified,
       photoUrl: identity.photoUrl ?? null,
       isPlatformAdmin: false,
     });
+  }
+
+  /**
+   * Refuses a session for an address nobody has proved they control.
+   *
+   * Registration creates the account and the school up front so the person can
+   * come back to a half-finished sign-up, which means the account exists in a
+   * state that must not be usable. This is the gate that makes that safe.
+   */
+  assertEmailVerified(user: User): void {
+    if (!user.emailVerified) {
+      throw AppError.forbidden(
+        'Please verify your email address. Check your inbox for the six-digit code.',
+      );
+    }
   }
 
   async loadMemberships(userId: string): Promise<MembershipRow[]> {
@@ -97,6 +121,7 @@ export class SessionService {
 
   async buildSession(identity: AuthIdentity, requestedSchoolId: string | null): Promise<SessionDTO> {
     const user = await this.ensureUser(identity);
+    this.assertEmailVerified(user);
     const rows = await this.loadMemberships(user.id);
 
     // A blocked staff account is a distinct, explainable refusal — not the same
@@ -156,6 +181,17 @@ export class SessionService {
   }
 }
 
+/** "Adaeze Okonkwo" splits at the last space; a single word becomes the first name. */
+function splitName(displayName: string): { firstName: string; lastName: string } {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: 'Unknown', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    lastName: parts[parts.length - 1],
+  };
+}
+
 /**
  * A school may invent roles of its own, so the key list is split: the ones that
  * match a built-in name drive persona selection, and the rest are shown by name.
@@ -200,7 +236,10 @@ export function toUserDTO(user: User, rows: MembershipRow[]): AuthenticatedUserD
     id: user.id,
     firebaseUid: user.firebaseUid,
     email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
     displayName: user.displayName,
+    emailVerified: user.emailVerified,
     phone: user.phone,
     photoUrl: user.photoUrl,
     isPlatformAdmin: user.isPlatformAdmin,

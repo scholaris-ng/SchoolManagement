@@ -9,6 +9,7 @@ import { SchoolBranch } from '../../modules/school/entities/schoolBranch.entity'
 import { WebsiteContent } from '../../modules/school/entities/websiteContent.entity';
 import { User } from '../../modules/auth/entities/user.entity';
 import { SchoolMembership } from '../../modules/auth/entities/schoolMembership.entity';
+import { EmailVerification } from '../../modules/auth/entities/emailVerification.entity';
 import { Role } from '../../modules/rbac/entities/role.entity';
 import { MembershipRole } from '../../modules/rbac/entities/membershipRole.entity';
 import { AuditLog } from '../../modules/audit/entities/auditLog.entity';
@@ -36,6 +37,7 @@ export const entities = [
   WebsiteContent,
   User,
   SchoolMembership,
+  EmailVerification,
   Role,
   MembershipRole,
   AuditLog,

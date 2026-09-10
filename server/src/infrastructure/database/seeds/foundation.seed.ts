@@ -412,7 +412,11 @@ export async function seedFoundation(dataSource: DataSource): Promise<void> {
           // replaces this with the genuine uid.
           firebaseUid: `seed:${persona.email}`,
           email: persona.email,
+          firstName: persona.displayName.split(' ').slice(0, -1).join(' '),
+          lastName: persona.displayName.split(' ').slice(-1)[0],
           displayName: persona.displayName,
+          // Seeded accounts skip the code flow — they exist to be signed in as.
+          emailVerified: true,
           phone: null,
           photoUrl: null,
           isPlatformAdmin: false,

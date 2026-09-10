@@ -30,7 +30,10 @@ export interface AuthenticatedUserDTO {
   id: string;
   firebaseUid: string;
   email: string;
+  firstName: string;
+  lastName: string;
   displayName: string;
+  emailVerified: boolean;
   phone: string | null;
   photoUrl: string | null;
   isPlatformAdmin: boolean;

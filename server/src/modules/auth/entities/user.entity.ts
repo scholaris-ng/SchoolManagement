@@ -19,8 +19,27 @@ export class User extends SoftDeletableEntity {
   @Index()
   email: string;
 
+  @Column({ type: 'varchar', name: 'first_name', length: 100 })
+  firstName: string;
+
+  @Column({ type: 'varchar', name: 'last_name', length: 100 })
+  lastName: string;
+
+  /**
+   * Kept alongside the two name parts rather than derived on read: it is what
+   * the client renders everywhere, and a person may want to be shown as
+   * something other than "first last".
+   */
   @Column({ type: 'varchar', name: 'display_name', length: 160 })
   displayName: string;
+
+  /**
+   * Whether this address has been proved. Registration creates the account and
+   * the school immediately, but a session is refused until this is true, so an
+   * unverified address cannot be used to reach a school's data.
+   */
+  @Column({ type: 'boolean', name: 'email_verified', default: false })
+  emailVerified: boolean;
 
   @Column({ type: 'varchar', length: 40, nullable: true })
   phone: string | null;
