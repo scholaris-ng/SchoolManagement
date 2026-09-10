@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table2 } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
@@ -34,6 +34,13 @@ export function ScoreEntryPage() {
     list.filters.classId ? { classId: list.filters.classId } : {},
   );
   const terms = useTerms();
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (sheet: ScoreSheetSummary) => navigate(`/results/entry/${sheet.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<ScoreSheetSummary>[]>(
     () => [
@@ -157,7 +164,7 @@ export function ScoreEntryPage() {
         onRetry={() => void sheets.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(sheet) => navigate(`/results/entry/${sheet.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Table2 />}
         emptyTitle={list.isFiltered ? 'No score sheets match those filters' : 'No score sheets yet'}
         emptyDescription={

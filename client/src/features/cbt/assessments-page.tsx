@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, Clock, Plus } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
@@ -43,6 +43,13 @@ export function AssessmentsPage() {
   const assessments = useAssessments(list.query);
 
   const isStudent = persona === 'student';
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (assessment: CbtAssessment) => navigate(`/cbt/${assessment.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<CbtAssessment>[]>(
     () => [
@@ -196,7 +203,7 @@ export function AssessmentsPage() {
         onRetry={() => void assessments.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(assessment) => navigate(`/cbt/${assessment.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<BookOpen />}
         emptyTitle={isStudent ? 'Nothing open for you right now' : 'No assessments yet'}
         emptyDescription={

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, UploadCloud, UserCog } from 'lucide-react';
 import { formatDate } from '@/lib/format';
@@ -33,6 +33,13 @@ export function StaffListPage() {
     defaultSortBy: 'lastName',
   });
   const staff = useStaffList(list.query);
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (member: StaffMember) => navigate(`/staff/${member.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<StaffMember>[]>(
     () => [
@@ -169,7 +176,7 @@ export function StaffListPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(member) => navigate(`/staff/${member.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<UserCog />}
         emptyTitle={list.isFiltered ? 'No staff match those filters' : 'No staff recorded yet'}
         emptyDescription={

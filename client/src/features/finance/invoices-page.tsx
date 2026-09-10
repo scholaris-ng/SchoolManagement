@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Plus, Receipt } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -34,6 +34,13 @@ export function InvoicesPage() {
   const classes = useClasses();
 
   const currency = 'NGN';
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (invoice: Invoice) => navigate(`/finance/invoices/${invoice.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<Invoice>[]>(
     () => [
@@ -206,7 +213,7 @@ export function InvoicesPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(invoice) => navigate(`/finance/invoices/${invoice.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Receipt />}
         emptyTitle={list.isFiltered ? 'No invoices match those filters' : 'No invoices yet'}
         emptyDescription={

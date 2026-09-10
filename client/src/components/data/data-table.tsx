@@ -1,8 +1,9 @@
-import { Fragment, useId } from 'react';
+import { useCallback, useId } from 'react';
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SortDirection } from '@/types/api';
 import { Checkbox } from '@/components/ui/primitives';
+import { DataTableRow, DataTableCard } from './data-table-row';
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/ui/feedback';
 import { Pagination } from './pagination';
 import type { Column, DataTableProps } from './data-table.types';
@@ -56,13 +57,18 @@ export function DataTable<T>({
     }
   };
 
-  const toggleOne = (id: string) => {
-    if (!onSelectionChange) return;
-    const current = selectedIds ?? [];
-    onSelectionChange(
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
-    );
-  };
+  // Stable across renders so the memoised rows below are not invalidated by a
+  // fresh handler identity on every parent render.
+  const toggleOne = useCallback(
+    (id: string) => {
+      if (!onSelectionChange) return;
+      const current = selectedIds ?? [];
+      onSelectionChange(
+        current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+      );
+    },
+    [onSelectionChange, selectedIds],
+  );
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortKey || !onSortChange) return;
@@ -167,46 +173,20 @@ export function DataTable<T>({
               <tbody className="divide-y divide-border">
                 {rows.map((row) => {
                   const id = rowKey(row);
-                  const selected = selectedIds?.includes(id);
-                  const interactive = Boolean(onRowClick || rowHref);
                   return (
-                    <tr
+                    <DataTableRow
                       key={id}
-                      data-cy={cy('row')}
-                      data-row-id={id}
-                      onClick={onRowClick ? () => onRowClick(row) : undefined}
-                      className={cn(
-                        'transition-colors',
-                        selected ? 'bg-primary-subtle' : 'hover:bg-muted/50',
-                        interactive && 'cursor-pointer',
-                        rowClassName?.(row),
-                      )}
-                    >
-                      {selectable && (
-                        <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-                          <Checkbox
-                            checked={selected}
-                            onCheckedChange={() => toggleOne(id)}
-                            data-cy={cy(`select-${id}`)}
-                            aria-label={`Select row ${id}`}
-                          />
-                        </td>
-                      )}
-                      {visibleColumns.map((column) => (
-                        <td
-                          key={column.id}
-                          className={cn(
-                            'px-3 py-2.5 align-middle',
-                            column.align === 'right' && 'text-right',
-                            column.align === 'center' && 'text-center',
-                            column.sticky && 'sticky left-0 z-10 bg-card',
-                            column.className,
-                          )}
-                        >
-                          {column.cell(row)}
-                        </td>
-                      ))}
-                    </tr>
+                      row={row}
+                      id={id}
+                      columns={visibleColumns}
+                      selected={Boolean(selectedIds?.includes(id))}
+                      selectable={selectable}
+                      interactive={Boolean(onRowClick || rowHref)}
+                      dataCy={dataCy}
+                      onRowClick={onRowClick}
+                      onToggleSelect={toggleOne}
+                      rowClassName={rowClassName}
+                    />
                   );
                 })}
               </tbody>
@@ -218,51 +198,18 @@ export function DataTable<T>({
             <ul className="divide-y divide-border lg:hidden">
               {rows.map((row) => {
                 const id = rowKey(row);
-                const selected = selectedIds?.includes(id);
                 return (
-                  <li
+                  <DataTableCard
                     key={id}
-                    // Distinct from the desktop `-row`: both layouts are in the
-                    // DOM at once (one hidden by a breakpoint), so sharing a
-                    // selector would make every row appear twice to a test.
-                    data-cy={cy('card')}
-                    data-row-id={id}
-                    className={cn('p-4', selected && 'bg-primary-subtle')}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  >
-                    <div className="flex items-start gap-3">
-                      {selectable && (
-                        <div className="pt-0.5" onClick={(event) => event.stopPropagation()}>
-                          <Checkbox
-                            checked={selected}
-                            onCheckedChange={() => toggleOne(id)}
-                            data-cy={cy(`select-${id}`)}
-                            aria-label={`Select row ${id}`}
-                          />
-                        </div>
-                      )}
-                      <dl className="min-w-0 flex-1 space-y-1.5">
-                        {cardColumns.map((column, index) => (
-                          <Fragment key={column.id}>
-                            {index === 0 ? (
-                              <dd className="text-sm font-medium text-foreground">
-                                {(column.mobileCell ?? column.cell)(row)}
-                              </dd>
-                            ) : (
-                              <div className="flex items-baseline justify-between gap-3 text-sm">
-                                <dt className="shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
-                                  {column.header}
-                                </dt>
-                                <dd className="min-w-0 text-right">
-                                  {(column.mobileCell ?? column.cell)(row)}
-                                </dd>
-                              </div>
-                            )}
-                          </Fragment>
-                        ))}
-                      </dl>
-                    </div>
-                  </li>
+                    row={row}
+                    id={id}
+                    columns={cardColumns}
+                    selected={Boolean(selectedIds?.includes(id))}
+                    selectable={selectable}
+                    dataCy={dataCy}
+                    onRowClick={onRowClick}
+                    onToggleSelect={toggleOne}
+                  />
                 );
               })}
             </ul>

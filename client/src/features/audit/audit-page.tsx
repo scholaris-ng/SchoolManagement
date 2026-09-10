@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Download, Lock, ScrollText } from 'lucide-react';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { exportRowsToXlsx } from '@/lib/xlsx';
@@ -36,6 +36,13 @@ export function AuditPage() {
   const [selected, setSelected] = useState<AuditLogEntry | null>(null);
 
   const rows = useMemo(() => audit.data?.items ?? [], [audit.data]);
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (row: AuditLogEntry) => setSelected(row),
+    [setSelected],
+  );
 
   const columns = useMemo<Column<AuditLogEntry>[]>(
     () => [
@@ -172,7 +179,7 @@ export function AuditPage() {
         onRetry={() => void audit.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(row) => setSelected(row)}
+        onRowClick={handleRowClick}
         emptyIcon={<ScrollText />}
         emptyTitle="Nothing audited yet"
         emptyDescription="Sensitive changes — published results, payments, role edits — appear here as they happen."

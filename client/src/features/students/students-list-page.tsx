@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Download, Plus, UploadCloud, Users } from 'lucide-react';
 import { formatDate } from '@/lib/format';
@@ -46,6 +46,13 @@ export function StudentsListPage() {
   const students = useStudents(query);
   const classes = useClasses();
   const levels = useLevels();
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (student: Student) => navigate(`/students/${student.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<Student>[]>(
     () => [
@@ -259,7 +266,7 @@ export function StudentsListPage() {
         onSortChange={list.setSort}
         selectedIds={can('student.update') ? selectedIds : undefined}
         onSelectionChange={can('student.update') ? setSelectedIds : undefined}
-        onRowClick={(student) => navigate(`/students/${student.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Users />}
         emptyTitle={list.isFiltered ? 'No students match those filters' : 'No students yet'}
         emptyDescription={

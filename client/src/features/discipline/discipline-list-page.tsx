@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Gavel, Plus } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
@@ -39,6 +39,13 @@ export function DisciplineListPage() {
   });
   const incidents = useIncidents(list.query);
   const classes = useClasses();
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (incident: DisciplineIncident) => navigate(`/discipline/${incident.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<DisciplineIncident>[]>(
     () => [
@@ -163,7 +170,7 @@ export function DisciplineListPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(incident) => navigate(`/discipline/${incident.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Gavel />}
         emptyTitle={list.isFiltered ? 'No incidents match those filters' : 'No incidents recorded'}
         emptyDescription={

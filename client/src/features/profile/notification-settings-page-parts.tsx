@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import {
   Bell,
   BellOff,
@@ -9,10 +9,7 @@ import { disablePush, enablePush, pushSupportState, type PushSupportState } from
 import {
   useRegisterPushToken,
 } from '@/features/notifications/api';
-import type {
-  NotificationChannel,
-  NotificationPreference,
-} from '@/types/engagement';
+import type { NotificationCategory, NotificationChannel, NotificationPreference } from '@/types/engagement';
 import {
   Card,
   CardContent,
@@ -30,14 +27,25 @@ import { CHANNELS, CATEGORY_META } from './notification-settings-page-constants'
  * the limit in section 17 of the frontend guide.
  */
 
-export function PreferenceRow({
+/**
+ * One row of the preference list.
+ *
+ * Memoised because toggling one channel re-renders the whole list, and
+ * `onToggle` takes the category back out so the page can hold a single stable
+ * handler rather than minting one per row.
+ */
+export const PreferenceRow = memo(function PreferenceRow({
   preference,
   saving,
   onToggle,
 }: {
   preference: NotificationPreference;
   saving: boolean;
-  onToggle: (channel: NotificationChannel, enabled: boolean) => void;
+  onToggle: (
+    category: NotificationCategory,
+    channel: NotificationChannel,
+    enabled: boolean,
+  ) => void;
 }) {
   const meta = CATEGORY_META[preference.category];
 
@@ -76,7 +84,7 @@ export function PreferenceRow({
                   <Switch
                     data-cy="profile-notification-settings-checked"
                     checked={checked}
-                    onCheckedChange={(value) => onToggle(channel.key, value)}
+                    onCheckedChange={(value) => onToggle(preference.category, channel.key, value)}
                     aria-label={label}
                   />
                 </label>
@@ -87,7 +95,7 @@ export function PreferenceRow({
       </div>
     </li>
   );
-}
+});
 
 /**
  * Push has to be enabled twice: once by the browser (permission) and once by

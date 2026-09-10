@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart, Mail, Phone, Plus, Send, UploadCloud } from 'lucide-react';
 import { formatRelative } from '@/lib/format';
@@ -22,6 +22,13 @@ export function GuardiansListPage() {
   const list = useListQuery({ filterKeys: ['hasPortalAccess'], defaultSortBy: 'lastName' });
   const guardians = useGuardians(list.query);
   const invite = useInviteGuardian();
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (guardian: Guardian) => navigate(`/guardians/${guardian.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<Guardian>[]>(
     () => [
@@ -175,7 +182,7 @@ export function GuardiansListPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(guardian) => navigate(`/guardians/${guardian.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Heart />}
         emptyTitle={list.isFiltered ? 'No guardians match those filters' : 'No guardians yet'}
         emptyDescription={

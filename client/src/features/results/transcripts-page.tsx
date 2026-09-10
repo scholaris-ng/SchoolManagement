@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import { formatDate } from '@/lib/format';
@@ -29,6 +29,13 @@ export function TranscriptsPage() {
   const navigate = useNavigate();
   const list = useListQuery({ filterKeys: ['status', 'classId'], defaultSortBy: 'lastName' });
   const students = useStudents(list.query);
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (student: Student) => navigate(`/transcripts/${student.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<Student>[]>(
     () => [
@@ -125,7 +132,7 @@ export function TranscriptsPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(student) => navigate(`/transcripts/${student.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<GraduationCap />}
         emptyTitle="No students found"
         emptyDescription="Transcripts are built from published results across sessions."

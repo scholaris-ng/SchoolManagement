@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -50,6 +50,13 @@ export function RetentionPage() {
   const rows = useMemo(() => risk.data?.items ?? [], [risk.data]);
   const highCount = rows.filter((row) => row.riskBand === 'HIGH').length;
   const mediumCount = rows.filter((row) => row.riskBand === 'MEDIUM').length;
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (row: RetentionRiskRow) => setSelected(row),
+    [setSelected],
+  );
 
   const columns = useMemo<Column<RetentionRiskRow>[]>(
     () => [
@@ -245,7 +252,7 @@ export function RetentionPage() {
         onRetry={() => void risk.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(row) => setSelected(row)}
+        onRowClick={handleRowClick}
         emptyIcon={<ShieldCheck />}
         emptyTitle="No families are showing warning signs"
         emptyDescription="Attendance, fee balances and guardian engagement all look healthy."

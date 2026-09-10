@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCheck, CreditCard, Download, Plus, Receipt } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -43,6 +43,13 @@ export function PaymentsPage() {
   const [pendingReconcile, setPendingReconcile] = useState<Payment | null>(null);
 
   const currency = 'NGN';
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (payment: Payment) => navigate(`/finance/receipts/${payment.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<Payment>[]>(
     () => [
@@ -238,7 +245,7 @@ export function PaymentsPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(payment) => navigate(`/finance/receipts/${payment.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<CreditCard />}
         emptyTitle={list.isFiltered ? 'No payments match those filters' : 'No payments recorded yet'}
         emptyDescription={

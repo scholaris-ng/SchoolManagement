@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CreditCard, Download, Wallet } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -31,6 +31,13 @@ export function DebtorsPage() {
   const classes = useClasses();
 
   const currency = 'NGN';
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (row: StudentFinanceSummary) => navigate(`/students/${row.studentId}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<StudentFinanceSummary>[]>(
     () => [
@@ -202,7 +209,7 @@ export function DebtorsPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(row) => navigate(`/students/${row.studentId}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Wallet />}
         emptyTitle="Every account is settled"
         emptyDescription="No family currently owes the school anything."

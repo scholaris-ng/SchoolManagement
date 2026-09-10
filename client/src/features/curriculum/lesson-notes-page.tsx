@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { NotebookPen, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/format';
@@ -38,6 +38,13 @@ export function LessonNotesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const canDelete = can('lessonnote.manage');
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (note: LessonNote) => navigate(`/lesson-notes/${note.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<LessonNote>[]>(
     () => [
@@ -170,7 +177,7 @@ export function LessonNotesPage() {
         onSortChange={list.setSort}
         selectedIds={canDelete ? selectedIds : undefined}
         onSelectionChange={canDelete ? setSelectedIds : undefined}
-        onRowClick={(note) => navigate(`/lesson-notes/${note.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<NotebookPen />}
         emptyTitle={list.isFiltered ? 'No lesson notes match those filters' : 'No lesson notes yet'}
         emptyDescription={

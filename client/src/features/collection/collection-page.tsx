@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bus, UserCheck } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
@@ -27,6 +27,13 @@ export function CollectionPage() {
   const list = useListQuery({ defaultPageSize: 25 });
   const events = useCollectionEvents(list.query);
   const [releaseOpen, setReleaseOpen] = useState(false);
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (event: CollectionEvent) => navigate(`/students/${event.studentId}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<CollectionEvent>[]>(
     () => [
@@ -137,7 +144,7 @@ export function CollectionPage() {
         onRetry={() => void events.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(event) => navigate(`/students/${event.studentId}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<Bus />}
         emptyTitle="No collections recorded yet"
         emptyDescription="Records appear here as children are released at the gate."

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -47,6 +47,13 @@ export function AdmissionsListPage() {
   const applications = useAdmissions(list.query);
   const funnel = useAdmissionFunnel();
   const levels = useLevels();
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (application: AdmissionApplication) => navigate(`/admissions/${application.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<AdmissionApplication>[]>(
     () => [
@@ -258,7 +265,7 @@ export function AdmissionsListPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
-        onRowClick={(application) => navigate(`/admissions/${application.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<BadgeCheck />}
         emptyTitle={list.isFiltered ? 'No applications match those filters' : 'No applications yet'}
         emptyDescription={

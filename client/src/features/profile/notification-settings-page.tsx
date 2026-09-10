@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import {
   useNotificationPreferences,
   useUpdateNotificationPreference,
@@ -12,6 +13,7 @@ import {
 } from '@/components/ui/primitives';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PreferenceRow, PushCard } from './notification-settings-page-parts';
+import type { NotificationCategory, NotificationChannel } from '@/types/engagement';
 
 
 
@@ -27,6 +29,14 @@ import { PreferenceRow, PushCard } from './notification-settings-page-parts';
 export function NotificationSettingsPage() {
   const preferences = useNotificationPreferences();
   const update = useUpdateNotificationPreference();
+
+  // One handler for the whole list rather than one per row, so the memoised
+  // rows are not invalidated every time any preference changes.
+  const handleToggle = useCallback(
+    (category: NotificationCategory, channel: NotificationChannel, enabled: boolean) =>
+      update.mutate({ category, channel, enabled }),
+    [update],
+  );
 
   return (
     <PageContainer width="narrow">
@@ -58,9 +68,7 @@ export function NotificationSettingsPage() {
                   key={preference.category}
                   preference={preference}
                   saving={update.isPending}
-                  onToggle={(channel, enabled) =>
-                    update.mutate({ category: preference.category, channel, enabled })
-                  }
+                  onToggle={handleToggle}
                 />
               ))}
             </ul>

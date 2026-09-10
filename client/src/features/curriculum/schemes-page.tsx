@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ListChecks, Sparkles } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
@@ -29,6 +29,13 @@ export function SchemesPage() {
   const generate = useGenerateScheme();
 
   const [generateOpen, setGenerateOpen] = useState(false);
+
+  // Hoisted so the memoised rows in `DataTable` are not invalidated by a
+  // new handler identity on every render.
+  const handleRowClick = useCallback(
+    (scheme: SchemeSummary) => navigate(`/schemes/${scheme.id}`),
+    [navigate],
+  );
 
   const columns = useMemo<Column<SchemeSummary>[]>(
     () => [
@@ -134,7 +141,7 @@ export function SchemesPage() {
         onRetry={() => void schemes.refetch()}
         onPageChange={list.setPage}
         onPageSizeChange={list.setPageSize}
-        onRowClick={(scheme) => navigate(`/schemes/${scheme.id}`)}
+        onRowClick={handleRowClick}
         emptyIcon={<ListChecks />}
         emptyTitle={list.isFiltered ? 'No schemes match those filters' : 'No schemes of work yet'}
         emptyDescription={
