@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { identity, type IdentityUser } from '@/lib/identity';
+import {
+  AuthEndpoints,
+  type RegisterSchoolInput,
+  type RegistrationResult,
+} from '@/features/auth/auth.endpoints';
 import { configureHttp, http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { localStore, storageKeys } from '@/lib/storage';
@@ -31,7 +36,8 @@ interface AuthContextValue {
   can: (requirement?: PermissionRequirement) => boolean;
   switchSchool: (schoolId: string) => void;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  register: (values: RegisterSchoolInput) => Promise<RegistrationResult>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -150,13 +156,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [queryClient],
   );
 
-  const signUp = useCallback(
-    async (email: string, password: string, displayName: string) => {
-      await identity.signUp(email, password, displayName);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
-    },
-    [queryClient],
+  /**
+   * Registration deliberately does NOT live here.
+   *
+   * Creating a school means creating a credential, a school, its roles and an
+   * administrator membership together, and only the server can do that as one
+   * operation. Calling `identity.signUp` from the browser would create a
+   * Firebase account first and leave it orphaned if provisioning then failed.
+   *
+   * `SignUpPage` posts to `/auth/register` instead, and the account stays
+   * unusable until the emailed code is entered — so there is no session to
+   * establish here and nothing to invalidate.
+   */
+  const register = useCallback(
+    async (values: RegisterSchoolInput) => AuthEndpoints.register(values),
+    [],
   );
+
+  const verifyEmail = useCallback(async (email: string, code: string) => {
+    await AuthEndpoints.verifyEmail(email, code);
+    // Still no session: the user signs in with the password they just set.
+  }, []);
 
   const signOutUser = useCallback(async () => {
     await identity.signOut();
@@ -194,7 +214,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       can,
       switchSchool,
       signIn,
-      signUp,
+      register,
+      verifyEmail,
       signOut: signOutUser,
       sendPasswordReset: (email: string) => identity.sendPasswordReset(email),
       refreshSession,
@@ -211,7 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       can,
       switchSchool,
       signIn,
-      signUp,
+      register,
+      verifyEmail,
       signOutUser,
       refreshSession,
       sessionQuery.error,

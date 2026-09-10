@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { GraduationCap, Lock, Mail } from 'lucide-react';
 import { env } from '@/lib/env';
+import { isApiError } from '@/lib/api-error';
 import { isMockIdentity } from '@/lib/identity';
 import { useAuth } from '@/app/providers/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,10 @@ export function SignInPage() {
   const location = useLocation();
   const [error, setError] = useState<string | null>(null);
 
+  // Set by the verification page on its way here, so somebody who has just
+  // finished registering is told it worked rather than facing a bare form.
+  const arrivedVerified = (location.state as { verified?: boolean } | null)?.verified === true;
+
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: '', password: '' },
@@ -58,6 +63,12 @@ export function SignInPage() {
       const from = (location.state as { from?: string } | null)?.from;
       navigate(from ?? '/', { replace: true });
     } catch (cause) {
+      // The credentials were right but the address was never confirmed. Send
+      // them to finish that rather than showing an error they cannot act on.
+      if (isApiError(cause) && cause.isForbidden && /verify your email/i.test(cause.message)) {
+        navigate('/verify-email', { state: { email: values.email } });
+        return;
+      }
       setError(cause instanceof Error ? cause.message : 'Sign-in failed. Please try again.');
     }
   });
@@ -118,6 +129,12 @@ export function SignInPage() {
             </p>
           </div>
 
+          {arrivedVerified && !error && (
+            <Alert tone="success" data-cy="sign-in-verified">
+              Your email is confirmed. Sign in to open your school.
+            </Alert>
+          )}
+
           {error && (
             <Alert tone="danger" data-cy="sign-in-error">
               {error}
@@ -172,8 +189,16 @@ export function SignInPage() {
             </Suspense>
           )}
 
+          <p className="text-center text-sm text-muted-foreground">
+            New school?{' '}
+            <Link to="/sign-up" data-cy="sign-in-sign-up" className="text-primary hover:underline">
+              Create an account
+            </Link>
+          </p>
+
           <p className="text-center text-xs text-muted-foreground">
-            Trouble signing in? Contact your school administrator.
+            Staff and parents are invited by their school. Trouble signing in? Contact your school
+            administrator.
           </p>
         </div>
       </div>

@@ -68,6 +68,14 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       css: false,
+      /**
+       * Vitest's 5s default is too tight for the page-level specs here. Several
+       * render a whole screen, drive it with `userEvent` and wait on React
+       * Query — around 3-4s on an idle machine, and past 5s once the suite runs
+       * them in parallel. That produced failures that came and went with
+       * machine load rather than with the code.
+       */
+      testTimeout: 20_000,
       env: {
         // Never pass requests through to a real API in tests. The specs under
         // src/mocks exist to verify the mock API's own behaviour, and a

@@ -34,6 +34,12 @@ import { portalRoutes } from './routes/portal.routes';
 const SignInPage = lazy(() =>
   import('@/features/auth/sign-in-page').then((m) => ({ default: m.SignInPage })),
 );
+const SignUpPage = lazy(() =>
+  import('@/features/auth/sign-up-page').then((m) => ({ default: m.SignUpPage })),
+);
+const VerifyEmailPage = lazy(() =>
+  import('@/features/auth/verify-email-page').then((m) => ({ default: m.VerifyEmailPage })),
+);
 const ForgotPasswordPage = lazy(() =>
   import('@/features/auth/forgot-password-page').then((m) => ({ default: m.ForgotPasswordPage })),
 );
@@ -52,6 +58,8 @@ const NotFoundPage = lazy(() =>
 
 export const router = createBrowserRouter([
   { path: '/sign-in', element: <SignInPage /> },
+  { path: '/sign-up', element: <SignUpPage /> },
+  { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/verify/:code', element: <VerifyPage /> },
   { path: '/s/:slug', element: <SchoolWebsitePage /> },
