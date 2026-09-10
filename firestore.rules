@@ -1,0 +1,69 @@
+rules_version = '2';
+
+// Scholaris — Firestore security rules.
+//
+// Server-mediated writes (ai_agent_flow_firebase.md section 1): the Admin SDK
+// is the only writer and bypasses these rules entirely, so `allow write: if
+// false` blocks browsers alone. Every ownership, moderation and validation
+// decision stays in the Express service layer and is never duplicated here.
+//
+// Reads DO deviate from that guide's blanket `allow read: if request.auth !=
+// null`, and deliberately. That default assumes anonymous auth in a
+// single-tenant app. Scholaris is multi-tenant and its clients sign in with
+// real Firebase Auth, so `request.auth.uid` identifies an actual person —
+// which means a blanket rule would let any signed-in parent at any school read
+// every other school's conversations. These rules scope each read to the
+// documents that name the caller. That is tenant isolation, not business
+// logic, and it is the one thing rules must do that the API cannot.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isParticipant(participantUids) {
+      return isSignedIn() && request.auth.uid in participantUids;
+    }
+
+    // ── Parent–teacher conversations (spec section 29) ──────────────────────
+    // `participantUids` is written by the server as the Firebase uids of the
+    // people in the thread. A thread you are not in does not exist for you.
+    match /conversations/{conversationId} {
+      allow read: if isParticipant(resource.data.participantUids);
+      allow write: if false;
+
+      match /messages/{messageId} {
+        // Re-read the parent rather than trusting anything on the message, so
+        // a message cannot widen its own audience.
+        allow read: if isParticipant(
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids
+        );
+        allow write: if false;
+      }
+    }
+
+    // ── Notification inbox projection (spec section 28) ─────────────────────
+    // One document per notification, addressed to exactly one person.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow write: if false;
+    }
+
+    // ── Presence and typing indicators ──────────────────────────────────────
+    // Transient, and scoped the same way as the thread it belongs to.
+    match /presence/{conversationId}/{document=**} {
+      allow read: if isParticipant(
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids
+      );
+      allow write: if false;
+    }
+
+    // Anything not matched above is closed. Firestore denies by default; this
+    // is here so that intent is stated rather than inferred.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

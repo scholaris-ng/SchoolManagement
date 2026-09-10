@@ -56,17 +56,24 @@ env:
       - RUNTIME
 
   # --- Firebase Admin -----------------------------------------------------
-  # Deliberately absent. On App Hosting the runtime service account supplies
-  # Application Default Credentials through the metadata server, so no key file
-  # or secret is needed. Grant that account roles/datastore.user for Firestore.
+  # No key or secret here. On App Hosting the runtime service account supplies
+  # Application Default Credentials through the metadata server.
+  #
+  # That account needs the same two roles the local dev account has, and for
+  # the same reasons: roles/datastore.user for Firestore, and
+  # roles/firebaseauth.admin because the server creates Firebase credentials
+  # during school registration and verifies tokens with the revocation check.
+  # Find it with:
+  #   gcloud run services describe <service> --region=<region> \
+  #     --format="value(spec.template.spec.serviceAccountName)"
   - variable: FIREBASE_PROJECT_ID
-    value: scholaris-production
+    value: scholaris-64b96
     availability:
       - BUILD
       - RUNTIME
 
   - variable: FIREBASE_STORAGE_BUCKET
-    value: scholaris-production.firebasestorage.app
+    value: scholaris-64b96.firebasestorage.app
     availability:
       - BUILD
       - RUNTIME
@@ -107,16 +114,16 @@ env:
       - BUILD
 
   - variable: VITE_FIREBASE_AUTH_DOMAIN
-    value: scholaris-production.firebaseapp.com
+    value: scholaris-64b96.firebaseapp.com
     availability:
       - BUILD
 
   - variable: VITE_FIREBASE_PROJECT_ID
-    value: scholaris-production
+    value: scholaris-64b96
     availability:
       - BUILD
 
   - variable: VITE_FIREBASE_STORAGE_BUCKET
-    value: scholaris-production.firebasestorage.app
+    value: scholaris-64b96.firebasestorage.app
     availability:
       - BUILD

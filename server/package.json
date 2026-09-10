@@ -18,7 +18,8 @@
     "migration:show": "tsx typeorm.cli.ts migration:show -d src/infrastructure/database/dataSource.ts",
     "schema:log": "tsx typeorm.cli.ts schema:log -d src/infrastructure/database/dataSource.ts",
     "seed": "tsx src/infrastructure/database/seeds/run-seed.ts",
-    "postman": "node postman/build.mjs"
+    "postman": "node postman/build.mjs",
+    "firebase:verify": "tsx src/infrastructure/firebase/verify.ts"
   },
   "dependencies": {
     "compression": "^1.7.5",
