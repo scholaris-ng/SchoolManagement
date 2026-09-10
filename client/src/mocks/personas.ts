@@ -1,83 +1,12 @@
 import type { Permission, RoleName } from '@/types/rbac';
 
 /**
- * Development personas.
+ * Default permission sets per role.
  *
- * These exist so every screen can be exercised as each role while the Express
- * API is being built. They are compiled out of production builds along with the
- * rest of `src/mocks` — see `env.useMockApi`.
- */
-export interface DemoPersona {
-  email: string;
-  name: string;
-  roleLabel: string;
-  roles: RoleName[];
-  /** Which seeded school this persona belongs to. */
-  schoolIndex: 0 | 1;
-  /** Links the persona to a seeded guardian/student/staff record. */
-  link?: { type: 'guardian' | 'student' | 'staff'; index: number };
-}
-
-export const DEMO_PERSONAS: DemoPersona[] = [
-  {
-    email: 'admin@brightfield.edu.ng',
-    name: 'Adaeze Okonkwo',
-    roleLabel: 'School administrator · Brightfield Academy',
-    roles: ['SCHOOL_ADMIN'],
-    schoolIndex: 0,
-  },
-  {
-    email: 'principal@brightfield.edu.ng',
-    name: 'Dr Emeka Nwosu',
-    roleLabel: 'Principal · Brightfield Academy',
-    roles: ['PRINCIPAL'],
-    schoolIndex: 0,
-  },
-  {
-    email: 'teacher@brightfield.edu.ng',
-    name: 'Funmilayo Adeyemi',
-    roleLabel: 'Form teacher · JSS 1 Gold',
-    roles: ['TEACHER', 'FORM_TEACHER'],
-    schoolIndex: 0,
-    link: { type: 'staff', index: 0 },
-  },
-  {
-    email: 'bursar@brightfield.edu.ng',
-    name: 'Ibrahim Sule',
-    roleLabel: 'Bursar · Brightfield Academy',
-    roles: ['BURSAR'],
-    schoolIndex: 0,
-    link: { type: 'staff', index: 1 },
-  },
-  {
-    email: 'parent@example.com',
-    name: 'Mrs Chioma Eze',
-    roleLabel: 'Parent · three children enrolled',
-    roles: ['PARENT'],
-    schoolIndex: 0,
-    link: { type: 'guardian', index: 0 },
-  },
-  {
-    email: 'student@brightfield.edu.ng',
-    name: 'Tobenna Eze',
-    roleLabel: 'Student · JSS 2 Silver',
-    roles: ['STUDENT'],
-    schoolIndex: 0,
-    link: { type: 'student', index: 0 },
-  },
-  {
-    email: 'admin@rivercrest.edu.ng',
-    name: 'Grace Bello',
-    roleLabel: 'School administrator · Rivercrest School (second tenant)',
-    roles: ['SCHOOL_ADMIN'],
-    schoolIndex: 1,
-  },
-];
-
-/**
- * Default permission sets per role. The real source of truth is the RolePermission
- * table on the server; this mirror lets the mock API answer `/auth/session`
- * with a realistic payload.
+ * The real source of truth is the RolePermission table on the server; this
+ * mirror exists so the Cypress e2e suite's `cy.login()` can build a realistic
+ * stubbed session without drifting from what each role actually gets there —
+ * see `cypress/support/session.ts`.
  */
 export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
   SUPER_ADMIN: ['platform.manage'],

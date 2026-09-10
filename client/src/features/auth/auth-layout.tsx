@@ -1,5 +1,4 @@
 import { GraduationCap } from 'lucide-react';
-import { DemoBanner } from '@/components/layout/demo-banner';
 
 /**
  * The split-screen shell every unauthenticated page shares.
@@ -18,10 +17,6 @@ export function AuthLayout({
 }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
-      <div className="lg:col-span-2">
-        <DemoBanner />
-      </div>
-
       <div className="relative hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-lg bg-white/15">

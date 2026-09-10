@@ -79,10 +79,13 @@ export function SignUpPage() {
       });
 
       // The account exists but cannot be used yet, so the next step is the
-      // code — not a dashboard the server would refuse anyway.
+      // code — not a dashboard the server would refuse anyway. The password
+      // rides along in router state (memory only, never persisted) so that
+      // once the code is confirmed, verification can sign the user straight
+      // in instead of making them retype it.
       navigate('/verify-email', {
         replace: true,
-        state: { email: result.email, schoolName: result.schoolName },
+        state: { email: result.email, schoolName: result.schoolName, password: values.password },
       });
     } catch (cause) {
       // Field-level messages from the server land on the right inputs.

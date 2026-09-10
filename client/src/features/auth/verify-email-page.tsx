@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { MailCheck } from 'lucide-react';
+import { useAuth } from '@/app/providers/auth-provider';
 import { AuthEndpoints } from './auth.endpoints';
 import { AuthLayout } from './auth-layout';
 import { Button } from '@/components/ui/button';
@@ -33,13 +34,19 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = (location.state ?? null) as { email?: string; schoolName?: string } | null;
+  const { signIn } = useAuth();
+  const state = (location.state ?? null) as
+    | { email?: string; schoolName?: string; password?: string }
+    | null;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
   const email = useRef(state?.email ?? '').current;
+  // Carried in memory only (never persisted) from sign-up or a sign-in
+  // attempt that already proved it against Firebase — see those pages.
+  const password = useRef(state?.password ?? '').current;
 
   const form = useForm<VerifyValues>({
     resolver: zodResolver(verifySchema),
@@ -80,6 +87,22 @@ export function VerifyEmailPage() {
     setNotice(null);
     try {
       await AuthEndpoints.verifyEmail(email, values.code);
+
+      // With the password in hand, sign straight in rather than making a
+      // person who just proved both their email and password type either
+      // again. If that fails for any reason, fall back to sign-in the same
+      // way an arrival without a password already does.
+      if (password) {
+        try {
+          await signIn(email, password);
+          navigate('/', { replace: true });
+          return;
+        } catch {
+          // Fall through — the code was still valid, only the auto sign-in
+          // didn't take.
+        }
+      }
+
       navigate('/sign-in', {
         replace: true,
         state: { verified: true, email },

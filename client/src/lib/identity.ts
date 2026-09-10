@@ -17,5 +17,3 @@ export const identity: IdentityProvider =
   env.useMockAuth || !isFirebaseConfigured
     ? new MockIdentityProvider()
     : new FirebaseIdentityProvider();
-
-export const isMockIdentity = identity.kind === 'mock';

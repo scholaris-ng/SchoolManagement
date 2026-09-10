@@ -1,32 +1,15 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { GraduationCap, Lock, Mail } from 'lucide-react';
-import { env } from '@/lib/env';
 import { isApiError } from '@/lib/api-error';
-import { isMockIdentity } from '@/lib/identity';
 import { useAuth } from '@/app/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
 import { FullPageLoader } from '@/components/layout/full-page-loader';
-import { DemoBanner } from '@/components/layout/demo-banner';
-
-/**
- * Sign-in shortcuts for the seeded personas.
- *
- * Both operands are build-time constants, so an ordinary production build drops
- * the chunk entirely and the persona list never reaches a published bundle. A
- * demo build keeps it, because clicking a role is the whole point of one.
- */
-const PERSONAS_COMPILED_IN =
-  import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
-
-const DevPersonaPanel = PERSONAS_COMPILED_IN
-  ? lazy(() => import('./dev-personas').then((m) => ({ default: m.DevPersonaPanel })))
-  : null;
 
 const signInSchema = z.object({
   email: z.string().trim().min(1, 'Enter your email address').email('Enter a valid email address'),
@@ -50,7 +33,13 @@ export function SignInPage() {
     defaultValues: { email: '', password: '' },
   });
 
-  if (status === 'loading') return <FullPageLoader label="Checking your session…" />;
+  // Once a submit is in flight, the button's own spinner is the loading
+  // affordance — the session query that submit triggers also flips `status`
+  // to 'loading', and without this guard that would swap the whole page for
+  // a full-screen loader mid-submit instead.
+  if (status === 'loading' && !form.formState.isSubmitting) {
+    return <FullPageLoader label="Checking your session…" />;
+  }
   if (status === 'authenticated') {
     const from = (location.state as { from?: string } | null)?.from;
     return <Navigate to={from ?? '/'} replace />;
@@ -66,28 +55,18 @@ export function SignInPage() {
       // The credentials were right but the address was never confirmed. Send
       // them to finish that rather than showing an error they cannot act on.
       if (isApiError(cause) && cause.isForbidden && /verify your email/i.test(cause.message)) {
-        navigate('/verify-email', { state: { email: values.email } });
+        // Firebase already accepted this password (that's why the app got far
+        // enough to hit the "unverified" check) — pass it through so, once
+        // verified, the user lands signed in rather than retyping it.
+        navigate('/verify-email', { state: { email: values.email, password: values.password } });
         return;
       }
       setError(cause instanceof Error ? cause.message : 'Sign-in failed. Please try again.');
     }
   });
 
-  const signInAs = async (email: string) => {
-    setError(null);
-    try {
-      await signIn(email, 'demo');
-      navigate('/', { replace: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Sign-in failed. Please try again.');
-    }
-  };
-
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
-      <div className="lg:col-span-2">
-        <DemoBanner />
-      </div>
       {/* Brand panel — hidden on small screens where it would only push the
           form below the fold. */}
       <div className="relative hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
@@ -182,12 +161,6 @@ export function SignInPage() {
               Sign in
             </Button>
           </form>
-
-          {DevPersonaPanel && (env.isDevelopment || env.isDemo) && isMockIdentity && (
-            <Suspense fallback={null}>
-              <DevPersonaPanel onSignInAs={(email) => void signInAs(email)} />
-            </Suspense>
-          )}
 
           <p className="text-center text-sm text-muted-foreground">
             New school?{' '}

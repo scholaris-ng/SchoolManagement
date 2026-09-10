@@ -23,12 +23,10 @@ project, so a test that reaches "the dev API" reaches real school records.
 
 Two things enforce it:
 
-1. `npm run dev:e2e` runs Vite with `--mode e2e`, which loads `.env.e2e`. That
-   file points the dev proxy at **`http://127.0.0.1:9`** — the discard port,
-   which nothing ever listens on. A request a spec forgot to stub is refused
-   instantly. It cannot leak data, and it cannot quietly pass.
-2. `.env.e2e` also sets `VITE_USE_MOCK_API=false`. MSW would otherwise answer
-   the very requests a spec is trying to stub, and the test would prove nothing.
+`npm run dev:e2e` runs Vite with `--mode e2e`, which loads `.env.e2e`. That
+file points the dev proxy at **`http://127.0.0.1:9`** — the discard port, which
+nothing ever listens on. A request a spec forgot to stub is refused instantly.
+It cannot leak data, and it cannot quietly pass.
 
 ## Envelope
 

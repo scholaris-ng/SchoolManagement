@@ -1,42 +1,14 @@
 /// <reference types="vitest/config" />
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import fs from 'node:fs';
 import path from 'node:path';
-
-/**
- * MSW's worker script lives in `public/` so the dev server can serve it, which
- * would otherwise copy it into every production build. Nothing would load it
- * there — the mock bundle is compiled out — but shipping a request-interception
- * worker to a live school portal is not something to leave to chance.
- *
- * A demo build is the exception: it *is* the mock API, so it needs the worker.
- */
-function excludeMockWorkerFromBuild(isDemo: boolean): Plugin {
-  return {
-    name: 'scholaris:exclude-mock-worker',
-    apply: 'build',
-    generateBundle(_options, bundle) {
-      if (isDemo) return;
-      for (const fileName of Object.keys(bundle)) {
-        if (fileName === 'mockServiceWorker.js') delete bundle[fileName];
-      }
-    },
-    closeBundle() {
-      if (isDemo) return;
-      const artefact = path.resolve(__dirname, 'dist/mockServiceWorker.js');
-      if (fs.existsSync(artefact)) fs.rmSync(artefact);
-    },
-  };
-}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiTarget = env.VITE_DEV_API_PROXY || 'http://localhost:4000';
-  const isDemo = env.VITE_DEMO_MODE === 'true';
 
   return {
-    plugins: [react(), excludeMockWorkerFromBuild(isDemo)],
+    plugins: [react()],
     resolve: {
       alias: { '@': path.resolve(__dirname, './src') },
     },
@@ -76,14 +48,6 @@ export default defineConfig(({ mode }) => {
        * machine load rather than with the code.
        */
       testTimeout: 20_000,
-      env: {
-        // Never pass requests through to a real API in tests. The specs under
-        // src/mocks exist to verify the mock API's own behaviour, and a
-        // passthrough there reaches for a server that is not running — the
-        // request fails instead of being answered. Tests are always fully
-        // mocked; the live seam is exercised by cypress/e2e/live.
-        VITE_USE_LIVE_ENDPOINTS: 'false',
-      },
     },
   };
 });
