@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useListQuery } from '@/hooks/use-list-query';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -41,6 +42,7 @@ import { NativeSelect } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
 import { Alert, EmptyState, LoadingState } from '@/components/ui/feedback';
 import { StatusBadge } from '@/components/data/status-badge';
+import { Pagination } from '@/components/data/pagination';
 import { Stepper, Tally } from './import-page-parts';
 
 const ENTITIES: ImportEntity[] = ['STUDENTS', 'GUARDIANS', 'STAFF', 'SUBJECTS', 'FEES'];
@@ -74,7 +76,10 @@ export function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const validate = useValidateImport();
   const commit = useCommitImport();
-  const jobs = useImportJobs();
+  // Namespaced so its page number lives in its own `jobs_page` param rather
+  // than colliding with the wizard's own `entity` query param on this route.
+  const jobsList = useListQuery({ namespace: 'jobs', defaultPageSize: 10 });
+  const jobs = useImportJobs(jobsList.query);
 
   const targets = useMemo(() => (entity ? IMPORT_TARGETS[entity] : []), [entity]);
 
@@ -585,6 +590,14 @@ export function ImportPage() {
                 </li>
               ))}
             </ul>
+          )}
+          {jobs.data?.meta && jobs.data.meta.total > 0 && (
+            <Pagination
+              meta={jobs.data.meta}
+              onPageChange={jobsList.setPage}
+              onPageSizeChange={jobsList.setPageSize}
+              isFetching={jobs.isFetching}
+            />
           )}
         </CardContent>
       </Card>

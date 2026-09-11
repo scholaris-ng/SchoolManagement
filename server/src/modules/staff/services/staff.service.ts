@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { In } from 'typeorm';
 import type { DeepPartial, EntityManager } from 'typeorm';
 import type { RequestContext } from '../../../shared/types/context';
 import { AppError } from '../../../shared/errors/AppError';
@@ -421,18 +422,27 @@ export class StaffService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────
 
+  /**
+   * One existence check per list rather than one per id — a form with a dozen
+   * classes and a dozen subjects used to mean two dozen round trips before the
+   * write even started.
+   */
   private async assertClassesAndSubjectsExist(
     schoolId: string,
     classIds: string[],
     subjectIds: string[],
   ): Promise<void> {
-    for (const classId of classIds) {
-      const found = await this.classes.findByIdScoped(schoolId, classId);
-      if (!found) throw AppError.validation('One of the selected classes could not be found.');
+    if (classIds.length > 0) {
+      const found = await this.classes.countScoped(schoolId, { id: In(classIds) });
+      if (found !== new Set(classIds).size) {
+        throw AppError.validation('One of the selected classes could not be found.');
+      }
     }
-    for (const subjectId of subjectIds) {
-      const found = await this.subjects.findByIdScoped(schoolId, subjectId);
-      if (!found) throw AppError.validation('One of the selected subjects could not be found.');
+    if (subjectIds.length > 0) {
+      const found = await this.subjects.countScoped(schoolId, { id: In(subjectIds) });
+      if (found !== new Set(subjectIds).size) {
+        throw AppError.validation('One of the selected subjects could not be found.');
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import { In } from 'typeorm';
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
@@ -192,60 +193,72 @@ export class StudentRelationsService {
         [context.schoolId, input.fromClassId],
       );
 
-      let promoted = 0;
-      let repeated = 0;
-      let graduated = 0;
+      // Grouped by outcome rather than walked student by student — a roll of
+      // forty pupils used to mean up to 120 sequential round trips inside this
+      // transaction. Each group below is one statement regardless of size.
+      const rollIds = roll.map((row) => row.id);
+      const graduatingIds = rollIds.filter((id) => graduating.has(id));
+      const repeatingIds = rollIds.filter((id) => repeating.has(id) && !graduating.has(id));
+      const promotedIds = rollIds.filter((id) => !graduating.has(id) && !repeating.has(id));
 
-      for (const { id } of roll) {
-        const isGraduating = graduating.has(id);
-        const isRepeating = repeating.has(id);
-
-        // Close the outgoing enrolment with the outcome it actually had.
+      const closeOutgoing = async (ids: string[], status: string) => {
+        if (ids.length === 0) return;
         await manager.query(
           `UPDATE student_enrollments
               SET status = $3, exited_on = CURRENT_DATE, note = COALESCE($4, note), updated_at = now()
-            WHERE school_id = $1 AND student_id = $2 AND status = 'ACTIVE'`,
-          [
-            context.schoolId,
-            id,
-            isGraduating ? 'COMPLETED' : isRepeating ? 'REPEATED' : 'PROMOTED',
-            input.note || null,
-          ],
+            WHERE school_id = $1 AND student_id = ANY($2::uuid[]) AND status = 'ACTIVE'`,
+          [context.schoolId, ids, status, input.note || null],
         );
+      };
 
-        if (isGraduating) {
-          await manager.update(
-            Student,
-            { id },
-            { status: 'GRADUATED', currentClassId: null },
-          );
-          graduated += 1;
-          continue;
-        }
+      // Close every outgoing enrolment with the outcome it actually had.
+      await closeOutgoing(graduatingIds, 'COMPLETED');
+      await closeOutgoing(repeatingIds, 'REPEATED');
+      await closeOutgoing(promotedIds, 'PROMOTED');
 
-        // A repeating pupil stays where they are; everyone else moves up.
-        const destination = isRepeating ? fromClass : toClass;
-
-        await manager.save(
-          manager.create(StudentEnrollment, {
-            schoolId: context.schoolId,
-            studentId: id,
-            sessionId: input.nextSessionId,
-            levelId: destination.levelId,
-            classId: destination.id,
-            status: 'ACTIVE',
-            enrolledOn: new Date().toISOString().slice(0, 10),
-            note: input.note || null,
-          }),
+      if (graduatingIds.length > 0) {
+        await manager.update(
+          Student,
+          { id: In(graduatingIds) },
+          { status: 'GRADUATED', currentClassId: null },
         );
-
-        if (!isRepeating) {
-          await manager.update(Student, { id }, { currentClassId: toClass.id });
-          promoted += 1;
-        } else {
-          repeated += 1;
-        }
       }
+      if (promotedIds.length > 0) {
+        await manager.update(Student, { id: In(promotedIds) }, { currentClassId: toClass.id });
+      }
+      // A repeating pupil stays where they are, so their `students` row needs
+      // no change — only a fresh enrolment, alongside everyone promoted.
+
+      const enrolledOn = new Date().toISOString().slice(0, 10);
+      const newEnrollments = [
+        ...repeatingIds.map((id) => ({
+          schoolId: context.schoolId,
+          studentId: id,
+          sessionId: input.nextSessionId,
+          levelId: fromClass.levelId,
+          classId: fromClass.id,
+          status: 'ACTIVE' as const,
+          enrolledOn,
+          note: input.note || null,
+        })),
+        ...promotedIds.map((id) => ({
+          schoolId: context.schoolId,
+          studentId: id,
+          sessionId: input.nextSessionId,
+          levelId: toClass.levelId,
+          classId: toClass.id,
+          status: 'ACTIVE' as const,
+          enrolledOn,
+          note: input.note || null,
+        })),
+      ];
+      if (newEnrollments.length > 0) {
+        await manager.insert(StudentEnrollment, newEnrollments);
+      }
+
+      const promoted = promotedIds.length;
+      const repeated = repeatingIds.length;
+      const graduated = graduatingIds.length;
 
       // Recount both classes from the roll rather than adjusting by deltas —
       // after a bulk move, a derived counter should be re-derived.
