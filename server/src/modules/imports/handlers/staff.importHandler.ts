@@ -1,6 +1,8 @@
+import type { RequestContext } from '../../../shared/types/context';
 import { StaffService } from '../../staff/services/staff.service';
 import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { UserRepository } from '../../auth/repositories/user.repository';
+import { getIdentityProvider } from '../../../shared/services/identity.service';
 import { ROLES } from '../../../config/constants';
 import type { CreateStaffInput, UpdateStaffInput } from '../../staff/validators/staff.schema';
 import type { ImportEntityHandler, MappedRow, RowCheck, RowContext } from './importHandler.interface';
@@ -18,6 +20,20 @@ const DEFAULT_ROLE = 'TEACHER';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^[+()\d\s-]{7,20}$/;
 
+interface StaffLookups {
+  existingByStaffNo: Map<string, { id: string; email: string; deletedAt: Date | null }>;
+  /** Addresses that already have an account anywhere on the platform. */
+  emailsInUse: Set<string>;
+  /**
+   * Addresses that hold a sign-in credential but no account here.
+   *
+   * Credentials live outside this database, so removing a staff record leaves
+   * one behind. Without this the row passes every check and then fails at the
+   * moment of creation, which reads as the import breaking for no reason.
+   */
+  orphanedCredentials: Set<string>;
+}
+
 /**
  * Staff: staff number is the key.
  *
@@ -26,10 +42,12 @@ const PHONE = /^[+()\d\s-]{7,20}$/;
  * them a password — work that sits outside any database transaction and cannot
  * be rolled back, so it reuses the same path as hiring one person by hand.
  */
-export class StaffImportHandler implements ImportEntityHandler {
+export class StaffImportHandler implements ImportEntityHandler<StaffLookups> {
   readonly entity = 'STAFF' as const;
   readonly naturalKeyField = 'staffNo';
   readonly naturalKeyLabel = 'staff number';
+  /** Each hire gets a login, and a login is one address to one person. */
+  readonly alsoUniqueInFile = [{ field: 'email', label: 'work email' }];
 
   private readonly staff = StaffRepository.Instance;
   private readonly users = UserRepository.Instance;
@@ -38,7 +56,30 @@ export class StaffImportHandler implements ImportEntityHandler {
     return row.staffNo?.trim() || null;
   }
 
-  async check({ context, rowNumber, row }: RowContext): Promise<RowCheck> {
+  async prepare(context: RequestContext, rows: MappedRow[]): Promise<StaffLookups> {
+    const staffNos = rows.map((row) => this.naturalKey(row)).filter((no): no is string => Boolean(no));
+    const emails = rows
+      .map((row) => (row.email ?? '').trim().toLowerCase())
+      .filter((email) => email.length > 0);
+
+    const [existing, emailsInUse, credentials] = await Promise.all([
+      this.staff.findManyByStaffNo(context.schoolId, staffNos),
+      this.users.findEmailsInUse(emails),
+      getIdentityProvider().findExistingEmails(emails),
+    ]);
+
+    const orphanedCredentials = new Set(
+      [...credentials].filter((email) => !emailsInUse.has(email)),
+    );
+
+    return {
+      existingByStaffNo: new Map(existing.map((row) => [row.staffNo, row])),
+      emailsInUse,
+      orphanedCredentials,
+    };
+  }
+
+  async check({ rowNumber, row, lookups }: RowContext<StaffLookups>): Promise<RowCheck> {
     const issues = [];
     const staffNo = (row.staffNo ?? '').trim();
     const firstName = normaliseSpacing(row.firstName ?? '');
@@ -92,7 +133,7 @@ export class StaffImportHandler implements ImportEntityHandler {
 
     let willUpdate = false;
     if (staffNo) {
-      const existing = await this.staff.findByStaffNo(context.schoolId, staffNo);
+      const existing = lookups.existingByStaffNo.get(staffNo);
       if (existing?.deletedAt) {
         issues.push(
           issue(
@@ -112,10 +153,20 @@ export class StaffImportHandler implements ImportEntityHandler {
     // The email is a sign-in credential, so it must be free platform-wide, not
     // just within this school — unless it already belongs to this same person.
     if (email && EMAIL.test(email) && !willUpdate) {
-      const inUse = await this.users.findByEmail(email);
-      if (inUse) {
+      if (lookups.emailsInUse.has(email)) {
         issues.push(
           issue(rowNumber, 'ERROR', 'EMAIL_IN_USE', 'An account with that email address already exists.', 'email', email),
+        );
+      } else if (lookups.orphanedCredentials.has(email)) {
+        issues.push(
+          issue(
+            rowNumber,
+            'ERROR',
+            'CREDENTIAL_ORPHANED',
+            'That address still has a sign-in account left over from before, even though there is no staff record for it here. Remove it from the sign-in provider, or give this person a different address.',
+            'email',
+            email,
+          ),
         );
       }
     }
@@ -141,7 +192,7 @@ export class StaffImportHandler implements ImportEntityHandler {
     };
   }
 
-  async apply({ context, row }: RowContext): Promise<'CREATED' | 'UPDATED'> {
+  async apply({ context, row, lookups }: RowContext<StaffLookups>): Promise<'CREATED' | 'UPDATED'> {
     const staffNo = row.staffNo.trim();
     const roles = splitList(row.roleNames).map((role) => role.toUpperCase());
     const roleNames = roles.length > 0 ? roles : [DEFAULT_ROLE];
@@ -159,7 +210,7 @@ export class StaffImportHandler implements ImportEntityHandler {
       roleNames,
     };
 
-    const existing = await this.staff.findByStaffNo(context.schoolId, staffNo);
+    const existing = lookups.existingByStaffNo.get(staffNo);
     if (existing) {
       // Employment type and status have no column in the template, so they are
       // left off the patch rather than reset to a default on every re-import.
@@ -177,7 +228,12 @@ export class StaffImportHandler implements ImportEntityHandler {
       classIds: [],
       isFormTeacher: false,
     };
-    await StaffService.Instance.createStaff(context, input);
+    const { member } = await StaffService.Instance.createStaff(context, input);
+    // Keeps a staff number repeated later in the same file an update, and the
+    // new address claimed so a second row cannot try to reuse it.
+    lookups.existingByStaffNo.set(staffNo, { id: member.id, email: shared.email, deletedAt: null });
+    lookups.emailsInUse.add(shared.email);
+    lookups.orphanedCredentials.delete(shared.email);
     return 'CREATED';
   }
 }

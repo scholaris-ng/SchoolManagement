@@ -1,11 +1,19 @@
+import type { EntityManager } from 'typeorm';
+import type { RequestContext } from '../../../shared/types/context';
 import { SubjectRepository } from '../../academics/repositories/subject.repository';
 import { LevelRepository } from '../../academics/repositories/level.repository';
 import type { ImportEntityHandler, MappedRow, RowCheck, RowContext } from './importHandler.interface';
-import { issue } from './importHandler.interface';
+import { issue, matchKey } from './importHandler.interface';
 import { normaliseSpacing, parseBooleanCell, splitList } from '../utils/cells';
 
+interface SubjectLookups {
+  /** Level id and canonical name, keyed by the name normalised for matching. */
+  levelsByName: Map<string, { id: string; name: string }>;
+  existingByCode: Map<string, { id: string }>;
+}
+
 /** Subjects: code is the key, levels are an optional set of names. */
-export class SubjectsImportHandler implements ImportEntityHandler {
+export class SubjectsImportHandler implements ImportEntityHandler<SubjectLookups> {
   readonly entity = 'SUBJECTS' as const;
   readonly naturalKeyField = 'code';
   readonly naturalKeyLabel = 'subject code';
@@ -17,7 +25,24 @@ export class SubjectsImportHandler implements ImportEntityHandler {
     return row.code?.trim().toUpperCase() || null;
   }
 
-  async check({ context, rowNumber, row, manager }: RowContext): Promise<RowCheck> {
+  async prepare(
+    context: RequestContext,
+    rows: MappedRow[],
+    manager?: EntityManager,
+  ): Promise<SubjectLookups> {
+    const codes = rows.map((row) => this.naturalKey(row)).filter((code): code is string => Boolean(code));
+    const [levels, existing] = await Promise.all([
+      this.levels.findAllForMatching(context.schoolId, manager),
+      this.subjects.findManyByCode(context.schoolId, codes, manager),
+    ]);
+
+    return {
+      levelsByName: new Map(levels.map((level) => [matchKey(level.name), level])),
+      existingByCode: new Map(existing.map((row) => [row.code.toUpperCase(), { id: row.id }])),
+    };
+  }
+
+  async check({ rowNumber, row, lookups }: RowContext<SubjectLookups>): Promise<RowCheck> {
     const issues = [];
     const name = normaliseSpacing(row.name ?? '');
     const code = (row.code ?? '').trim().toUpperCase();
@@ -33,18 +58,16 @@ export class SubjectsImportHandler implements ImportEntityHandler {
       issues.push(issue(rowNumber, 'WARNING', 'UNREADABLE_BOOLEAN', core.warning, 'isCore', row.isCore));
     }
 
-    const { matched, missing } = await this.resolveLevels(context.schoolId, row.levelNames, manager);
-    for (const name of missing) {
+    const { matched, missing } = this.resolveLevels(row.levelNames, lookups);
+    for (const levelName of missing) {
       issues.push(
-        issue(rowNumber, 'WARNING', 'LEVEL_NOT_FOUND', `No level called "${name}" — that link was skipped.`, 'levelNames', name),
+        issue(rowNumber, 'WARNING', 'LEVEL_NOT_FOUND', `No level called "${levelName}" — that link was skipped.`, 'levelNames', levelName),
       );
     }
 
-    const existing = code ? await this.subjects.findByCode(context.schoolId, code, manager) : null;
-
     return {
       issues,
-      willUpdate: Boolean(existing),
+      willUpdate: Boolean(code && lookups.existingByCode.has(code)),
       preview: {
         name,
         code,
@@ -55,16 +78,14 @@ export class SubjectsImportHandler implements ImportEntityHandler {
     };
   }
 
-  async apply({ context, row, manager }: RowContext): Promise<'CREATED' | 'UPDATED'> {
+  async apply({ context, row, lookups, manager }: RowContext<SubjectLookups>): Promise<'CREATED' | 'UPDATED'> {
     const name = normaliseSpacing(row.name);
     const code = row.code.trim().toUpperCase();
     const category = normaliseSpacing(row.category ?? '') || null;
     const isCore = parseBooleanCell(row.isCore, true).value;
+    const levelIds = this.resolveLevels(row.levelNames, lookups).matched.map((level) => level.id);
 
-    const { matched } = await this.resolveLevels(context.schoolId, row.levelNames, manager);
-    const levelIds = matched.map((level) => level.id);
-    const existing = await this.subjects.findByCode(context.schoolId, code, manager);
-
+    const existing = lookups.existingByCode.get(code);
     if (existing) {
       await this.subjects.update(existing.id, { name, category, isCore }, manager);
       // Only touched when the sheet actually carried a Levels column, so an
@@ -79,27 +100,23 @@ export class SubjectsImportHandler implements ImportEntityHandler {
       { schoolId: context.schoolId, name, code, category, isCore, isActive: true, schedule: [] },
       manager,
     );
+    // Keeps a code repeated later in the same file an update, not a second insert.
+    lookups.existingByCode.set(code, { id: created.id });
     if (levelIds.length > 0) {
       await this.subjects.replaceLevels(context.schoolId, created.id, levelIds, manager);
     }
     return 'CREATED';
   }
 
-  private async resolveLevels(
-    schoolId: string,
+  private resolveLevels(
     raw: string | undefined,
-    manager?: RowContext['manager'],
-  ): Promise<{ matched: { id: string; name: string }[]; missing: string[] }> {
+    lookups: SubjectLookups,
+  ): { matched: { id: string; name: string }[]; missing: string[] } {
     const names = splitList(raw);
-    if (names.length === 0) return { matched: [], missing: [] };
-
-    const found = await this.levels.findByNames(schoolId, names, manager);
-    const byName = new Map(found.map((level) => [normaliseSpacing(level.name).toLowerCase(), level]));
-
     const matched: { id: string; name: string }[] = [];
     const missing: string[] = [];
     for (const name of names) {
-      const level = byName.get(normaliseSpacing(name).toLowerCase());
+      const level = lookups.levelsByName.get(matchKey(name));
       if (level) matched.push(level);
       else missing.push(name);
     }

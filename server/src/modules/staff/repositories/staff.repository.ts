@@ -132,6 +132,22 @@ export class StaffRepository extends TenantRepository<Staff> {
     return this.repo.findOne({ where: { schoolId, staffNo }, withDeleted: true });
   }
 
+  /**
+   * Looks up a whole spreadsheet's worth of staff numbers at once. Includes
+   * soft-deleted rows, as `findByStaffNo` does — the number is still taken.
+   */
+  async findManyByStaffNo(
+    schoolId: string,
+    staffNos: string[],
+  ): Promise<{ id: string; staffNo: string; email: string; deletedAt: Date | null }[]> {
+    if (staffNos.length === 0) return [];
+    return this.repo.query(
+      `SELECT id, staff_no AS "staffNo", email, deleted_at AS "deletedAt"
+         FROM staff WHERE school_id = $1 AND staff_no = ANY($2::text[])`,
+      [schoolId, staffNos],
+    );
+  }
+
   async findByEmail(schoolId: string, email: string): Promise<Staff | null> {
     return this.repo.findOne({ where: { schoolId, email }, withDeleted: true });
   }

@@ -17,10 +17,10 @@ import type {
   ImportEntity,
   ImportMapping,
   ImportPreview,
-  ImportResult,
   ImportSessionFile,
 } from '@/types/imports';
 import { useCommitImport, useImportJobs, useValidateImport } from './api';
+import { activeImport } from './active-import';
 import {
   IMPORT_ENTITY_DESCRIPTION,
   IMPORT_ENTITY_LABEL,
@@ -66,7 +66,8 @@ export function ImportPage() {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<ImportMapping>({});
   const [preview, setPreview] = useState<ImportPreview | null>(null);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  /** Set once a file has been handed to the server, for the confirmation card. */
+  const [started, setStarted] = useState<{ fileName: string; totalRows: number } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [skipInvalidRows, setSkipInvalidRows] = useState(true);
 
@@ -77,7 +78,7 @@ export function ImportPage() {
 
   const targets = useMemo(() => (entity ? IMPORT_TARGETS[entity] : []), [entity]);
 
-  const step = result ? 4 : preview ? 3 : file ? 2 : entity ? 1 : 0;
+  const step = started ? 4 : preview ? 3 : file ? 2 : entity ? 1 : 0;
 
   const missingRequired = useMemo(
     () => targets.filter((target) => target.required && !mapping[target.key]),
@@ -95,7 +96,6 @@ export function ImportPage() {
     setRows([]);
     setMapping({});
     setPreview(null);
-    setResult(null);
     setFileError(null);
   }
 
@@ -145,7 +145,7 @@ export function ImportPage() {
     });
     setMapping(suggestColumnMapping(parsed.headers, entity ? IMPORT_TARGETS[entity] : []));
     setPreview(null);
-    setResult(null);
+    setStarted(null);
   };
 
   const runValidation = async () => {
@@ -159,14 +159,34 @@ export function ImportPage() {
     setPreview(outcome);
   };
 
+  /**
+   * Starts the import and lets go of it.
+   *
+   * The server keeps working after it answers, so there is nothing to wait for
+   * here: the file is handed over, the wizard returns to a ready state, and the
+   * header carries the progress and the final counts from here on.
+   */
   const runCommit = async () => {
-    if (!preview) return;
-    const outcome = await commit.mutateAsync({ importId: preview.importId, skipInvalidRows });
-    setResult(outcome);
+    if (!preview || !entity || !file) return;
+    const accepted = await commit.mutateAsync({
+      importId: preview.importId,
+      skipInvalidRows,
+    });
+
+    activeImport.start({
+      importId: accepted.importId,
+      entity: accepted.entity,
+      fileName: file.fileName,
+      totalRows: accepted.totalRows,
+    });
+
+    setStarted({ fileName: file.fileName, totalRows: accepted.totalRows });
+    resetFile();
+    void jobs.refetch();
   };
 
   const downloadErrorReport = () => {
-    const issues = result?.issues ?? preview?.issues ?? [];
+    const issues = preview?.issues ?? [];
     void exportRowsToXlsx(
       `import-errors-${new Date().toISOString().slice(0, 10)}.xlsx`,
       issues.map((issue) => ({
@@ -376,7 +396,7 @@ export function ImportPage() {
       )}
 
       {/* Step 4 — review ---------------------------------------------------- */}
-      {preview && !result && (
+      {preview && !started && (
         <Card>
           <CardHeader>
             <CardTitle>4. Review before importing</CardTitle>
@@ -510,45 +530,24 @@ export function ImportPage() {
         </Card>
       )}
 
-      {/* Step 5 — result ---------------------------------------------------- */}
-      {result && (
+      {/* Step 5 — handed over ------------------------------------------------ */}
+      {started && (
         <Card>
           <CardHeader>
-            <CardTitle>Import finished</CardTitle>
+            <CardTitle>Import started</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Alert
-              tone={
-                result.status === 'COMPLETED'
-                  ? 'success'
-                  : result.status === 'PARTIAL'
-                    ? 'warning'
-                    : 'danger'
-              }
-              title={
-                result.status === 'COMPLETED'
-                  ? 'Everything imported'
-                  : result.status === 'PARTIAL'
-                    ? 'Imported, with some rows skipped'
-                    : 'Nothing was imported'
-              }
-            >
-              {result.created} created · {result.updated} updated · {result.skipped} skipped ·{' '}
-              {result.failed} failed
+            <Alert tone="info" title="You can carry on working" icon={<UploadCloud />}>
+              {started.totalRows.toLocaleString()} row
+              {started.totalRows === 1 ? '' : 's'} from {started.fileName} are being imported
+              on the server. The progress and the final count are in the bar at the top of
+              the screen, wherever you go next.
             </Alert>
 
-            <div className="flex flex-wrap gap-2">
-              {result.issues.length > 0 && (
-                <Button data-cy="import-download-error-report" variant="outline" onClick={downloadErrorReport}>
-                  <Download />
-                  Download error report
-                </Button>
-              )}
-              <Button data-cy="import-import-another-file" variant="outline" onClick={resetFile}>
-                <RotateCcw />
-                Import another file
-              </Button>
-            </div>
+            <Button data-cy="import-import-another-file" variant="outline" onClick={() => setStarted(null)}>
+              <RotateCcw />
+              Import another file
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -574,8 +573,13 @@ export function ImportPage() {
                       {job.startedByName} · {formatDateTime(job.startedAt)}
                     </p>
                   </div>
+                  {/* Created and updated both count as work done: an import
+                      that only refreshes existing staff creates nothing, and
+                      counting creations alone reported it as "0 of 35 rows". */}
                   <span className="tabular-nums text-muted-foreground">
-                    {job.created} of {job.totalRows} rows
+                    {(job.created + job.updated).toLocaleString()} of{' '}
+                    {job.totalRows.toLocaleString()} rows
+                    {job.skipped > 0 && ` · ${job.skipped.toLocaleString()} skipped`}
                   </span>
                   <StatusBadge status={job.status} />
                 </li>

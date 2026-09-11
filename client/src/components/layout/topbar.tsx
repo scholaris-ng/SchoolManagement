@@ -22,6 +22,7 @@ import { Avatar } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { CurrentTermBadge } from './current-term-badge';
 import { SyncIndicator } from './sync-indicator';
+import { ImportIndicator } from './import-indicator';
 import { NotificationBell } from '@/features/notifications/notification-bell';
 import { CommandPalette } from './command-palette';
 
@@ -67,6 +68,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
 
         <div className="ml-auto flex items-center gap-1">
           <CurrentTermBadge />
+          <ImportIndicator />
           <SyncIndicator />
 
           {quickActions.length > 0 && (

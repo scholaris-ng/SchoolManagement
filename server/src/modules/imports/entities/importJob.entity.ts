@@ -69,6 +69,14 @@ export class ImportJob extends BaseEntity {
   @Column({ name: 'total_rows', type: 'int', default: 0 })
   totalRows: number;
 
+  /**
+   * How far a running import has got. Written outside the import's own
+   * transaction — from inside it nothing would be visible until the whole file
+   * committed, which is exactly when progress stops being interesting.
+   */
+  @Column({ name: 'processed_rows', type: 'int', default: 0 })
+  processedRows: number;
+
   @Column({ name: 'valid_rows', type: 'int', default: 0 })
   validRows: number;
 

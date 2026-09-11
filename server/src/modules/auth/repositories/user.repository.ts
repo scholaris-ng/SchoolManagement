@@ -17,6 +17,21 @@ export class UserRepository extends BaseRepository<User> {
     return this.repo.findOne({ where: { email: email.toLowerCase() } });
   }
 
+  /**
+   * Which of these addresses already have an account, platform-wide.
+   *
+   * A sign-in credential is unique across schools, so a bulk import has to
+   * check every address in the file — one query rather than one per row.
+   */
+  async findEmailsInUse(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const rows: { email: string }[] = await this.repo.query(
+      `SELECT email FROM users WHERE deleted_at IS NULL AND email = ANY($1::text[])`,
+      [emails.map((email) => email.toLowerCase())],
+    );
+    return new Set(rows.map((row) => row.email.toLowerCase()));
+  }
+
   async create(data: DeepPartial<User>): Promise<User> {
     return this.repo.save(this.repo.create({ ...data, email: data.email?.toLowerCase() }));
   }

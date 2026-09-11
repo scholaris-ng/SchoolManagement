@@ -127,6 +127,20 @@ export class GuardianRepository extends TenantRepository<Guardian> {
     });
   }
 
+  /** Looks up a whole spreadsheet's worth of guardian emails at once. */
+  async findManyByEmail(
+    schoolId: string,
+    emails: string[],
+    manager?: EntityManager,
+  ): Promise<{ id: string; email: string }[]> {
+    if (emails.length === 0) return [];
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, email FROM guardians
+        WHERE school_id = $1 AND deleted_at IS NULL AND email = ANY($2::text[])`,
+      [schoolId, emails.map((email) => email.toLowerCase())],
+    );
+  }
+
   async create(data: DeepPartial<Guardian>, manager?: EntityManager): Promise<Guardian> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create({ ...data, email: data.email?.toLowerCase() }));

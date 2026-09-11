@@ -35,6 +35,20 @@ export interface ImportResultDTO {
   completedAt: string;
 }
 
+/** What `POST /imports/commit` answers now that the work outlives the request. */
+export interface ImportAcceptedDTO {
+  importId: string;
+  entity: ImportEntityName;
+  status: 'IMPORTING';
+  totalRows: number;
+}
+
+/** `GET /imports/:id` — what the header polls while an import runs. */
+export interface ImportJobDetailDTO extends ImportJobDTO {
+  processedRows: number;
+  issues: ImportRowIssueDTO[];
+}
+
 export interface ImportJobDTO {
   id: string;
   schoolId: string;
@@ -43,6 +57,10 @@ export interface ImportJobDTO {
   status: ImportJobStatus;
   totalRows: number;
   created: number;
+  /** An import that only refreshes existing records creates nothing — the
+   * history has to count these too, or it reads as though nothing happened. */
+  updated: number;
+  skipped: number;
   failed: number;
   startedByName: string;
   startedAt: string;

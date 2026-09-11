@@ -21,10 +21,20 @@ export class ImportsController {
     }
   }
 
+  /** Accepted, not finished — 202, and the client follows the job from here. */
   static async commit(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = req.validated!.body as CommitImportInput;
-      res.status(200).json(ApiResponse.ok(await service().commit(contextOf(req), body)));
+      res.status(202).json(ApiResponse.ok(await service().commit(contextOf(req), body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async fetchJob(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      res.status(200).json(ApiResponse.ok(await service().fetchJob(contextOf(req), id)));
     } catch (error) {
       next(error);
     }

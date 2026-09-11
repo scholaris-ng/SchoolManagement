@@ -45,6 +45,10 @@ export const fetchImportJobsSchema = z.object({
   }),
 });
 
+export const importIdParamSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+});
+
 export type ValidateImportInput = z.infer<typeof validateImportSchema>['body'];
 export type CommitImportInput = z.infer<typeof commitImportSchema>['body'];
 export type FetchImportJobsQuery = z.infer<typeof fetchImportJobsSchema>['query'];

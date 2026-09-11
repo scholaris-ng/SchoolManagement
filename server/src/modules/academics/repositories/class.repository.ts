@@ -81,6 +81,33 @@ export class ClassRepository extends TenantRepository<SchoolClass> {
     );
   }
 
+  /**
+   * Every class, with the spellings a spreadsheet might use for it.
+   *
+   * Bulk import resolves hundreds of rows against this, so it is fetched once
+   * and matched in memory rather than queried per row.
+   */
+  async findAllForMatching(
+    schoolId: string,
+    manager?: EntityManager,
+  ): Promise<{ id: string; levelId: string; name: string; arm: string | null; code: string; displayName: string }[]> {
+    return (manager ?? this.repo.manager).query(
+      `SELECT c.id,
+              c.level_id AS "levelId",
+              c.name,
+              c.arm,
+              c.code,
+              CASE
+                WHEN c.arm IS NULL OR c.arm = '' THEN TRIM(c.name)
+                WHEN LOWER(TRIM(c.name)) LIKE '%' || LOWER(TRIM(c.arm)) THEN TRIM(c.name)
+                ELSE TRIM(CONCAT_WS(' ', c.name, c.arm))
+              END AS "displayName"
+         FROM school_classes c
+        WHERE c.school_id = $1 AND c.deleted_at IS NULL`,
+      [schoolId],
+    );
+  }
+
   async fetchForSchool(schoolId: string, filter: ClassFilter): Promise<SchoolClassDTO[]> {
     if (filter.allowedIds && filter.allowedIds.length === 0) return [];
 

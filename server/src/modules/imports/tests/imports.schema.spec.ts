@@ -1,6 +1,7 @@
 import {
   MAX_IMPORT_ROWS,
   commitImportSchema,
+  importIdParamSchema,
   validateImportSchema,
 } from '../validators/imports.schema';
 import { mapRow } from '../services/imports.service';
@@ -81,6 +82,20 @@ describe('commitImportSchema', () => {
       wrap({ body: { importId: '3f2504e0-4f89-11d3-9a0c-0305e82c3301' } }),
     );
     expect(result.success).toBe(false);
+  });
+});
+
+describe('importIdParamSchema', () => {
+  it('accepts the id an import was given', () => {
+    const result = importIdParamSchema.safeParse(
+      wrap({ params: { id: '3f2504e0-4f89-11d3-9a0c-0305e82c3301' } }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects anything that could not be one, so polling cannot be used to probe', () => {
+    expect(importIdParamSchema.safeParse(wrap({ params: { id: 'latest' } })).success).toBe(false);
+    expect(importIdParamSchema.safeParse(wrap({ params: {} })).success).toBe(false);
   });
 });
 

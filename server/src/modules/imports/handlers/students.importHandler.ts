@@ -3,11 +3,13 @@ import { StudentRepository } from '../../students/repositories/student.repositor
 import { GuardianRepository } from '../../guardians/repositories/guardian.repository';
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { HouseRepository } from '../../academics/repositories/facility.repository';
+import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { Student } from '../../students/entities/student.entity';
 import { StudentEnrollment } from '../../students/entities/studentEnrollment.entity';
 import { SchoolClass } from '../../academics/entities/schoolClass.entity';
+import type { RequestContext } from '../../../shared/types/context';
 import type { ImportEntityHandler, MappedRow, RowCheck, RowContext } from './importHandler.interface';
-import { issue } from './importHandler.interface';
+import { issue, matchKey } from './importHandler.interface';
 import { isIsoDate, normaliseSpacing, splitPersonName, todayIso } from '../utils/cells';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -19,6 +21,20 @@ interface ResolvedClass {
   displayName: string;
 }
 
+interface StudentLookups {
+  /**
+   * Several spellings point at the same class — its name, its name with the
+   * arm, and its code — so the value is a list: two classes answering to one
+   * spelling is an ambiguity the row has to be told about, not resolved by
+   * picking the first.
+   */
+  classesByName: Map<string, ResolvedClass[]>;
+  housesByName: Map<string, { id: string }>;
+  existingByAdmissionNo: Map<string, { id: string; currentClassId: string | null; deletedAt: Date | null }>;
+  /** The school's current session, if one is open — the same for every row. */
+  sessionId: string | null;
+}
+
 /**
  * Students: admission number is the key.
  *
@@ -26,7 +42,7 @@ interface ResolvedClass {
  * than calling it — that method opens its own transaction, which would commit
  * independently of the import's and defeat the all-or-nothing guarantee.
  */
-export class StudentsImportHandler implements ImportEntityHandler {
+export class StudentsImportHandler implements ImportEntityHandler<StudentLookups> {
   readonly entity = 'STUDENTS' as const;
   readonly naturalKeyField = 'admissionNo';
   readonly naturalKeyLabel = 'admission number';
@@ -40,7 +56,49 @@ export class StudentsImportHandler implements ImportEntityHandler {
     return row.admissionNo?.trim() || null;
   }
 
-  async check({ context, rowNumber, row, manager }: RowContext): Promise<RowCheck> {
+  async prepare(
+    context: RequestContext,
+    rows: MappedRow[],
+    manager?: EntityManager,
+  ): Promise<StudentLookups> {
+    const admissionNos = rows.map((row) => this.naturalKey(row)).filter((no): no is string => Boolean(no));
+
+    const [classes, houses, existing, session] = await Promise.all([
+      this.classes.findAllForMatching(context.schoolId, manager),
+      this.houses.findAllForMatching(context.schoolId, manager),
+      this.students.findManyByAdmissionNo(context.schoolId, admissionNos, manager),
+      this.currentSessionId(manager ?? AppDataSource.manager, context.schoolId),
+    ]);
+
+    const classesByName = new Map<string, ResolvedClass[]>();
+    const add = (key: string, entry: ResolvedClass) => {
+      const normalised = matchKey(key);
+      if (!normalised) return;
+      const bucket = classesByName.get(normalised);
+      if (bucket) {
+        if (!bucket.some((item) => item.id === entry.id)) bucket.push(entry);
+      } else {
+        classesByName.set(normalised, [entry]);
+      }
+    };
+
+    for (const row of classes) {
+      const entry: ResolvedClass = { id: row.id, levelId: row.levelId, displayName: row.displayName };
+      add(row.name, entry);
+      add(row.displayName, entry);
+      if (row.arm) add(`${row.name} ${row.arm}`, entry);
+      if (row.code) add(row.code, entry);
+    }
+
+    return {
+      classesByName,
+      housesByName: new Map(houses.map((house) => [matchKey(house.name), { id: house.id }])),
+      existingByAdmissionNo: new Map(existing.map((row) => [row.admissionNo, row])),
+      sessionId: session,
+    };
+  }
+
+  async check({ rowNumber, row, lookups }: RowContext<StudentLookups>): Promise<RowCheck> {
     const issues = [];
     const admissionNo = (row.admissionNo ?? '').trim();
     const firstName = normaliseSpacing(row.firstName ?? '');
@@ -64,7 +122,7 @@ export class StudentsImportHandler implements ImportEntityHandler {
     if (!className) {
       issues.push(issue(rowNumber, 'ERROR', 'REQUIRED', 'A class is required.', 'className'));
     } else {
-      const matches = await this.classes.findByDisplayName(context.schoolId, className, manager);
+      const matches = lookups.classesByName.get(matchKey(className)) ?? [];
       if (matches.length === 0) {
         issues.push(
           issue(rowNumber, 'ERROR', 'CLASS_NOT_FOUND', `There is no class called "${className}".`, 'className', className),
@@ -86,13 +144,10 @@ export class StudentsImportHandler implements ImportEntityHandler {
     }
 
     const houseName = normaliseSpacing(row.houseName ?? '');
-    if (houseName) {
-      const house = await this.houses.findByNameInsensitive(context.schoolId, houseName, manager);
-      if (!house) {
-        issues.push(
-          issue(rowNumber, 'WARNING', 'HOUSE_NOT_FOUND', `No house called "${houseName}" — left unset.`, 'houseName', houseName),
-        );
-      }
+    if (houseName && !lookups.housesByName.has(matchKey(houseName))) {
+      issues.push(
+        issue(rowNumber, 'WARNING', 'HOUSE_NOT_FOUND', `No house called "${houseName}" — left unset.`, 'houseName', houseName),
+      );
     }
 
     // A guardian record cannot exist without an email: it is both required and
@@ -121,7 +176,7 @@ export class StudentsImportHandler implements ImportEntityHandler {
 
     let willUpdate = false;
     if (admissionNo) {
-      const existing = await this.students.findByAdmissionNo(context.schoolId, admissionNo, manager);
+      const existing = lookups.existingByAdmissionNo.get(admissionNo);
       if (existing?.deletedAt) {
         issues.push(
           issue(
@@ -162,18 +217,16 @@ export class StudentsImportHandler implements ImportEntityHandler {
     };
   }
 
-  async apply({ context, row, manager }: RowContext): Promise<'CREATED' | 'UPDATED'> {
+  async apply({ context, row, lookups, manager }: RowContext<StudentLookups>): Promise<'CREATED' | 'UPDATED'> {
     if (!manager) throw new Error('Student import must run inside a transaction.');
 
     const admissionNo = row.admissionNo.trim();
     const className = normaliseSpacing(row.className);
-    const [schoolClass] = await this.classes.findByDisplayName(context.schoolId, className, manager);
+    const [schoolClass] = lookups.classesByName.get(matchKey(className)) ?? [];
     if (!schoolClass) throw new Error(`Class "${className}" could not be resolved.`);
 
     const houseName = normaliseSpacing(row.houseName ?? '');
-    const house = houseName
-      ? await this.houses.findByNameInsensitive(context.schoolId, houseName, manager)
-      : null;
+    const house = houseName ? lookups.housesByName.get(matchKey(houseName)) : undefined;
 
     const fields = {
       firstName: normaliseSpacing(row.firstName),
@@ -185,7 +238,7 @@ export class StudentsImportHandler implements ImportEntityHandler {
       houseId: house?.id ?? null,
     };
 
-    const existing = await this.students.findByAdmissionNo(context.schoolId, admissionNo, manager);
+    const existing = lookups.existingByAdmissionNo.get(admissionNo);
 
     let studentId: string;
     let outcome: 'CREATED' | 'UPDATED';
@@ -218,13 +271,12 @@ export class StudentsImportHandler implements ImportEntityHandler {
 
       // Admission opens the first enrolment, exactly as adding a student by
       // hand does — without it the child has a class but no history.
-      const sessionId = await this.currentSessionId(manager, context.schoolId);
-      if (sessionId) {
+      if (lookups.sessionId) {
         await manager.save(
           manager.create(StudentEnrollment, {
             schoolId: context.schoolId,
             studentId: student.id,
-            sessionId,
+            sessionId: lookups.sessionId,
             levelId: schoolClass.levelId,
             classId: schoolClass.id,
             status: 'ACTIVE',
@@ -236,6 +288,12 @@ export class StudentsImportHandler implements ImportEntityHandler {
       await manager.increment(SchoolClass, { id: schoolClass.id }, 'enrolledCount', 1);
       studentId = student.id;
       outcome = 'CREATED';
+      // Keeps an admission number repeated later in the same file an update.
+      lookups.existingByAdmissionNo.set(admissionNo, {
+        id: student.id,
+        currentClassId: schoolClass.id,
+        deletedAt: null,
+      });
     }
 
     await this.attachGuardian(context.schoolId, studentId, row, manager);

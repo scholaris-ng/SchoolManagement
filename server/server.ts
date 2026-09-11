@@ -3,6 +3,10 @@ import type { Server } from 'node:http';
 import { createApp } from './src/app';
 import { env } from './src/config/env';
 import { closeDatabase, initialiseDatabase } from './src/infrastructure/database/dataSource';
+import {
+  failRunningImports,
+  reapAbandonedImports,
+} from './src/modules/imports/services/imports.service';
 import { isFirebaseConfigured } from './src/infrastructure/firebase/firebaseAdmin';
 
 /**
@@ -12,6 +16,14 @@ import { isFirebaseConfigured } from './src/infrastructure/firebase/firebaseAdmi
 async function main(): Promise<void> {
   await initialiseDatabase();
   console.info('[api] Database connected.');
+
+  // An import runs in this process, so one that was in flight when the last
+  // process stopped is never coming back. Left alone its progress bar would
+  // sit part way for ever.
+  const abandoned = await reapAbandonedImports();
+  if (abandoned > 0) {
+    console.warn(`[api] Marked ${abandoned} unfinished import(s) as failed.`);
+  }
 
   if (!isFirebaseConfigured()) {
     const note = env.devAuthEnabled
@@ -47,6 +59,10 @@ function installShutdownHandlers(server: Server): void {
     timer.unref();
 
     server.close(async () => {
+      // `server.close` waits for HTTP connections, and a bulk import is not
+      // one — it would be cut off mid-run with the job still reading
+      // "importing". Say so before the pool goes.
+      await failRunningImports();
       await closeDatabase();
       clearTimeout(timer);
       process.exit(0);

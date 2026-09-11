@@ -181,6 +181,26 @@ export class StudentRepository extends TenantRepository<Student> {
     });
   }
 
+  /**
+   * Looks up a whole spreadsheet's worth of admission numbers at once.
+   *
+   * Soft-deleted rows are included, as `findByAdmissionNo` does: the number is
+   * still taken, and importing over a withdrawn pupil is not something to do
+   * by accident.
+   */
+  async findManyByAdmissionNo(
+    schoolId: string,
+    admissionNos: string[],
+    manager?: EntityManager,
+  ): Promise<{ id: string; admissionNo: string; currentClassId: string | null; deletedAt: Date | null }[]> {
+    if (admissionNos.length === 0) return [];
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, admission_no AS "admissionNo", current_class_id AS "currentClassId", deleted_at AS "deletedAt"
+         FROM students WHERE school_id = $1 AND admission_no = ANY($2::text[])`,
+      [schoolId, admissionNos],
+    );
+  }
+
   async create(data: DeepPartial<Student>, manager?: EntityManager): Promise<Student> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));

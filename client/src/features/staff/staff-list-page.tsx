@@ -1,17 +1,19 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, UploadCloud, UserCog } from 'lucide-react';
+import { Plus, UploadCloud, UserCog, UserX } from 'lucide-react';
 import { formatDate } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useListQuery } from '@/hooks/use-list-query';
-import { useStaffList } from './api';
+import { useAuth } from '@/app/providers/auth-provider';
+import { useBulkExitStaff, useStaffList } from './api';
 import type { StaffMember } from '@/types/people';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
-import { FilterBar } from '@/components/data/filter-bar';
+import { FilterBar, SelectionBar } from '@/components/data/filter-bar';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Avatar, Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/guards/permission-gate';
 
 const STATUS_OPTIONS = [
@@ -28,11 +30,26 @@ const EMPLOYMENT_OPTIONS = [
 
 export function StaffListPage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const list = useListQuery({
     filterKeys: ['status', 'employmentType', 'department'],
     defaultSortBy: 'lastName',
   });
   const staff = useStaffList(list.query);
+  const bulkExit = useBulkExitStaff();
+
+  const selectedMembers = useMemo(
+    () => (staff.data?.items ?? []).filter((member) => selectedIds.includes(member.id)),
+    [staff.data, selectedIds],
+  );
+
+  const confirmExit = async () => {
+    await bulkExit.mutateAsync(selectedMembers.map(({ id, version }) => ({ id, version })));
+    setExitConfirmOpen(false);
+    setSelectedIds([]);
+  };
 
   // Hoisted so the memoised rows in `DataTable` are not invalidated by a
   // new handler identity on every render.
@@ -159,6 +176,18 @@ export function StaffListPage() {
         ]}
       />
 
+      <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+        <Button
+          data-cy="staff-list-mark-exited"
+          variant="outline"
+          size="sm"
+          onClick={() => setExitConfirmOpen(true)}
+        >
+          <UserX />
+          Mark as exited
+        </Button>
+      </SelectionBar>
+
       <DataTable
 
         data-cy="staff-table"
@@ -176,6 +205,8 @@ export function StaffListPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
+        selectedIds={can('staff.manage') ? selectedIds : undefined}
+        onSelectionChange={can('staff.manage') ? setSelectedIds : undefined}
         onRowClick={handleRowClick}
         emptyIcon={<UserCog />}
         emptyTitle={list.isFiltered ? 'No staff match those filters' : 'No staff recorded yet'}
@@ -194,6 +225,18 @@ export function StaffListPage() {
             </Button>
           </PermissionGate>
         }
+      />
+
+      <ConfirmDialog
+        data-cy="staff-list-exit-confirm"
+        open={exitConfirmOpen}
+        onOpenChange={setExitConfirmOpen}
+        tone="danger"
+        title={`Mark ${selectedMembers.length === 1 ? 'this staff member' : `${selectedMembers.length} staff members`} as exited?`}
+        description="They will no longer be able to sign in. Their record, past teaching assignments and history are kept, and this can be reversed by editing their status back to Active."
+        confirmLabel="Mark as exited"
+        loading={bulkExit.isPending}
+        onConfirm={confirmExit}
       />
     </PageContainer>
   );

@@ -90,6 +90,20 @@ export class SubjectRepository extends TenantRepository<Subject> {
     return this.repoFor(manager).findOne({ where: { schoolId, code } });
   }
 
+  /** Looks up a whole spreadsheet's worth of subject codes at once. */
+  async findManyByCode(
+    schoolId: string,
+    codes: string[],
+    manager?: EntityManager,
+  ): Promise<{ id: string; code: string }[]> {
+    if (codes.length === 0) return [];
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, code FROM subjects
+        WHERE school_id = $1 AND deleted_at IS NULL AND code = ANY($2::text[])`,
+      [schoolId, codes.map((code) => code.toUpperCase())],
+    );
+  }
+
   async create(data: DeepPartial<Subject>, manager?: EntityManager): Promise<Subject> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));

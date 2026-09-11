@@ -7,6 +7,7 @@ import { ImportsController } from '../controllers/imports.controller';
 import {
   commitImportSchema,
   fetchImportJobsSchema,
+  importIdParamSchema,
   validateImportSchema,
 } from '../validators/imports.schema';
 
@@ -18,6 +19,11 @@ import {
  * saved — and writes nothing but the record of having looked. `commit` then
  * applies it, re-checking as it goes, so nothing is decided on a picture of
  * the database that has since moved on.
+ *
+ * `commit` answers 202 and keeps working after the response: a large file used
+ * to outlast the browser's thirty-second patience and report itself as a
+ * network failure while the rows were landing. Progress is followed through
+ * `GET /imports/:id`.
  */
 const router = Router();
 
@@ -28,6 +34,13 @@ router.get(
   authorise('import.run'),
   validate(fetchImportJobsSchema),
   ImportsController.fetchJobs,
+);
+
+router.get(
+  '/imports/:id',
+  authorise('import.run'),
+  validate(importIdParamSchema),
+  ImportsController.fetchJob,
 );
 
 router.post(

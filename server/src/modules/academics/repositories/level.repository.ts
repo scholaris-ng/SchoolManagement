@@ -25,23 +25,18 @@ export class LevelRepository extends TenantRepository<SchoolLevel> {
   }
 
   /**
-   * Resolves level names typed into a spreadsheet ("JSS 1;JSS 2") in one query.
-   *
-   * Matching is case- and whitespace-insensitive; the caller compares what came
-   * back against what it asked for to find the names that matched nothing.
+   * Every level, for resolving the names typed into a spreadsheet
+   * ("JSS 1;JSS 2"). Fetched once per import and matched in memory — a school
+   * has a handful of levels, and a query per row is not worth the round trips.
    */
-  async findByNames(
+  async findAllForMatching(
     schoolId: string,
-    names: string[],
     manager?: EntityManager,
   ): Promise<{ id: string; name: string }[]> {
-    if (names.length === 0) return [];
     return (manager ?? this.repo.manager).query(
       `SELECT id, name FROM school_levels
-        WHERE school_id = $1
-          AND deleted_at IS NULL
-          AND LOWER(REGEXP_REPLACE(TRIM(name), '\\s+', ' ', 'g')) = ANY($2::text[])`,
-      [schoolId, names.map((name) => name.trim().replace(/\s+/g, ' ').toLowerCase())],
+        WHERE school_id = $1 AND deleted_at IS NULL`,
+      [schoolId],
     );
   }
 

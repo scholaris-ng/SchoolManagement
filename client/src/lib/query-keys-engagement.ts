@@ -51,6 +51,7 @@ export const engagementKeys = {
 
   imports: {
     jobs: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'imports', query ?? {}),
+    job: (schoolId: Scope, id: string) => scoped(schoolId, 'imports', 'job', id),
     templates: (schoolId: Scope, entity: string) => scoped(schoolId, 'import-template', entity),
   },
 

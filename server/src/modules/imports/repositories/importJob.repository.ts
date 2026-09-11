@@ -62,6 +62,8 @@ export class ImportJobRepository extends TenantRepository<ImportJob> {
       status: row.status,
       totalRows: row.totalRows,
       created: row.created,
+      updated: row.updated,
+      skipped: row.skipped,
       failed: row.failed,
       startedByName: row.startedByName,
       startedAt: row.createdAt.toISOString(),

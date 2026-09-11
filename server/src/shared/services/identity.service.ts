@@ -24,6 +24,16 @@ export interface IdentityProvider {
   deleteUser(uid: string): Promise<void>;
   markEmailVerified(uid: string): Promise<void>;
   /**
+   * Which of these addresses already hold a credential.
+   *
+   * Credentials live outside our database, so deleting a staff row does not
+   * remove one — and the next import of that person fails at the moment of
+   * creation, long after it was told the file was fine. Bulk import asks this
+   * up front so the clash is reported while there is still something the
+   * school can do about it.
+   */
+  findExistingEmails(emails: string[]): Promise<Set<string>>;
+  /**
    * A one-time link that lets someone set a new password, or `null` when the
    * address has no credential.
    *
@@ -66,6 +76,28 @@ class FirebaseIdentityProvider implements IdentityProvider {
     await getFirebaseAuth().deleteUser(uid);
   }
 
+  /** `getUsers` takes at most 100 identifiers, so long files go in batches. */
+  async findExistingEmails(emails: string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    if (emails.length === 0) return found;
+
+    const auth = getFirebaseAuth();
+    for (let start = 0; start < emails.length; start += 100) {
+      const batch = emails.slice(start, start + 100);
+      try {
+        const result = await auth.getUsers(batch.map((email) => ({ email })));
+        for (const user of result.users) {
+          if (user.email) found.add(user.email.toLowerCase());
+        }
+      } catch (error) {
+        // A lookup that fails must not fail the import: the row will still be
+        // caught at creation, just later and less helpfully.
+        console.error('[identity] getUsers lookup failed:', error);
+      }
+    }
+    return found;
+  }
+
   async markEmailVerified(uid: string): Promise<void> {
     await getFirebaseAuth().updateUser(uid, { emailVerified: true });
   }
@@ -106,6 +138,11 @@ class DevIdentityProvider implements IdentityProvider {
 
   async deleteUser(): Promise<void> {
     // Nothing external was created, so there is nothing to undo.
+  }
+
+  async findExistingEmails(): Promise<Set<string>> {
+    // No credentials are held in this mode, so none can clash.
+    return new Set();
   }
 
   async markEmailVerified(): Promise<void> {

@@ -106,20 +106,18 @@ export class HouseRepository extends TenantRepository<House> {
     return this.repoFor(manager).findOne({ where: { schoolId, name } });
   }
 
-  /** Case-insensitive, for matching a house typed into a spreadsheet. */
-  async findByNameInsensitive(
+  /**
+   * Every house, for matching the names typed into a spreadsheet. Fetched once
+   * per import rather than queried per row.
+   */
+  async findAllForMatching(
     schoolId: string,
-    name: string,
     manager?: EntityManager,
-  ): Promise<House | null> {
-    const rows: { id: string }[] = await (manager ?? this.repo.manager).query(
-      `SELECT id FROM houses
-        WHERE school_id = $1 AND deleted_at IS NULL AND LOWER(TRIM(name)) = LOWER(TRIM($2))
-        LIMIT 1`,
-      [schoolId, name],
+  ): Promise<{ id: string; name: string }[]> {
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, name FROM houses WHERE school_id = $1 AND deleted_at IS NULL`,
+      [schoolId],
     );
-    if (!rows[0]) return null;
-    return this.repoFor(manager).findOne({ where: { schoolId, id: rows[0].id } });
   }
 
   async create(data: DeepPartial<House>): Promise<House> {

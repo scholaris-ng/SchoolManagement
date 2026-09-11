@@ -1,8 +1,14 @@
+import type { EntityManager } from 'typeorm';
+import type { RequestContext } from '../../../shared/types/context';
 import { FeeItemRepository } from '../../finance/repositories/feeItem.repository';
 import { FEE_CATEGORIES, type FeeCategory } from '../../finance/entities/feeItem.entity';
 import type { ImportEntityHandler, MappedRow, RowCheck, RowContext } from './importHandler.interface';
 import { issue } from './importHandler.interface';
 import { normaliseSpacing, parseBooleanCell } from '../utils/cells';
+
+interface FeeLookups {
+  existingByCode: Map<string, { id: string }>;
+}
 
 /** Strips the grouping and currency marks a school may have typed: "₦85,000.00". */
 function parseAmount(raw: string | undefined): number | null {
@@ -19,7 +25,7 @@ function parseCategory(raw: string | undefined): FeeCategory | null {
 }
 
 /** Fee items: code is the key, amount and category are required and strict. */
-export class FeesImportHandler implements ImportEntityHandler {
+export class FeesImportHandler implements ImportEntityHandler<FeeLookups> {
   readonly entity = 'FEES' as const;
   readonly naturalKeyField = 'code';
   readonly naturalKeyLabel = 'fee code';
@@ -30,7 +36,17 @@ export class FeesImportHandler implements ImportEntityHandler {
     return row.code?.trim().toUpperCase() || null;
   }
 
-  async check({ context, rowNumber, row, manager }: RowContext): Promise<RowCheck> {
+  async prepare(
+    context: RequestContext,
+    rows: MappedRow[],
+    manager?: EntityManager,
+  ): Promise<FeeLookups> {
+    const codes = rows.map((row) => this.naturalKey(row)).filter((code): code is string => Boolean(code));
+    const existing = await this.feeItems.findManyByCode(context.schoolId, codes, manager);
+    return { existingByCode: new Map(existing.map((row) => [row.code.toUpperCase(), { id: row.id }])) };
+  }
+
+  async check({ rowNumber, row, lookups }: RowContext<FeeLookups>): Promise<RowCheck> {
     const issues = [];
     const name = normaliseSpacing(row.name ?? '');
     const code = (row.code ?? '').trim().toUpperCase();
@@ -69,11 +85,9 @@ export class FeesImportHandler implements ImportEntityHandler {
       issues.push(issue(rowNumber, 'WARNING', 'UNREADABLE_BOOLEAN', optional.warning, 'isOptional', row.isOptional));
     }
 
-    const existing = code ? await this.feeItems.findByCode(context.schoolId, code, manager) : null;
-
     return {
       issues,
-      willUpdate: Boolean(existing),
+      willUpdate: Boolean(code && lookups.existingByCode.has(code)),
       // Every column the template offers appears here: the wizard draws one
       // cell per mapped column, so anything left out reads as blank to a
       // school checking its file.
@@ -88,7 +102,7 @@ export class FeesImportHandler implements ImportEntityHandler {
     };
   }
 
-  async apply({ context, row, manager }: RowContext): Promise<'CREATED' | 'UPDATED'> {
+  async apply({ context, row, lookups, manager }: RowContext<FeeLookups>): Promise<'CREATED' | 'UPDATED'> {
     const name = normaliseSpacing(row.name);
     const code = row.code.trim().toUpperCase();
     const amount = (parseAmount(row.amount) ?? 0).toFixed(2);
@@ -96,13 +110,13 @@ export class FeesImportHandler implements ImportEntityHandler {
     const isOptional = parseBooleanCell(row.isOptional, false).value;
     const description = normaliseSpacing(row.description ?? '') || null;
 
-    const existing = await this.feeItems.findByCode(context.schoolId, code, manager);
+    const existing = lookups.existingByCode.get(code);
     if (existing) {
       await this.feeItems.update(existing.id, { name, amount, category, isOptional, description }, manager);
       return 'UPDATED';
     }
 
-    await this.feeItems.create(
+    const created = await this.feeItems.create(
       {
         schoolId: context.schoolId,
         name,
@@ -116,6 +130,8 @@ export class FeesImportHandler implements ImportEntityHandler {
       },
       manager,
     );
+    // Keeps a code repeated later in the same file an update, not a second insert.
+    lookups.existingByCode.set(code, { id: created.id });
     return 'CREATED';
   }
 }

@@ -51,6 +51,20 @@ export class FeeItemRepository extends TenantRepository<FeeItem> {
     return this.repoFor(manager).findOne({ where: { schoolId, code } });
   }
 
+  /** Looks up a whole spreadsheet's worth of fee codes at once. */
+  async findManyByCode(
+    schoolId: string,
+    codes: string[],
+    manager?: EntityManager,
+  ): Promise<{ id: string; code: string }[]> {
+    if (codes.length === 0) return [];
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, code FROM fee_items
+        WHERE school_id = $1 AND deleted_at IS NULL AND code = ANY($2::text[])`,
+      [schoolId, codes.map((code) => code.toUpperCase())],
+    );
+  }
+
   async create(data: DeepPartial<FeeItem>, manager?: EntityManager): Promise<FeeItem> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));
