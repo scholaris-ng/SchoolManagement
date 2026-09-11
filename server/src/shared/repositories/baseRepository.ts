@@ -1,6 +1,7 @@
 import type {
   DataSource,
   DeepPartial,
+  EntityManager,
   EntityTarget,
   FindOptionsWhere,
   ObjectLiteral,
@@ -29,6 +30,18 @@ export abstract class BaseRepository<T extends ObjectLiteral & { id: string }> {
 
   get manager() {
     return this.repo.manager;
+  }
+
+  /**
+   * The repository bound to a caller's open transaction, or the default one.
+   *
+   * Bulk import applies a whole file inside a single transaction, so the methods
+   * it calls must write through *that* manager. Reaching for `this.repo` there
+   * would quietly open a second, independently-committing transaction and a
+   * failure half way through would leave the earlier rows behind.
+   */
+  protected repoFor(manager?: EntityManager): Repository<T> {
+    return manager ? manager.getRepository(this.repo.target) : this.repo;
   }
 
   async findById(id: string): Promise<T | null> {

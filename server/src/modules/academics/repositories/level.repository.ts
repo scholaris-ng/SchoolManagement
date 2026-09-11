@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { SchoolLevel } from '../entities/schoolLevel.entity';
 import type { SchoolLevelDTO } from '../dto/academics.dto';
@@ -22,6 +22,27 @@ export class LevelRepository extends TenantRepository<SchoolLevel> {
 
   private constructor() {
     super(SchoolLevel, 'level');
+  }
+
+  /**
+   * Resolves level names typed into a spreadsheet ("JSS 1;JSS 2") in one query.
+   *
+   * Matching is case- and whitespace-insensitive; the caller compares what came
+   * back against what it asked for to find the names that matched nothing.
+   */
+  async findByNames(
+    schoolId: string,
+    names: string[],
+    manager?: EntityManager,
+  ): Promise<{ id: string; name: string }[]> {
+    if (names.length === 0) return [];
+    return (manager ?? this.repo.manager).query(
+      `SELECT id, name FROM school_levels
+        WHERE school_id = $1
+          AND deleted_at IS NULL
+          AND LOWER(REGEXP_REPLACE(TRIM(name), '\\s+', ' ', 'g')) = ANY($2::text[])`,
+      [schoolId, names.map((name) => name.trim().replace(/\s+/g, ' ').toLowerCase())],
+    );
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -170,12 +170,24 @@ export class StudentRepository extends TenantRepository<Student> {
     return rows[0] ?? null;
   }
 
-  async findByAdmissionNo(schoolId: string, admissionNo: string): Promise<Student | null> {
-    return this.repo.findOne({ where: { schoolId, admissionNo }, withDeleted: true });
+  async findByAdmissionNo(
+    schoolId: string,
+    admissionNo: string,
+    manager?: EntityManager,
+  ): Promise<Student | null> {
+    return this.repoFor(manager).findOne({
+      where: { schoolId, admissionNo },
+      withDeleted: true,
+    });
   }
 
-  async create(data: DeepPartial<Student>): Promise<Student> {
-    return this.repo.save(this.repo.create(data));
+  async create(data: DeepPartial<Student>, manager?: EntityManager): Promise<Student> {
+    const repo = this.repoFor(manager);
+    return repo.save(repo.create(data));
+  }
+
+  async update(id: string, patch: DeepPartial<Student>, manager?: EntityManager): Promise<void> {
+    await this.repoFor(manager).update(id, patch as never);
   }
 
   /** Guarded by the version the caller loaded (spec section 34). */
@@ -191,10 +203,6 @@ export class StudentRepository extends TenantRepository<Student> {
       .where('id = :id AND version = :expectedVersion', { id, expectedVersion })
       .execute();
     return (result.affected ?? 0) > 0;
-  }
-
-  async update(id: string, patch: DeepPartial<Student>): Promise<void> {
-    await this.repo.update(id, patch as never);
   }
 
   /** Ids of the children a guardian is linked to — the parent portal's whole scope. */

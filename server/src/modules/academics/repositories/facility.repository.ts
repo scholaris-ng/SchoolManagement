@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { Room } from '../entities/room.entity';
 import { House } from '../entities/house.entity';
@@ -98,8 +98,28 @@ export class HouseRepository extends TenantRepository<House> {
     return rows[0] ?? null;
   }
 
-  async findByName(schoolId: string, name: string): Promise<House | null> {
-    return this.repo.findOne({ where: { schoolId, name } });
+  async findByName(
+    schoolId: string,
+    name: string,
+    manager?: EntityManager,
+  ): Promise<House | null> {
+    return this.repoFor(manager).findOne({ where: { schoolId, name } });
+  }
+
+  /** Case-insensitive, for matching a house typed into a spreadsheet. */
+  async findByNameInsensitive(
+    schoolId: string,
+    name: string,
+    manager?: EntityManager,
+  ): Promise<House | null> {
+    const rows: { id: string }[] = await (manager ?? this.repo.manager).query(
+      `SELECT id FROM houses
+        WHERE school_id = $1 AND deleted_at IS NULL AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+        LIMIT 1`,
+      [schoolId, name],
+    );
+    if (!rows[0]) return null;
+    return this.repoFor(manager).findOne({ where: { schoolId, id: rows[0].id } });
   }
 
   async create(data: DeepPartial<House>): Promise<House> {

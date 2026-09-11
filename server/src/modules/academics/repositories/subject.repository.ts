@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { Subject } from '../entities/subject.entity';
 import { SubjectLevel } from '../entities/subjectLevel.entity';
@@ -82,36 +82,55 @@ export class SubjectRepository extends TenantRepository<Subject> {
     return rows[0] ?? null;
   }
 
-  async findByCode(schoolId: string, code: string): Promise<Subject | null> {
-    return this.repo.findOne({ where: { schoolId, code } });
+  async findByCode(
+    schoolId: string,
+    code: string,
+    manager?: EntityManager,
+  ): Promise<Subject | null> {
+    return this.repoFor(manager).findOne({ where: { schoolId, code } });
   }
 
-  async create(data: DeepPartial<Subject>): Promise<Subject> {
-    return this.repo.save(this.repo.create(data));
+  async create(data: DeepPartial<Subject>, manager?: EntityManager): Promise<Subject> {
+    const repo = this.repoFor(manager);
+    return repo.save(repo.create(data));
   }
 
-  async update(id: string, patch: DeepPartial<Subject>): Promise<void> {
-    await this.repo.update(id, patch as never);
+  async update(id: string, patch: DeepPartial<Subject>, manager?: EntityManager): Promise<void> {
+    await this.repoFor(manager).update(id, patch as never);
   }
 
-  /** Replaces the level set atomically, dropping ids that are not this school's. */
-  async replaceLevels(schoolId: string, subjectId: string, levelIds: string[]): Promise<void> {
-    await this.repo.manager.transaction(async (manager) => {
-      await manager.delete(SubjectLevel, { subjectId });
+  /**
+   * Replaces the level set atomically, dropping ids that are not this school's.
+   *
+   * A caller already inside a transaction passes its manager, and the work joins
+   * that transaction. Opening one of our own there would commit independently of
+   * the caller's, which is exactly what a bulk import must not do.
+   */
+  async replaceLevels(
+    schoolId: string,
+    subjectId: string,
+    levelIds: string[],
+    manager?: EntityManager,
+  ): Promise<void> {
+    const run = async (em: EntityManager) => {
+      await em.delete(SubjectLevel, { subjectId });
       if (levelIds.length === 0) return;
 
-      const rows: { id: string }[] = await manager.query(
+      const rows: { id: string }[] = await em.query(
         `SELECT id FROM school_levels
          WHERE school_id = $1 AND deleted_at IS NULL AND id = ANY($2::uuid[])`,
         [schoolId, levelIds],
       );
       if (rows.length === 0) return;
 
-      await manager.insert(
+      await em.insert(
         SubjectLevel,
         rows.map((row) => ({ schoolId, subjectId, levelId: row.id })),
       );
-    });
+    };
+
+    if (manager) return run(manager);
+    await this.repo.manager.transaction(run);
   }
 
   /** The level a class sits at — asking for a class's subjects is asking for its level's. */

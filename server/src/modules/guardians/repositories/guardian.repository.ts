@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -117,16 +117,27 @@ export class GuardianRepository extends TenantRepository<Guardian> {
     return rows[0] ?? null;
   }
 
-  async findByEmail(schoolId: string, email: string): Promise<Guardian | null> {
-    return this.repo.findOne({ where: { schoolId, email: email.toLowerCase() } });
+  async findByEmail(
+    schoolId: string,
+    email: string,
+    manager?: EntityManager,
+  ): Promise<Guardian | null> {
+    return this.repoFor(manager).findOne({
+      where: { schoolId, email: email.toLowerCase() },
+    });
   }
 
-  async create(data: DeepPartial<Guardian>): Promise<Guardian> {
-    return this.repo.save(this.repo.create({ ...data, email: data.email?.toLowerCase() }));
+  async create(data: DeepPartial<Guardian>, manager?: EntityManager): Promise<Guardian> {
+    const repo = this.repoFor(manager);
+    return repo.save(repo.create({ ...data, email: data.email?.toLowerCase() }));
   }
 
-  async update(id: string, patch: DeepPartial<Guardian>): Promise<void> {
-    await this.repo.update(id, patch as never);
+  async update(
+    id: string,
+    patch: DeepPartial<Guardian>,
+    manager?: EntityManager,
+  ): Promise<void> {
+    await this.repoFor(manager).update(id, patch as never);
   }
 
   async updateIfVersionMatches(
@@ -177,15 +188,30 @@ export class GuardianRepository extends TenantRepository<Guardian> {
     schoolId: string,
     studentId: string,
     guardianId: string,
+    manager?: EntityManager,
   ): Promise<StudentGuardian | null> {
-    return this.repo.manager
+    return (manager ?? this.repo.manager)
       .getRepository(StudentGuardian)
       .findOne({ where: { schoolId, studentId, guardianId } });
   }
 
-  async createLink(data: DeepPartial<StudentGuardian>): Promise<StudentGuardian> {
-    const repo = this.repo.manager.getRepository(StudentGuardian);
+  async createLink(
+    data: DeepPartial<StudentGuardian>,
+    manager?: EntityManager,
+  ): Promise<StudentGuardian> {
+    const repo = (manager ?? this.repo.manager).getRepository(StudentGuardian);
     return repo.save(repo.create(data));
+  }
+
+  /** How many guardians a child already has — the first one linked becomes primary. */
+  async countLinksForStudent(
+    schoolId: string,
+    studentId: string,
+    manager?: EntityManager,
+  ): Promise<number> {
+    return (manager ?? this.repo.manager)
+      .getRepository(StudentGuardian)
+      .count({ where: { schoolId, studentId } });
   }
 
   async deleteLink(schoolId: string, id: string): Promise<boolean> {
@@ -201,8 +227,13 @@ export class GuardianRepository extends TenantRepository<Guardian> {
    * "Who do we call first" has exactly one answer, so setting a new primary
    * demotes the previous one rather than leaving two.
    */
-  async clearOtherPrimaries(schoolId: string, studentId: string, keepId: string): Promise<void> {
-    await this.repo.query(
+  async clearOtherPrimaries(
+    schoolId: string,
+    studentId: string,
+    keepId: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    await (manager ?? this.repo.manager).query(
       `UPDATE student_guardians
           SET is_primary_contact = FALSE, updated_at = now()
         WHERE school_id = $1 AND student_id = $2 AND id <> $3 AND is_primary_contact`,

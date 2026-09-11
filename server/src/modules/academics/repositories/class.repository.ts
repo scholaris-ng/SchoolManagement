@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { SchoolClass } from '../entities/schoolClass.entity';
 import { ClassFormTeacher } from '../entities/classFormTeacher.entity';
@@ -41,6 +41,44 @@ export class ClassRepository extends TenantRepository<SchoolClass> {
 
   private constructor() {
     super(SchoolClass, 'class');
+  }
+
+  /**
+   * Resolves the name a school writes in a spreadsheet — "JSS 1 Gold" — to a class.
+   *
+   * Schools name classes two ways and both are in use: `name` "JSS 1" with `arm`
+   * "Gold", and `name` "JSS 1 Gold" with the arm repeated. So the typed name is
+   * matched against the name alone, the name and arm joined, and the class code,
+   * and every hit is returned — an ambiguous name is the caller's to report
+   * rather than something to pick a silent winner for.
+   */
+  async findByDisplayName(
+    schoolId: string,
+    displayName: string,
+    manager?: EntityManager,
+  ): Promise<{ id: string; levelId: string; displayName: string }[]> {
+    return (manager ?? this.repo.manager).query(
+      `WITH typed AS (SELECT LOWER(REGEXP_REPLACE(TRIM($2), '\\s+', ' ', 'g')) AS value)
+       SELECT c.id,
+              c.level_id AS "levelId",
+              -- Some schools put the arm in the name as well; repeating it here
+              -- would show a class back to them as "JSS 1 Gold Gold".
+              CASE
+                WHEN c.arm IS NULL OR c.arm = '' THEN TRIM(c.name)
+                WHEN LOWER(TRIM(c.name)) LIKE '%' || LOWER(TRIM(c.arm)) THEN TRIM(c.name)
+                ELSE TRIM(CONCAT_WS(' ', c.name, c.arm))
+              END AS "displayName"
+         FROM school_classes c, typed
+        WHERE c.school_id = $1
+          AND c.deleted_at IS NULL
+          AND (
+            LOWER(REGEXP_REPLACE(TRIM(c.name), '\\s+', ' ', 'g')) = typed.value
+            OR LOWER(REGEXP_REPLACE(TRIM(CONCAT_WS(' ', c.name, c.arm)), '\\s+', ' ', 'g'))
+               = typed.value
+            OR LOWER(TRIM(c.code)) = typed.value
+          )`,
+      [schoolId, displayName],
+    );
   }
 
   async fetchForSchool(schoolId: string, filter: ClassFilter): Promise<SchoolClassDTO[]> {
