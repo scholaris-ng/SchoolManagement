@@ -45,9 +45,12 @@ export function WebsiteSettingsPage() {
     }
   }, [website.data]);
 
+  const headerBreadcrumbs = [{ label: 'Administration' }, { label: 'Website' }];
+
   if (website.isPending || !draft) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={headerBreadcrumbs} />
         <LoadingState label="Loading website settings…" />
       </PageContainer>
     );
@@ -56,6 +59,7 @@ export function WebsiteSettingsPage() {
   if (website.isError) {
     return (
       <PageContainer>
+        <PageHeader title="Website" breadcrumbs={headerBreadcrumbs} />
         <ErrorState error={website.error} onRetry={() => void website.refetch()} />
       </PageContainer>
     );
@@ -81,7 +85,7 @@ export function WebsiteSettingsPage() {
       <PageHeader
         title="Website"
         description="The public profile families see before they ever sign in."
-        breadcrumbs={[{ label: 'Administration' }, { label: 'Website' }]}
+        breadcrumbs={headerBreadcrumbs}
         actions={
           <>
             <Button data-cy="settings-website-settings-preview" variant="outline" asChild>

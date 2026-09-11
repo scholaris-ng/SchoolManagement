@@ -145,9 +145,35 @@ export function CurriculumDetailPage() {
     setSelected([]);
   };
 
+  const header = (
+    <PageHeader
+      title={curriculum ? `${curriculum.subjectName} · ${curriculum.className}` : 'Curriculum'}
+      description={curriculum?.description ?? 'Topics and the objectives beneath them.'}
+      breadcrumbs={[
+        { label: 'Curriculum', to: '/curriculum' },
+        { label: curriculum?.subjectName ?? 'Curriculum' },
+      ]}
+      actions={
+        canManage && (
+          <Button
+            data-cy="curriculum-detail-add-topic"
+            onClick={() => {
+              setTopicDialogSeq((n) => n + 1);
+              setTopicDialog({ open: true });
+            }}
+          >
+            <Plus />
+            Add topic
+          </Button>
+        )
+      }
+    />
+  );
+
   if (topics.isPending) {
     return (
       <PageContainer>
+        {header}
         <LoadingState label="Loading curriculum…" />
       </PageContainer>
     );
@@ -156,6 +182,7 @@ export function CurriculumDetailPage() {
   if (topics.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={topics.error} onRetry={() => void topics.refetch()} />
       </PageContainer>
     );
@@ -163,28 +190,7 @@ export function CurriculumDetailPage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={curriculum ? `${curriculum.subjectName} · ${curriculum.className}` : 'Curriculum'}
-        description={curriculum?.description ?? 'Topics and the objectives beneath them.'}
-        breadcrumbs={[
-          { label: 'Curriculum', to: '/curriculum' },
-          { label: curriculum?.subjectName ?? 'Curriculum' },
-        ]}
-        actions={
-          canManage && (
-            <Button
-              data-cy="curriculum-detail-add-topic"
-              onClick={() => {
-                setTopicDialogSeq((n) => n + 1);
-                setTopicDialog({ open: true });
-              }}
-            >
-              <Plus />
-              Add topic
-            </Button>
-          )
-        }
-      />
+      {header}
 
       {curriculum && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">

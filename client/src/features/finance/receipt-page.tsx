@@ -21,9 +21,17 @@ export function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
   const receipt = useReceipt(paymentId);
 
+  const breadcrumbs = [
+    { label: 'Finance', to: '/finance' },
+    { label: 'Payments', to: '/finance/payments' },
+  ];
+
   if (receipt.isPending) {
     return (
-      <PageContainer>
+      <PageContainer width="narrow">
+        <div className="no-print">
+          <PageHeader loading title="" breadcrumbs={breadcrumbs} />
+        </div>
         <LoadingState label="Loading receipt…" />
       </PageContainer>
     );
@@ -31,7 +39,10 @@ export function ReceiptPage() {
 
   if (receipt.isError || !receipt.data) {
     return (
-      <PageContainer>
+      <PageContainer width="narrow">
+        <div className="no-print">
+          <PageHeader title="Receipt" breadcrumbs={breadcrumbs} />
+        </div>
         <ErrorState error={receipt.error} onRetry={() => void receipt.refetch()} />
       </PageContainer>
     );
@@ -46,11 +57,7 @@ export function ReceiptPage() {
         <PageHeader
           title={`Receipt ${record.receiptNo}`}
           description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
-          breadcrumbs={[
-            { label: 'Finance', to: '/finance' },
-            { label: 'Payments', to: '/finance/payments' },
-            { label: record.receiptNo },
-          ]}
+          breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
           actions={
             <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
               <Printer />

@@ -72,9 +72,24 @@ export function FamilyPage() {
 
   const { activeId, setActive } = useTabState(tabs);
 
+  const headerActions = (
+    <Button data-cy="family-message-the-school" variant="outline" asChild>
+      <Link to="/messages">
+        <MessageSquare />
+        Message the school
+      </Link>
+    </Button>
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        <PageHeader
+          title="My children"
+          description="Everything about your children at this school, in one place."
+          breadcrumbs={[{ label: 'Overview' }, { label: 'My children' }]}
+          actions={headerActions}
+        />
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
@@ -83,6 +98,12 @@ export function FamilyPage() {
   if (dashboard.isPending) {
     return (
       <PageContainer>
+        <PageHeader
+          title="My children"
+          description="Everything about your children at this school, in one place."
+          breadcrumbs={[{ label: 'Overview' }, { label: 'My children' }]}
+          actions={headerActions}
+        />
         <LoadingState label="Loading your children…" />
       </PageContainer>
     );
@@ -94,6 +115,8 @@ export function FamilyPage() {
         <PageHeader
           title="My children"
           description="Everything about your children at this school, in one place."
+          breadcrumbs={[{ label: 'Overview' }, { label: 'My children' }]}
+          actions={headerActions}
         />
         <EmptyState
           icon={<Heart />}
@@ -114,14 +137,7 @@ export function FamilyPage() {
             : `Switch between your ${children.length} children — everything below follows your choice.`
         }
         breadcrumbs={[{ label: 'Overview' }, { label: 'My children' }]}
-        actions={
-          <Button data-cy="family-message-the-school" variant="outline" asChild>
-            <Link to="/messages">
-              <MessageSquare />
-              Message the school
-            </Link>
-          </Button>
-        }
+        actions={headerActions}
       />
 
       <ChildSwitcher

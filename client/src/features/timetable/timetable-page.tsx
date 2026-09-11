@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlarmClock, Plus, Printer, Trash2 } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlarmClock, CalendarRange, Plus, Printer, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
@@ -138,9 +138,42 @@ export function TimetablePage() {
     }
   };
 
+  const header = (
+    <PageHeader
+      title="Timetable"
+      description={
+        canManage
+          ? 'Who teaches what, where and when. Drag a lesson onto an empty period to move it — clashes are refused rather than warned about.'
+          : 'The classes and subjects you teach, plus your form class in full if you have one.'
+      }
+      breadcrumbs={[{ label: 'Teaching' }, { label: 'Timetable' }]}
+      actions={
+        <>
+          {canManage && (
+            <Button
+              data-cy="timetable-clear-timetable"
+              variant="outline"
+              className="text-danger hover:text-danger"
+              disabled={(timetable.data?.entries.length ?? 0) === 0}
+              onClick={() => setConfirmClear(true)}
+            >
+              <Trash2 />
+              Clear timetable
+            </Button>
+          )}
+          <Button data-cy="timetable-print" variant="outline" onClick={() => window.print()}>
+            <Printer />
+            Print
+          </Button>
+        </>
+      }
+    />
+  );
+
   if (timetable.isPending) {
     return (
-      <PageContainer>
+      <PageContainer width="wide">
+        {header}
         <LoadingState label="Loading the timetable…" />
       </PageContainer>
     );
@@ -148,11 +181,22 @@ export function TimetablePage() {
 
   if (timetable.isError) {
     return (
-      <PageContainer>
+      <PageContainer width="wide">
+        {header}
         <ErrorState
           error={timetable.error}
           onRetry={() => void timetable.refetch()}
           title="No timetable for this term yet"
+          action={
+            can('academics.manage') ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/settings/academics">
+                  <CalendarRange />
+                  Create a session
+                </Link>
+              </Button>
+            ) : undefined
+          }
         />
       </PageContainer>
     );
@@ -162,35 +206,7 @@ export function TimetablePage() {
 
   return (
     <PageContainer width="wide">
-      <PageHeader
-        title="Timetable"
-        description={
-          canManage
-            ? 'Who teaches what, where and when. Drag a lesson onto an empty period to move it — clashes are refused rather than warned about.'
-            : 'The classes and subjects you teach, plus your form class in full if you have one.'
-        }
-        breadcrumbs={[{ label: 'Teaching' }, { label: 'Timetable' }]}
-        actions={
-          <>
-            {canManage && (
-              <Button
-                data-cy="timetable-clear-timetable"
-                variant="outline"
-                className="text-danger hover:text-danger"
-                disabled={(timetable.data?.entries.length ?? 0) === 0}
-                onClick={() => setConfirmClear(true)}
-              >
-                <Trash2 />
-                Clear timetable
-              </Button>
-            )}
-            <Button data-cy="timetable-print" variant="outline" onClick={() => window.print()}>
-              <Printer />
-              Print
-            </Button>
-          </>
-        }
-      />
+      {header}
 
       <Card className="no-print">
         <CardContent className="flex flex-wrap items-end gap-3 pt-5">

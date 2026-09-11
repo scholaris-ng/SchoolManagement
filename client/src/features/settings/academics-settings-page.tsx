@@ -83,13 +83,14 @@ export function AcademicsSettingsPage() {
   });
   const [houseDialog, setHouseDialog] = useState<{ open: boolean; house?: House }>({ open: false });
 
-  const tabs: { id: Tab; label: string; icon: typeof Layers }[] = [
-    { id: 'sessions', label: 'Sessions & terms', icon: CalendarRange },
-    { id: 'periods', label: 'Periods', icon: Clock },
-    { id: 'levels', label: 'Levels', icon: Layers },
-    { id: 'classes', label: 'Classes', icon: Users },
-    { id: 'subjects', label: 'Subjects', icon: GraduationCap },
-    { id: 'houses', label: 'Houses', icon: Trophy },
+  const tabs: { id: Tab; label: string; singular: string; icon: typeof Layers }[] = [
+    { id: 'sessions', label: 'Sessions & terms', singular: 'session', icon: CalendarRange },
+    { id: 'periods', label: 'Periods', singular: 'period', icon: Clock },
+    { id: 'levels', label: 'Levels', singular: 'level', icon: Layers },
+    // Not `tab.slice(0, -1)` — that reads as "classe", not "class".
+    { id: 'classes', label: 'Classes', singular: 'class', icon: Users },
+    { id: 'subjects', label: 'Subjects', singular: 'subject', icon: GraduationCap },
+    { id: 'houses', label: 'Houses', singular: 'house', icon: Trophy },
   ];
 
   const newAction = {
@@ -111,7 +112,7 @@ export function AcademicsSettingsPage() {
           newAction && (
             <Button data-cy="settings-academics-settings-new" onClick={newAction}>
               <Plus />
-              New {tab.slice(0, -1)}
+              New {tabs.find((option) => option.id === tab)?.singular}
             </Button>
           )
         }

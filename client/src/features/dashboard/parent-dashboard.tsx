@@ -45,35 +45,40 @@ export function ParentDashboard() {
 
   const { activeChild, activeChildId, setActiveChildId, children } = useActiveChild(data?.children);
 
+  const firstName = user?.displayName?.split(' ').slice(-1)[0] ?? 'there';
+  const header = (
+    <PageHeader
+      title={`Welcome, ${firstName}`}
+      description={
+        children.length === 0
+          ? 'Your children will appear here once the school links them to your account.'
+          : `You are following ${children.length} ${children.length === 1 ? 'child' : 'children'} at this school.`
+      }
+      actions={
+        <Button data-cy="parent-dashboard-message-the-school" variant="outline" asChild>
+          <Link to="/messages">
+            <MessageSquare />
+            Message the school
+          </Link>
+        </Button>
+      }
+    />
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
   }
 
-  const firstName = user?.displayName?.split(' ').slice(-1)[0] ?? 'there';
   const totalOutstanding = children.reduce((sum, child) => sum + child.outstandingBalance, 0);
 
   return (
     <PageContainer>
-      <PageHeader
-        title={`Welcome, ${firstName}`}
-        description={
-          children.length === 0
-            ? 'Your children will appear here once the school links them to your account.'
-            : `You are following ${children.length} ${children.length === 1 ? 'child' : 'children'} at this school.`
-        }
-        actions={
-          <Button data-cy="parent-dashboard-message-the-school" variant="outline" asChild>
-            <Link to="/messages">
-              <MessageSquare />
-              Message the school
-            </Link>
-          </Button>
-        }
-      />
+      {header}
 
       {dashboard.isPending ? (
         <LoadingState label="Loading your children…" />

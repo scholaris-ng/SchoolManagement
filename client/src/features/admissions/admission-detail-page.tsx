@@ -82,6 +82,7 @@ export function AdmissionDetailPage() {
   if (application.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Admissions', to: '/admissions' }]} />
         <LoadingState label="Loading application…" />
       </PageContainer>
     );
@@ -90,6 +91,7 @@ export function AdmissionDetailPage() {
   if (application.isError || !application.data) {
     return (
       <PageContainer>
+        <PageHeader title="Application" breadcrumbs={[{ label: 'Admissions', to: '/admissions' }]} />
         <ErrorState error={application.error} onRetry={() => void application.refetch()} />
       </PageContainer>
     );

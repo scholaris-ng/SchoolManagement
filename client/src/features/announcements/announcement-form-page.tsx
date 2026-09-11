@@ -79,14 +79,6 @@ export function AnnouncementFormPage() {
     navigate('/announcements');
   };
 
-  if (isEdit && existing.isPending) {
-    return (
-      <PageContainer width="narrow">
-        <LoadingState label="Loading announcement…" />
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer width="narrow">
       <UnsavedChangesGuard when={dirty && !save.isPending} />
@@ -123,6 +115,10 @@ export function AnnouncementFormPage() {
         }
       />
 
+      {isEdit && existing.isPending ? (
+        <LoadingState label="Loading announcement…" />
+      ) : (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>Message</CardTitle>
@@ -288,6 +284,8 @@ export function AnnouncementFormPage() {
           </Alert>
         </CardContent>
       </Card>
+      </>
+      )}
     </PageContainer>
   );
 }

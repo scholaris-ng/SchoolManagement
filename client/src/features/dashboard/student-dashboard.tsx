@@ -29,30 +29,34 @@ export function StudentDashboard() {
   const dashboard = useStudentDashboard();
   const data = dashboard.data;
 
+  const firstName = data?.fullName?.split(' ')[0] ?? 'there';
+  const header = (
+    <PageHeader
+      title={`Hello, ${firstName}`}
+      description={data?.className ? `${data.className} · today's lessons and your progress.` : undefined}
+      actions={
+        <Button data-cy="student-dashboard-practice-amp-tests" variant="outline" asChild>
+          <Link to="/cbt">
+            <BookOpen />
+            Practice &amp; tests
+          </Link>
+        </Button>
+      }
+    />
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
   }
 
-  const firstName = data?.fullName?.split(' ')[0] ?? 'there';
-
   return (
     <PageContainer>
-      <PageHeader
-        title={`Hello, ${firstName}`}
-        description={data?.className ? `${data.className} · today's lessons and your progress.` : undefined}
-        actions={
-          <Button data-cy="student-dashboard-practice-amp-tests" variant="outline" asChild>
-            <Link to="/cbt">
-              <BookOpen />
-              Practice &amp; tests
-            </Link>
-          </Button>
-        }
-      />
+      {header}
 
       {dashboard.isPending ? (
         <LoadingState label="Loading your dashboard…" />

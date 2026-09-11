@@ -76,6 +76,7 @@ export function IncidentDetailPage() {
   if (incident.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Discipline', to: '/discipline' }]} />
         <LoadingState label="Loading incident…" />
       </PageContainer>
     );
@@ -84,6 +85,7 @@ export function IncidentDetailPage() {
   if (incident.isError || !incident.data) {
     return (
       <PageContainer>
+        <PageHeader title="Incident" breadcrumbs={[{ label: 'Discipline', to: '/discipline' }]} />
         <ErrorState error={incident.error} onRetry={() => void incident.refetch()} />
       </PageContainer>
     );

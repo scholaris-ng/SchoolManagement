@@ -58,6 +58,8 @@ export interface ErrorStateProps {
   title?: string;
   className?: string;
   compact?: boolean;
+  /** Extra action shown alongside "Try again", e.g. a link to fix the root cause. */
+  action?: React.ReactNode;
   /** The state carries it; the retry button gets `<cy>-retry`. */
   'data-cy'?: string;
 }
@@ -68,6 +70,7 @@ export function ErrorState({
   title,
   className,
   compact,
+  action,
   'data-cy': dataCy,
 }: ErrorStateProps) {
   const offline = isApiError(error) && error.isOffline;
@@ -98,17 +101,22 @@ export function ErrorState({
       title={heading}
       description={description}
       action={
-        onRetry && !forbidden ? (
-          <Button
-            variant="outline"
-            size="sm"
-            data-cy={dataCy ? `${dataCy}-retry` : undefined}
-            onClick={onRetry}
-          >
-            <RefreshCw />
-            Try again
-          </Button>
-        ) : undefined
+        (action || (onRetry && !forbidden)) && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {action}
+            {onRetry && !forbidden && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-cy={dataCy ? `${dataCy}-retry` : undefined}
+                onClick={onRetry}
+              >
+                <RefreshCw />
+                Try again
+              </Button>
+            )}
+          </div>
+        )
       }
     />
   );

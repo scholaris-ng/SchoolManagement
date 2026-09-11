@@ -217,9 +217,18 @@ export function FamilyFinancePage() {
     [currency],
   );
 
+  const header = (
+    <PageHeader
+      title="Fees & payments"
+      description="What has been billed, what you have paid, and what is still outstanding."
+      breadcrumbs={[{ label: 'My children', to: '/family' }, { label: 'Fees & payments' }]}
+    />
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
@@ -228,6 +237,7 @@ export function FamilyFinancePage() {
   if (dashboard.isPending) {
     return (
       <PageContainer>
+        {header}
         <LoadingState label="Loading your account…" />
       </PageContainer>
     );
@@ -236,7 +246,7 @@ export function FamilyFinancePage() {
   if (children.length === 0) {
     return (
       <PageContainer>
-        <PageHeader title="Fees & payments" />
+        {header}
         <EmptyState
           icon={<Wallet />}
           title="No children linked to your account yet"
@@ -248,11 +258,7 @@ export function FamilyFinancePage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Fees & payments"
-        description="What has been billed, what you have paid, and what is still outstanding."
-        breadcrumbs={[{ label: 'My children', to: '/family' }, { label: 'Fees & payments' }]}
-      />
+      {header}
 
       {children.length > 1 && totalOutstanding > 0 && (
         <Alert tone="warning" title="Across all your children">

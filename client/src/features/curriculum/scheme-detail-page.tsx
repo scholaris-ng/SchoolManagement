@@ -39,6 +39,7 @@ export function SchemeDetailPage() {
   if (scheme.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Schemes of work', to: '/schemes' }]} />
         <LoadingState label="Loading scheme of work…" />
       </PageContainer>
     );
@@ -47,6 +48,7 @@ export function SchemeDetailPage() {
   if (scheme.isError || !scheme.data) {
     return (
       <PageContainer>
+        <PageHeader title="Scheme of work" breadcrumbs={[{ label: 'Schemes of work', to: '/schemes' }]} />
         <ErrorState error={scheme.error} onRetry={() => void scheme.refetch()} />
       </PageContainer>
     );

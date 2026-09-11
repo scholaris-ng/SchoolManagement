@@ -45,9 +45,22 @@ export function AdminDashboard() {
   const currency = data?.currency ?? 'NGN';
   const firstName = user?.displayName?.split(' ')[0] ?? 'there';
 
+  const header = (
+    <PageHeader
+      title={`Good day, ${firstName}`}
+      description={`How ${membership?.schoolShortName ?? 'the school'} is running today.`}
+      actions={
+        <Button data-cy="admin-dashboard-view-full-analytics" variant="outline" asChild>
+          <Link to="/analytics">View full analytics</Link>
+        </Button>
+      }
+    />
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
@@ -58,15 +71,7 @@ export function AdminDashboard() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={`Good day, ${firstName}`}
-        description={`How ${membership?.schoolShortName ?? 'the school'} is running today.`}
-        actions={
-          <Button data-cy="admin-dashboard-view-full-analytics" variant="outline" asChild>
-            <Link to="/analytics">View full analytics</Link>
-          </Button>
-        }
-      />
+      {header}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

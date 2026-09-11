@@ -44,6 +44,7 @@ export function ReportCardPage() {
   if (card.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Report cards', to: '/report-cards' }]} />
         <LoadingState label="Building the report card…" />
       </PageContainer>
     );
@@ -52,6 +53,7 @@ export function ReportCardPage() {
   if (card.isError || !card.data) {
     return (
       <PageContainer>
+        <PageHeader title="Report card" breadcrumbs={[{ label: 'Report cards', to: '/report-cards' }]} />
         <ErrorState error={card.error} onRetry={() => void card.refetch()} />
       </PageContainer>
     );

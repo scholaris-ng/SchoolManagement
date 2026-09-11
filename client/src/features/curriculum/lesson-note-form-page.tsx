@@ -136,6 +136,7 @@ export function LessonNoteFormPage() {
   if (isEdit && existing.isPending) {
     return (
       <PageContainer width="narrow">
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Lesson notes', to: '/lesson-notes' }]} />
         <LoadingState label="Loading lesson note…" />
       </PageContainer>
     );

@@ -62,9 +62,12 @@ export function SchoolSettingsPage() {
     }
   }, [school.data]);
 
+  const headerBreadcrumbs = [{ label: 'Administration' }, { label: 'School settings' }];
+
   if (school.isPending || !draft) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={headerBreadcrumbs} />
         <LoadingState label="Loading school settings…" />
       </PageContainer>
     );
@@ -73,6 +76,7 @@ export function SchoolSettingsPage() {
   if (school.isError) {
     return (
       <PageContainer>
+        <PageHeader title="School settings" breadcrumbs={headerBreadcrumbs} />
         <ErrorState error={school.error} onRetry={() => void school.refetch()} />
       </PageContainer>
     );
@@ -142,7 +146,7 @@ export function SchoolSettingsPage() {
       <PageHeader
         title="School settings"
         description="Your school's identity, branding and the policies that shape how the product behaves."
-        breadcrumbs={[{ label: 'Administration' }, { label: 'School settings' }]}
+        breadcrumbs={headerBreadcrumbs}
         actions={
           <Button data-cy="settings-school-settings-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
             <Save />

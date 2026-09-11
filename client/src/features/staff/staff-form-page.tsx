@@ -145,14 +145,6 @@ export function StaffFormPage() {
     }
   });
 
-  if (isEdit && existing.isPending) {
-    return (
-      <PageContainer width="narrow">
-        <LoadingState label="Loading staff record…" />
-      </PageContainer>
-    );
-  }
-
   const photoUrl = form.watch('photoUrl');
   const isFormTeacher = form.watch('isFormTeacher');
   const classIds = form.watch('classIds');
@@ -170,6 +162,9 @@ export function StaffFormPage() {
         ]}
       />
 
+      {isEdit && existing.isPending ? (
+        <LoadingState label="Loading staff record…" />
+      ) : (
       <form onSubmit={onSubmit} noValidate>
         <UnsavedChangesGuard when={form.formState.isDirty && !mutation.isPending} />
 
@@ -323,6 +318,7 @@ export function StaffFormPage() {
           />
         </Card>
       </form>
+      )}
 
       <NewStaffCredentialsDialog
         credentials={newCredentials}

@@ -21,6 +21,43 @@ export interface TermRow {
   endDate: string;
 }
 
+interface TermIssue {
+  message: string;
+  field: 'start' | 'end';
+}
+
+/**
+ * A term must fit inside its session and not overlap the one before it.
+ * Rows are assumed to be in chronological order — First Term, Second Term,
+ * Third Term — so "the previous row" is the only overlap check needed.
+ */
+function findTermIssue(
+  row: TermRow,
+  index: number,
+  rows: TermRow[],
+  sessionStart: string,
+  sessionEnd: string,
+): TermIssue | null {
+  if (!row.startDate || !row.endDate) return null;
+  if (row.endDate < row.startDate) {
+    return { field: 'end', message: 'This term cannot end before it starts.' };
+  }
+  if (sessionStart && row.startDate < sessionStart) {
+    return { field: 'start', message: 'This term starts before the session does.' };
+  }
+  if (sessionEnd && row.endDate > sessionEnd) {
+    return { field: 'end', message: 'This term ends after the session does.' };
+  }
+  const previous = rows[index - 1];
+  if (previous?.endDate && row.startDate < previous.endDate) {
+    return {
+      field: 'start',
+      message: `Overlaps ${previous.name.trim() || 'the previous term'} — starts before it ends.`,
+    };
+  }
+  return null;
+}
+
 export function SessionDialog({
   state,
   onClose,
@@ -47,10 +84,14 @@ export function SessionDialog({
     setTermRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
-  // A backwards range would derive no teaching weeks at all, so it is caught
-  // here rather than saved and puzzled over later.
+  const termIssues = termRows.map((row, index) =>
+    findTermIssue(row, index, termRows, startDate, endDate),
+  );
+  // A backwards range, a term outside the session, or two terms overlapping
+  // would derive no meaningful teaching weeks, so all three are caught here
+  // rather than saved and puzzled over later.
   const termsValid = termRows.every(
-    (row) => row.name.trim() && row.startDate && row.endDate && row.endDate >= row.startDate,
+    (row, index) => row.name.trim() && row.startDate && row.endDate && !termIssues[index],
   );
   const valid =
     Boolean(name.trim() && startDate && endDate) && endDate >= startDate && termsValid;
@@ -111,59 +152,72 @@ export function SessionDialog({
           {isNew && (
             <div className="space-y-3">
               <Label>Terms</Label>
-              {termRows.map((row, index) => (
-                <div
-                  key={index}
-                  className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-4"
-                >
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`term-name-${index}`} required>
-                      Name
-                    </Label>
-                    <Input
-                      data-cy="academics-settings-name"
-                      id={`term-name-${index}`}
-                      value={row.name}
-                      onChange={(event) => updateTerm(index, { name: event.target.value })}
-                    />
+              {termRows.map((row, index) => {
+                const issue = termIssues[index];
+                return (
+                  <div
+                    key={index}
+                    className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-4"
+                  >
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`term-name-${index}`} required>
+                        Name
+                      </Label>
+                      <Input
+                        data-cy="academics-settings-name"
+                        id={`term-name-${index}`}
+                        value={row.name}
+                        onChange={(event) => updateTerm(index, { name: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`term-start-${index}`} required>
+                        Starts
+                      </Label>
+                      <Input
+                        data-cy="academics-settings-start-date"
+                        id={`term-start-${index}`}
+                        type="date"
+                        min={startDate || undefined}
+                        max={endDate || undefined}
+                        invalid={issue?.field === 'start'}
+                        value={row.startDate}
+                        onChange={(event) => updateTerm(index, { startDate: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`term-end-${index}`} required>
+                        Ends
+                      </Label>
+                      <Input
+                        data-cy="academics-settings-end-date"
+                        id={`term-end-${index}`}
+                        type="date"
+                        min={row.startDate || startDate || undefined}
+                        max={endDate || undefined}
+                        invalid={issue?.field === 'end'}
+                        value={row.endDate}
+                        onChange={(event) => updateTerm(index, { endDate: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`term-weeks-${index}`}>Teaching weeks</Label>
+                      <Input
+                        data-cy="academics-settings-end-date-2"
+                        id={`term-weeks-${index}`}
+                        value={teachingWeeksBetween(row.startDate, row.endDate) || '—'}
+                        readOnly
+                        disabled
+                      />
+                    </div>
+                    {issue && (
+                      <p role="alert" className="text-xs text-danger sm:col-span-4">
+                        {issue.message}
+                      </p>
+                    )}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`term-start-${index}`} required>
-                      Starts
-                    </Label>
-                    <Input
-                      data-cy="academics-settings-start-date"
-                      id={`term-start-${index}`}
-                      type="date"
-                      value={row.startDate}
-                      onChange={(event) => updateTerm(index, { startDate: event.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`term-end-${index}`} required>
-                      Ends
-                    </Label>
-                    <Input
-                      data-cy="academics-settings-end-date"
-                      id={`term-end-${index}`}
-                      type="date"
-                      min={row.startDate}
-                      value={row.endDate}
-                      onChange={(event) => updateTerm(index, { endDate: event.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`term-weeks-${index}`}>Teaching weeks</Label>
-                    <Input
-                      data-cy="academics-settings-end-date-2"
-                      id={`term-weeks-${index}`}
-                      value={teachingWeeksBetween(row.startDate, row.endDate) || '—'}
-                      readOnly
-                      disabled
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </DialogBody>

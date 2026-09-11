@@ -27,6 +27,7 @@ export function TranscriptPage() {
   if (transcript.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Transcripts', to: '/transcripts' }]} />
         <LoadingState label="Assembling the transcript…" />
       </PageContainer>
     );
@@ -35,6 +36,7 @@ export function TranscriptPage() {
   if (transcript.isError || !transcript.data) {
     return (
       <PageContainer>
+        <PageHeader title="Transcript" breadcrumbs={[{ label: 'Transcripts', to: '/transcripts' }]} />
         <ErrorState error={transcript.error} onRetry={() => void transcript.refetch()} />
       </PageContainer>
     );

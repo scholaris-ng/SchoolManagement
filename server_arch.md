@@ -995,6 +995,71 @@ app.use("/api/v1/billing", billingRoutes);
 - No platform-specific routes — the same endpoint serves web and mobile
 - Mobile clients signal their platform via `X-Client-Platform: mobile` header if platform-specific behaviour is ever needed, handled at service level, never at route level
 
+### 14.1 Mounting Many Routers on One Shared Prefix — Where This Codebase Diverges From §14's Example
+
+> **Real incident.** Every module router here is mounted on the *identical* bare `env.apiPrefix` — `app.use(env.apiPrefix, studentsRoutes)`, `app.use(env.apiPrefix, timetableRoutes)`, and so on — unlike §14's example above, where each router gets its own distinct sub-path (`/api/v1/patients`, `/api/v1/billing`). That distinction matters more than it looks like it should.
+>
+> When every router shares one mount path, Express cannot tell in advance which router owns an incoming URL. For a request to a route in the *last* router registered, Express walks every router ahead of it looking for a match. If those routers declare their own `router.use(authMiddleware, tenantMiddleware)` at the top — the pattern nearly every module in this codebase used — that `.use()` has no path filter, so it runs unconditionally for *every* request that reaches that router, whether or not the URL matches anything inside it. The auth/tenant check ran once per router ahead of the real one, not once per request: a route mounted 18 routers deep re-resolved identity and school membership 18 times, serially, before reaching its own handler. Each check alone was fast — small, indexed, single-digit-millisecond queries — which is exactly why it went unnoticed: nothing was ever slow enough on its own to look broken, and the aggregate cost (several seconds, worst for whichever router happened to be registered last) looked like generic "the database is slow" rather than a routing bug.
+>
+> **Before — every module repeated the check, and every repetition ran on every request:**
+>
+> ```typescript
+> // app.ts — every router mounted on the identical bare prefix
+> app.use(env.apiPrefix, apiRateLimiter);
+> app.use(env.apiPrefix, authRoutes);
+> app.use(env.apiPrefix, schoolRoutes);
+> app.use(env.apiPrefix, roleRoutes);        // has its own router.use(authMiddleware, tenantMiddleware)
+> app.use(env.apiPrefix, academicsRoutes);   // has its own router.use(authMiddleware, tenantMiddleware)
+> // …16 more routers, each with the same line…
+> app.use(env.apiPrefix, timetableRoutes);   // has its own router.use(authMiddleware, tenantMiddleware)
+> ```
+>
+> ```typescript
+> // modules/timetable/routes/timetable.routes.ts — repeated in ~18 route files
+> import { authMiddleware } from '../../../shared/middleware/auth.middleware';
+> import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
+>
+> const router = Router();
+> router.use(authMiddleware, tenantMiddleware); // ← runs for THIS router even when the
+>                                                //   request is headed somewhere else,
+>                                                //   because every router shares one prefix
+> router.get('/timetables/current', authorise('timetable.read'), validate(schema), handler);
+> export default router;
+> ```
+>
+> A request to `/timetables/current` paid for that `router.use()` line eighteen times over — once in every router Express checked before reaching this one — for a total of 8–9 seconds of pure middleware overhead on a route whose own work takes tens of milliseconds.
+>
+> **After — the check runs exactly once, in `app.ts`, before the routers that all require it:**
+>
+> ```typescript
+> // app.ts
+> app.use(env.apiPrefix, apiRateLimiter);
+>
+> // authRoutes / schoolRoutes mix public and authenticated routes, so they
+> // apply authMiddleware/tenantMiddleware inline, per route, and must stay
+> // mounted before the global pair below.
+> app.use(env.apiPrefix, authRoutes);
+> app.use(env.apiPrefix, schoolRoutes);
+>
+> // Everything after this point requires both on every route it has, so this
+> // is the only place that check happens.
+> app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
+>
+> const api = [roleRoutes, academicsRoutes, /* …16 more… */ timetableRoutes];
+> api.forEach((routes) => app.use(env.apiPrefix, routes));
+> ```
+>
+> ```typescript
+> // modules/timetable/routes/timetable.routes.ts — no auth import, no router.use()
+> const router = Router();
+> router.get('/timetables/current', authorise('timetable.read'), validate(schema), handler);
+> export default router;
+> ```
+>
+> **The fix, and the rule going forward:** `authMiddleware` and `tenantMiddleware` run exactly once, globally, in `app.ts` — immediately after the modules that must mix public and authenticated routes (registration, the public school page), and before the block of routers that require both on every route they have. A module router **never** declares its own `router.use(authMiddleware, tenantMiddleware)`; it only reaches for `authorise(...)` and `validate(...)` per route, because identity and tenant context already exist on `req` by the time any of these routers is reached. The exception is a module with a genuine mix of public and protected routes (see `auth.routes.ts`, `school.routes.ts`) — those apply `authMiddleware`/`tenantMiddleware` inline, per route, exactly as §4.3 shows, and stay mounted *before* the global pair in `app.ts` so their public routes are never forced through it.
+>
+> If a future module genuinely needs to be mounted at its own distinct sub-path instead of the shared prefix (making §14's original pattern the right fit again), that's fine — but do not reintroduce a router-level `authMiddleware`/`tenantMiddleware` pair on a router that shares the common prefix with everything else.
+
 ---
 
 ## 15. Naming Conventions
@@ -1067,8 +1132,9 @@ When scaffolding a new domain (e.g. `appointment`), complete in this exact order
 [ ] 7.  Implement Controller (thin)                        modules/appointment/controllers/appointment.controller.ts
 [ ]      — reads only from req.validated
 [ ]      — returns ApiResponse envelope
-[ ] 8.  Wire routes with full middleware chain             modules/appointment/routes/appointment.routes.ts
-[ ]      — authMiddleware → authorise() → validate(schema) → controller
+[ ] 8.  Wire routes                                        modules/appointment/routes/appointment.routes.ts
+[ ]      — authorise() → validate(schema) → controller
+[ ]      — do NOT add router.use(authMiddleware, tenantMiddleware) here — see §14.1
 [ ] 9.  Register routes in app.ts                          /api/v1/appointments
 [ ] 10. Write unit tests for service                       modules/appointment/tests/appointment.service.spec.ts
 [ ] 11. Write integration tests for repository             modules/appointment/tests/appointment.repository.spec.ts
@@ -1137,9 +1203,11 @@ AI agents building features in this codebase MUST:
 - Always use the `ApiResponse` envelope for every response
 - Always use the singleton pattern for services and repositories
 - Always update the Postman collection in the same change as the endpoint — one request per endpoint, one saved example response per status code (see Section 21)
+- Rely on the global `authMiddleware`/`tenantMiddleware` pair in `app.ts` for any new fully-protected route file — wire only `authorise(...)` and `validate(...)` in the router itself (§14.1)
 
 AI agents MUST NOT:
 
+- Add `router.use(authMiddleware, tenantMiddleware)` (or any other unconditional, path-unfiltered middleware) to a route file that shares its mount prefix with other routers — it runs once per router Express checks before the actual match, not once per request, and has already caused a real multi-second-per-request regression (§14.1)
 - Create a new `.js` file for any reason — new code is TypeScript only
 - Use `any` where a real type, a generic, or `unknown` + narrowing would work
 - Convert entities from `EntitySchema` style to decorator style (or vice versa) as a side effect of other work (§9.3)

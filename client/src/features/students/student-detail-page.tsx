@@ -76,6 +76,7 @@ export function StudentDetailPage() {
   if (student.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Students', to: '/students' }]} />
         <LoadingState label="Loading student…" />
       </PageContainer>
     );
@@ -84,6 +85,7 @@ export function StudentDetailPage() {
   if (student.isError || !student.data) {
     return (
       <PageContainer>
+        <PageHeader title="Student" breadcrumbs={[{ label: 'Students', to: '/students' }]} />
         <ErrorState error={student.error} onRetry={() => void student.refetch()} />
       </PageContainer>
     );

@@ -80,14 +80,6 @@ export function GuardianFormPage() {
     }
   });
 
-  if (isEdit && existing.isPending) {
-    return (
-      <PageContainer width="narrow">
-        <LoadingState label="Loading guardian…" />
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer width="narrow">
       <PageHeader
@@ -101,6 +93,9 @@ export function GuardianFormPage() {
         ]}
       />
 
+      {isEdit && existing.isPending ? (
+        <LoadingState label="Loading guardian…" />
+      ) : (
       <form onSubmit={onSubmit} noValidate>
         <UnsavedChangesGuard when={form.formState.isDirty && !mutation.isPending} />
 
@@ -168,6 +163,7 @@ export function GuardianFormPage() {
           />
         </Card>
       </form>
+      )}
     </PageContainer>
   );
 }

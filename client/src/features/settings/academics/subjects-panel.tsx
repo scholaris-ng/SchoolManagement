@@ -26,7 +26,7 @@ export function SubjectsPanel({
         ) : (subjects.data?.length ?? 0) === 0 ? (
           <EmptyState compact icon={<GraduationCap />} title="No subjects defined" />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="scrollbar-thin max-h-[28rem] divide-y divide-border overflow-y-auto">
             {subjects.data?.map((subject) => (
               <li key={subject.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                 <div className="min-w-0 flex-1">

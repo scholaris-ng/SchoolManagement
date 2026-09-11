@@ -38,15 +38,27 @@ export function TeacherDashboard() {
   const dashboard = useTeacherDashboard();
   const data = dashboard.data;
 
+  const firstName = user?.displayName?.split(' ')[0] ?? 'there';
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        <PageHeader
+          title={`Good day, ${firstName}`}
+          actions={
+            <Button data-cy="teacher-dashboard-take-attendance" asChild>
+              <Link to="/attendance">
+                <ClipboardCheck />
+                Take attendance
+              </Link>
+            </Button>
+          }
+        />
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
   }
 
-  const firstName = user?.displayName?.split(' ')[0] ?? 'there';
   const outstanding =
     (data?.pendingAttendance.length ?? 0) +
     (data?.pendingScoreEntry.length ?? 0) +

@@ -35,6 +35,7 @@ export function AssessmentDetailPage() {
   if (assessment.isPending) {
     return (
       <PageContainer width="narrow">
+        <PageHeader loading title="" breadcrumbs={[{ label: 'CBT', to: '/cbt' }]} />
         <LoadingState label="Loading assessment…" />
       </PageContainer>
     );
@@ -43,6 +44,7 @@ export function AssessmentDetailPage() {
   if (assessment.isError || !assessment.data) {
     return (
       <PageContainer width="narrow">
+        <PageHeader title="Assessment" breadcrumbs={[{ label: 'CBT', to: '/cbt' }]} />
         <ErrorState error={assessment.error} onRetry={() => void assessment.refetch()} />
       </PageContainer>
     );

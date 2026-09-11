@@ -46,6 +46,11 @@ export function GuardianDetailPage() {
   if (guardian.isPending) {
     return (
       <PageContainer>
+        <PageHeader
+          loading
+          title=""
+          breadcrumbs={[{ label: 'People' }, { label: 'Guardians', to: '/guardians' }]}
+        />
         <LoadingState label="Loading guardian…" />
       </PageContainer>
     );
@@ -54,6 +59,10 @@ export function GuardianDetailPage() {
   if (guardian.isError || !guardian.data) {
     return (
       <PageContainer>
+        <PageHeader
+          title="Guardian"
+          breadcrumbs={[{ label: 'People' }, { label: 'Guardians', to: '/guardians' }]}
+        />
         <ErrorState error={guardian.error} onRetry={() => void guardian.refetch()} />
       </PageContainer>
     );

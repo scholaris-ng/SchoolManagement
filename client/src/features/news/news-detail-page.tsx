@@ -20,6 +20,7 @@ export function NewsDetailPage() {
   if (post.isPending) {
     return (
       <PageContainer width="narrow">
+        <PageHeader loading title="" breadcrumbs={[{ label: 'News feed', to: '/news' }]} />
         <LoadingState label="Loading post…" />
       </PageContainer>
     );
@@ -28,6 +29,7 @@ export function NewsDetailPage() {
   if (post.isError || !post.data) {
     return (
       <PageContainer width="narrow">
+        <PageHeader title="Post" breadcrumbs={[{ label: 'News feed', to: '/news' }]} />
         <ErrorState error={post.error} onRetry={() => void post.refetch()} />
       </PageContainer>
     );

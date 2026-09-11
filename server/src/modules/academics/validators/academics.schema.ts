@@ -18,11 +18,16 @@ const boolish = z
 
 // ─── Sessions and terms ──────────────────────────────────────────────────────
 
-const termSeed = z.object({
-  name: z.string().trim().min(1).max(60).optional(),
-  startDate: isoDate.optional(),
-  endDate: isoDate.optional(),
-});
+const termSeed = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    startDate: isoDate.optional(),
+    endDate: isoDate.optional(),
+  })
+  .refine((value) => !value.startDate || !value.endDate || value.endDate >= value.startDate, {
+    message: 'A term cannot end before it starts.',
+    path: ['endDate'],
+  });
 
 export const createSessionSchema = z.object({
   body: z
@@ -37,7 +42,33 @@ export const createSessionSchema = z.object({
     .refine((value) => value.endDate >= value.startDate, {
       message: 'A session cannot end before it starts.',
       path: ['endDate'],
-    }),
+    })
+    .refine(
+      (value) =>
+        (value.terms ?? []).every((term) => !term.startDate || term.startDate >= value.startDate),
+      {
+        message: 'A term cannot start before its session does.',
+        path: ['terms'],
+      },
+    )
+    .refine(
+      (value) => (value.terms ?? []).every((term) => !term.endDate || term.endDate <= value.endDate),
+      {
+        message: 'A term cannot end after its session does.',
+        path: ['terms'],
+      },
+    )
+    .refine(
+      (value) =>
+        (value.terms ?? []).every((term, index, terms) => {
+          const previous = terms[index - 1];
+          return !previous?.endDate || !term.startDate || term.startDate >= previous.endDate;
+        }),
+      {
+        message: 'Terms cannot overlap — each must start on or after the previous term ends.',
+        path: ['terms'],
+      },
+    ),
 });
 
 export const updateSessionSchema = z.object({

@@ -44,14 +44,6 @@ export function GradingSettingsPage() {
     setDirty(false);
   }, [schemes.data, selectedId]);
 
-  if (schemes.isPending) {
-    return (
-      <PageContainer>
-        <LoadingState label="Loading grading schemes…" />
-      </PageContainer>
-    );
-  }
-
   const componentTotal = (draft?.components ?? []).reduce(
     (sum, component) => sum + component.maxScore,
     0,
@@ -125,7 +117,9 @@ export function GradingSettingsPage() {
 
       <SettingsTabs />
 
-      {(schemes.data?.length ?? 0) === 0 || !draft ? (
+      {schemes.isPending ? (
+        <LoadingState label="Loading grading schemes…" />
+      ) : (schemes.data?.length ?? 0) === 0 || !draft ? (
         <Card>
           <EmptyState
             icon={<Plus />}

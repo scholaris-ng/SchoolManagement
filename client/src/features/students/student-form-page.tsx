@@ -127,14 +127,6 @@ export function StudentFormPage() {
     }
   });
 
-  if (isEdit && existing.isPending) {
-    return (
-      <PageContainer width="narrow">
-        <LoadingState label="Loading student…" />
-      </PageContainer>
-    );
-  }
-
   const photoUrl = form.watch('photoUrl');
   const photoConsent = form.watch('photoConsent');
   const nationality = form.watch('nationality');
@@ -160,6 +152,9 @@ export function StudentFormPage() {
         ]}
       />
 
+      {isEdit && existing.isPending ? (
+        <LoadingState label="Loading student…" />
+      ) : (
       <form onSubmit={onSubmit} noValidate>
         <UnsavedChangesGuard when={form.formState.isDirty && !mutation.isPending} />
 
@@ -361,6 +356,7 @@ export function StudentFormPage() {
           />
         </Card>
       </form>
+      )}
     </PageContainer>
   );
 }

@@ -5,7 +5,10 @@ import { Term } from './term.entity';
 
 /** An academic year, named by the school — "2025/2026" (spec section 9). */
 @Entity('academic_sessions')
-@Index(['schoolId', 'name'], { unique: true })
+// Partial so a deleted session's name is free to reuse — a plain unique index
+// would still see the soft-deleted row and block recreating "2026/2027" after
+// deleting it.
+@Index(['schoolId', 'name'], { unique: true, where: '"deleted_at" IS NULL' })
 @Index(['schoolId', 'isCurrent'])
 export class AcademicSession extends SoftDeletableEntity {
   @Column({ name: 'school_id', type: 'uuid' })

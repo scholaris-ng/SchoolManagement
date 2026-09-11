@@ -152,6 +152,7 @@ export function ScoreSheetPage() {
   if (sheet.isPending) {
     return (
       <PageContainer>
+        <PageHeader loading title="" breadcrumbs={[{ label: 'Score entry', to: '/results/entry' }]} />
         <LoadingState label="Loading score sheet…" />
       </PageContainer>
     );
@@ -160,6 +161,7 @@ export function ScoreSheetPage() {
   if (sheet.isError || !data) {
     return (
       <PageContainer>
+        <PageHeader title="Score sheet" breadcrumbs={[{ label: 'Score entry', to: '/results/entry' }]} />
         <ErrorState error={sheet.error} onRetry={() => void sheet.refetch()} />
       </PageContainer>
     );

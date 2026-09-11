@@ -32,9 +32,33 @@ export function BursarDashboard() {
   const data = dashboard.data;
   const currency = data?.currency ?? 'NGN';
 
+  const header = (
+    <PageHeader
+      title="Finance"
+      description="What has been billed, what has come in, and what still has to be chased."
+      actions={
+        <>
+          <Button data-cy="bursar-dashboard-new-invoice" variant="outline" asChild>
+            <Link to="/finance/invoices/new">
+              <Receipt />
+              New invoice
+            </Link>
+          </Button>
+          <Button data-cy="bursar-dashboard-record-payment" asChild>
+            <Link to="/finance/payments/new">
+              <CreditCard />
+              Record payment
+            </Link>
+          </Button>
+        </>
+      }
+    />
+  );
+
   if (dashboard.isError) {
     return (
       <PageContainer>
+        {header}
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       </PageContainer>
     );
@@ -42,26 +66,7 @@ export function BursarDashboard() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Finance"
-        description="What has been billed, what has come in, and what still has to be chased."
-        actions={
-          <>
-            <Button data-cy="bursar-dashboard-new-invoice" variant="outline" asChild>
-              <Link to="/finance/invoices/new">
-                <Receipt />
-                New invoice
-              </Link>
-            </Button>
-            <Button data-cy="bursar-dashboard-record-payment" asChild>
-              <Link to="/finance/payments/new">
-                <CreditCard />
-                Record payment
-              </Link>
-            </Button>
-          </>
-        }
-      />
+      {header}
 
       {dashboard.isPending ? (
         <LoadingState label="Loading the ledger…" />

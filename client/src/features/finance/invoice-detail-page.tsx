@@ -14,9 +14,15 @@ export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const invoice = useInvoice(id);
 
+  const breadcrumbs = [
+    { label: 'Finance', to: '/finance' },
+    { label: 'Invoices', to: '/finance/invoices' },
+  ];
+
   if (invoice.isPending) {
     return (
-      <PageContainer>
+      <PageContainer width="narrow">
+        <PageHeader loading title="" breadcrumbs={breadcrumbs} />
         <LoadingState label="Loading invoice…" />
       </PageContainer>
     );
@@ -24,7 +30,8 @@ export function InvoiceDetailPage() {
 
   if (invoice.isError || !invoice.data) {
     return (
-      <PageContainer>
+      <PageContainer width="narrow">
+        <PageHeader title="Invoice" breadcrumbs={breadcrumbs} />
         <ErrorState error={invoice.error} onRetry={() => void invoice.refetch()} />
       </PageContainer>
     );
@@ -39,11 +46,7 @@ export function InvoiceDetailPage() {
         <PageHeader
           title={record.invoiceNo}
           description={`${record.termName} · ${record.sessionName}`}
-          breadcrumbs={[
-            { label: 'Finance', to: '/finance' },
-            { label: 'Invoices', to: '/finance/invoices' },
-            { label: record.invoiceNo },
-          ]}
+          breadcrumbs={[...breadcrumbs, { label: record.invoiceNo }]}
           meta={
             <>
               <StatusBadge status={record.status} />

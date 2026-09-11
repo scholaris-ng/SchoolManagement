@@ -28,6 +28,11 @@ export function StaffDetailPage() {
   if (member.isPending) {
     return (
       <PageContainer>
+        <PageHeader
+          loading
+          title=""
+          breadcrumbs={[{ label: 'People' }, { label: 'Staff', to: '/staff' }]}
+        />
         <LoadingState label="Loading staff record…" />
       </PageContainer>
     );
@@ -36,6 +41,10 @@ export function StaffDetailPage() {
   if (member.isError || !member.data) {
     return (
       <PageContainer>
+        <PageHeader
+          title="Staff member"
+          breadcrumbs={[{ label: 'People' }, { label: 'Staff', to: '/staff' }]}
+        />
         <ErrorState error={member.error} onRetry={() => void member.refetch()} />
       </PageContainer>
     );
