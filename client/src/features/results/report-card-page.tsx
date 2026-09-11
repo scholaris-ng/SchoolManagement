@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Printer, Save } from 'lucide-react';
 import { formatDate, formatPercent, ordinal } from '@/lib/format';
 import { env } from '@/lib/env';
+import { contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useCommentTemplates, useReportCard, useSaveReportCardComments } from './api';
 import { SubjectPerformanceChart } from './subject-performance-chart';
@@ -125,8 +126,14 @@ export function ReportCardPage() {
             <img src={report.school.logoUrl} alt="" className="size-16 object-contain" />
           ) : (
             <span
-              className="grid size-16 shrink-0 place-items-center rounded-lg text-xl font-bold text-white"
-              style={{ backgroundColor: report.school.primaryColor }}
+              className="grid size-16 shrink-0 place-items-center rounded-lg text-xl font-bold"
+              style={{
+                backgroundColor: report.school.primaryColor,
+                // The school's own picked colour, printed onto a document a
+                // parent reads — pale brand colours make hardcoded white text
+                // as illegible here as it was on the avatar initials.
+                color: contrastingTextColor(report.school.primaryColor),
+              }}
               aria-hidden="true"
             >
               {report.school.name.slice(0, 2).toUpperCase()}

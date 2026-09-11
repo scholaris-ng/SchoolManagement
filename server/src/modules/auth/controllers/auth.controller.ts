@@ -7,6 +7,7 @@ import { ProfileService } from '../services/profile.service';
 import { RegistrationService } from '../services/registration.service';
 import type { UpdateProfileInput } from '../validators/auth.schema';
 import type {
+  ForgotPasswordInput,
   RegisterSchoolInput,
   ResendVerificationInput,
   VerifyEmailInput,
@@ -65,6 +66,25 @@ export class AuthController {
         .json(
           ApiResponse.ok(result, 'If that address has an unverified account, a new code is on its way.'),
         );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Unauthenticated. Emails a link for setting a new password.
+   *
+   * Like `resendVerification`, the answer is the same whether or not the
+   * address has an account, so this cannot be used to discover which ones do.
+   */
+  static async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await RegistrationService.Instance.forgotPassword(
+        req.validated!.body as ForgotPasswordInput,
+      );
+      res
+        .status(200)
+        .json(ApiResponse.ok(result, 'If that address has an account, a reset link is on its way.'));
     } catch (error) {
       next(error);
     }

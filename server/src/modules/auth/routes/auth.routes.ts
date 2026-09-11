@@ -5,6 +5,7 @@ import { validate } from '../../../shared/middleware/validate.middleware';
 import { authRateLimiter } from '../../../shared/middleware/rateLimiter.middleware';
 import { updateProfileSchema } from '../validators/auth.schema';
 import {
+  forgotPasswordSchema,
   registerSchoolSchema,
   resendVerificationSchema,
   verifyEmailSchema,
@@ -37,6 +38,17 @@ router.post(
   authRateLimiter,
   validate(resendVerificationSchema),
   AuthController.resendVerification,
+);
+
+/**
+ * The reset link is generated here and sent in our own template rather than by
+ * the identity provider, so it reads like every other mail a school sends.
+ */
+router.post(
+  '/auth/forgot-password',
+  authRateLimiter,
+  validate(forgotPasswordSchema),
+  AuthController.forgotPassword,
 );
 
 /**

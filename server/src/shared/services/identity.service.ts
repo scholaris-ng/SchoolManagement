@@ -23,6 +23,17 @@ export interface IdentityProvider {
   /** Compensating action when provisioning fails after the credential exists. */
   deleteUser(uid: string): Promise<void>;
   markEmailVerified(uid: string): Promise<void>;
+  /**
+   * A one-time link that lets someone set a new password, or `null` when the
+   * address has no credential.
+   *
+   * Generated rather than sent. The provider would happily mail this itself,
+   * but that mail is its own, unbranded and outside every rule in section 22 —
+   * so we take the link and send it in our own template. `null` is a normal
+   * answer and must not be reported to the caller, or this becomes a way to
+   * discover which addresses have accounts.
+   */
+  generatePasswordResetLink(email: string): Promise<string | null>;
 }
 
 class FirebaseIdentityProvider implements IdentityProvider {
@@ -58,6 +69,20 @@ class FirebaseIdentityProvider implements IdentityProvider {
   async markEmailVerified(uid: string): Promise<void> {
     await getFirebaseAuth().updateUser(uid, { emailVerified: true });
   }
+
+  async generatePasswordResetLink(email: string): Promise<string | null> {
+    try {
+      return await getFirebaseAuth().generatePasswordResetLink(email, {
+        // Where the browser lands once the new password is set.
+        url: `${env.appUrl}/sign-in`,
+      });
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'auth/user-not-found' || code === 'auth/email-not-found') return null;
+      console.error('[identity] Firebase generatePasswordResetLink failed:', error);
+      throw AppError.internal('Could not prepare a password reset.');
+    }
+  }
 }
 
 /**
@@ -85,6 +110,12 @@ class DevIdentityProvider implements IdentityProvider {
 
   async markEmailVerified(): Promise<void> {
     // Verification is tracked on our own user row in this mode.
+  }
+
+  async generatePasswordResetLink(email: string): Promise<string | null> {
+    // There is no credential in this mode, so there is no password to reset.
+    console.warn(`[identity] Firebase is not configured — no reset link for ${email}.`);
+    return null;
   }
 }
 

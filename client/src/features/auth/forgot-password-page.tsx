@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ArrowLeft, CheckCircle2, Mail } from 'lucide-react';
-import { useAuth } from '@/app/providers/auth-provider';
+import { AuthEndpoints } from './auth.endpoints';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
@@ -14,7 +14,6 @@ const schema = z.object({
 });
 
 export function ForgotPasswordPage() {
-  const { sendPasswordReset } = useAuth();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +25,7 @@ export function ForgotPasswordPage() {
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null);
     try {
-      await sendPasswordReset(values.email);
+      await AuthEndpoints.forgotPassword(values.email);
       // Always report success: confirming whether an address exists would let
       // anyone enumerate the school's parent and staff accounts.
       setSent(true);

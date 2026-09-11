@@ -149,7 +149,7 @@ export function authStub(permissions: Permission[], over: Record<string, unknown
     register: async () => ({ email: "", schoolName: "", expiresInMinutes: 15, emailVerified: false }),
     verifyEmail: async () => {},
     signOut: async () => {},
-    sendPasswordReset: async () => {},
+    changePassword: async () => {},
     refreshSession: async () => {},
     error: null,
     ...over,

@@ -5,7 +5,6 @@ import {
   Check,
   CloudOff,
   KeyRound,
-  LogOut,
   Monitor,
   Moon,
   Save,
@@ -18,6 +17,7 @@ import { useAuth } from '@/app/providers/auth-provider';
 import { useTheme, type ThemeMode } from '@/app/providers/theme-provider';
 import { useOutbox } from '@/hooks/use-outbox';
 import { membershipLabel } from '@/lib/permissions';
+import { AuthEndpoints } from '@/features/auth/auth.endpoints';
 import { useUpdateProfile } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
 import { PhoneNumberInput } from '@/components/forms/form-field';
-import { ConfirmDialog } from '@/components/ui/dialog';
+import { ChangePasswordDialog } from './change-password-dialog';
 import { Alert } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 
@@ -52,8 +52,7 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
  * on the Roles & access screen, and the API enforces that regardless.
  */
 export function ProfilePage() {
-  const { user, identityUser, memberships, membership, switchSchool, signOut, sendPasswordReset } =
-    useAuth();
+  const { user, identityUser, memberships, membership, switchSchool } = useAuth();
   const { mode, setMode } = useTheme();
   const outbox = useOutbox();
   const update = useUpdateProfile();
@@ -63,8 +62,9 @@ export function ProfilePage() {
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl ?? null);
   const [dirty, setDirty] = useState(false);
-  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -91,14 +91,20 @@ export function ProfilePage() {
   const requestReset = async () => {
     const email = user?.email ?? identityUser?.email;
     if (!email) return;
+    setResetSending(true);
     try {
-      await sendPasswordReset(email);
+      await AuthEndpoints.forgotPassword(email);
       setResetSent(true);
       toast.success('Check your inbox', { description: `We sent a reset link to ${email}.` });
     } catch (error) {
       toast.error('We could not send that email', {
         description: error instanceof Error ? error.message : undefined,
       });
+    } finally {
+      // Left enabled on purpose. A link that never arrives is the usual reason
+      // someone presses this, and a button stuck reading "sent" gives them
+      // nowhere to go.
+      setResetSending(false);
     }
   };
 
@@ -357,32 +363,37 @@ export function ProfilePage() {
             <div className="min-w-0">
               <p className="text-sm font-medium">Password</p>
               <p className="text-xs text-muted-foreground">
-                We email you a link rather than asking for your current password.
+                Change it here whenever you like. Anyone signing in for the first time with a
+                password their school issued should change it now.
               </p>
             </div>
             <Button
               variant="outline"
-              data-cy="profile-send-reset-link"
-              onClick={() => void requestReset()}
-              disabled={resetSent}
+              data-cy="profile-change-password"
+              onClick={() => setChangePasswordOpen(true)}
             >
               <KeyRound />
-              {resetSent ? 'Reset link sent' : 'Send reset link'}
+              Change password
             </Button>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Sign out</p>
+              <p className="text-sm font-medium">Forgotten your password?</p>
               <p className="text-xs text-muted-foreground">
-                Ends this session and clears cached school data from this device.
+                We email you a link instead, so you never have to recall the current one.
               </p>
             </div>
-            <Button data-cy="profile-sign-out" variant="outline" onClick={() => setSignOutOpen(true)}>
-              <LogOut />
-              Sign out
+            <Button
+              variant="ghost"
+              data-cy="profile-send-reset-link"
+              onClick={() => void requestReset()}
+              loading={resetSending}
+            >
+              {resetSent ? 'Send another link' : 'Send reset link'}
             </Button>
           </div>
+
         </CardContent>
       </Card>
 
@@ -397,19 +408,7 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      <ConfirmDialog
-        open={signOutOpen}
-        onOpenChange={setSignOutOpen}
-        title="Sign out?"
-        description={
-          outbox.pendingCount > 0
-            ? `You have ${outbox.pendingCount} change${outbox.pendingCount === 1 ? '' : 's'} that have not reached the server yet. Signing out now may lose them.`
-            : 'You will need to sign in again to use the portal.'
-        }
-        confirmLabel="Sign out"
-        tone={outbox.pendingCount > 0 ? 'danger' : 'primary'}
-        onConfirm={() => signOut()}
-      />
+      <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
     </PageContainer>
   );
 }

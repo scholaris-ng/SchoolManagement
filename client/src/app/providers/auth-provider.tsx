@@ -39,7 +39,7 @@ interface AuthContextValue {
   register: (values: RegisterSchoolInput) => Promise<RegistrationResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
-  sendPasswordReset: (email: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   refreshSession: () => Promise<void>;
   error: unknown;
 }
@@ -217,7 +217,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       verifyEmail,
       signOut: signOutUser,
-      sendPasswordReset: (email: string) => identity.sendPasswordReset(email),
+      changePassword: (currentPassword: string, newPassword: string) =>
+        identity.changePassword(currentPassword, newPassword),
       refreshSession,
       error: sessionQuery.error,
     }),

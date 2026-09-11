@@ -1,5 +1,6 @@
 import {
   escapeHtml,
+  sendPasswordResetEmail,
   sendSchoolReadyEmail,
   sendStaffAccountEmail,
   sendGuardianInviteEmail,
@@ -124,6 +125,42 @@ describe('sendStaffAccountEmail', () => {
 
     const { html } = lastSend();
     expect(html).toContain('Or paste this into your browser: https://app.test/sign-in');
+  });
+});
+
+describe('sendPasswordResetEmail', () => {
+  const reset = {
+    to: 'chidinma.eze@brightfield.edu.ng',
+    firstName: 'Chidinma',
+    resetUrl: 'https://auth.test/reset?oobCode=abc123',
+    expiresInHours: 1,
+  };
+
+  it('carries the link as a button and as text, in our own template', async () => {
+    await sendPasswordResetEmail(reset);
+
+    const { html, subject } = lastSend();
+    expect(subject).toBe('Reset your password — Scholaris');
+    // The Scholaris shell, not the identity provider's unbranded mail.
+    expect(html).toContain('Schol');
+    expect(html).toContain(`href="${reset.resetUrl}"`);
+    expect(html).toContain(`Or paste this into your browser: ${reset.resetUrl}`);
+  });
+
+  it('keeps the link out of the inbox preview line', async () => {
+    await sendPasswordResetEmail(reset);
+
+    // The link alone is enough to take over the account, and a preheader shows
+    // on a locked phone.
+    expect(preheaderOf(lastSend().html)).not.toContain('oobCode');
+  });
+
+  it('says how long the link lasts, in words that read properly at one hour', async () => {
+    await sendPasswordResetEmail(reset);
+    expect(lastSend().text).toContain('expires in one hour');
+
+    await sendPasswordResetEmail({ ...reset, expiresInHours: 6 });
+    expect(lastSend().text).toContain('expires in 6 hours');
   });
 });
 

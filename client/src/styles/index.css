@@ -67,7 +67,7 @@
     --popover-foreground: 210 40% 96%;
 
     --primary: 243 75% 66%;
-    --primary-foreground: 222 47% 8%;
+    --primary-foreground: 0 0% 100%;
     --primary-subtle: 243 40% 20%;
 
     --secondary: 217 33% 17%;
@@ -79,6 +79,13 @@
     --accent: 217 33% 20%;
     --accent-foreground: 210 40% 96%;
 
+    /*
+     * success/warning/danger/info stay dark-on-bright in this theme, unlike
+     * primary above: their dark-mode backgrounds are light and saturated
+     * enough (L 45-60%) that white text drops below 4:1 contrast, and for
+     * warning it falls to ~2:1 (unreadable). Do not "fix" these to white to
+     * match primary — measure contrast first if the hues here ever change.
+     */
     --success: 142 60% 45%;
     --success-foreground: 222 47% 8%;
     --success-subtle: 142 40% 18%;

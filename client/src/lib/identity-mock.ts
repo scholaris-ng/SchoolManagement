@@ -55,8 +55,19 @@ export class MockIdentityProvider implements IdentityProvider {
     this.setCurrent(null);
   }
 
-  async sendPasswordReset(): Promise<void> {
-    /* Nothing to send in development. */
+  /**
+   * Accepted, but nothing is stored.
+   *
+   * This provider never held a password to begin with — `signIn` takes any
+   * address and believes it — so there is nothing here to verify against and
+   * nothing to change. It resolves so the screen behaves the same way in a
+   * demo build as it does against Firebase.
+   */
+  async changePassword(): Promise<void> {
+    if (!this.current) throw new Error('You are not signed in.');
+    // Said out loud, so nobody demonstrating this build believes a password
+    // was checked or stored when neither happened.
+    console.warn('[identity:mock] Password change accepted but not stored.');
   }
 
   async getIdToken(): Promise<string | null> {

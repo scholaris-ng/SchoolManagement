@@ -11,7 +11,11 @@ import {
   getIdentityProvider,
   type IdentityProvider,
 } from '../../../shared/services/identity.service';
-import { sendSchoolReadyEmail, sendVerificationEmail } from '../../../shared/utils/mailer';
+import {
+  sendPasswordResetEmail,
+  sendSchoolReadyEmail,
+  sendVerificationEmail,
+} from '../../../shared/utils/mailer';
 import { School } from '../../school/entities/school.entity';
 import { Role } from '../../rbac/entities/role.entity';
 import { MembershipRole } from '../../rbac/entities/membershipRole.entity';
@@ -24,6 +28,7 @@ import {
   hashCode,
 } from '../repositories/emailVerification.repository';
 import type {
+  ForgotPasswordInput,
   RegisterSchoolInput,
   ResendVerificationInput,
   VerifyEmailInput,
@@ -59,6 +64,15 @@ export interface VerificationResultDTO {
  * school's data. The school starts on TRIAL and stays there until a
  * subscription completes the picture.
  */
+/**
+ * How long a reset link stays usable.
+ *
+ * Firebase fixes this at one hour and the Admin SDK offers no way to change it,
+ * so the number is stated here only so the email and the screen can say the
+ * same thing the link actually does.
+ */
+const PASSWORD_RESET_TTL_HOURS = 1;
+
 export class RegistrationService {
   static Instance = new RegistrationService();
 
@@ -235,6 +249,43 @@ export class RegistrationService {
     }
 
     return { expiresInMinutes: env.verificationCodeTtlMinutes };
+  }
+
+  /**
+   * Emails a link for setting a new password.
+   *
+   * The identity provider owns the credential and generates the link; this
+   * sends it in our own template, so a reset arrives looking like every other
+   * message from the school rather than unbranded from a service the recipient
+   * has never heard of.
+   *
+   * Answers identically whether or not the address has an account, for the
+   * same reason resending a verification code does: a different answer turns
+   * this into a way to discover which of a school's parents and staff are
+   * registered.
+   */
+  async forgotPassword(input: ForgotPasswordInput): Promise<{ expiresInHours: number }> {
+    const user = await this.users.findByEmail(input.email);
+
+    if (user) {
+      const link = await getIdentityProvider()
+        .generatePasswordResetLink(user.email)
+        .catch((error) => {
+          console.error('[registration] Could not prepare a password reset:', error);
+          return null;
+        });
+
+      if (link) {
+        void sendPasswordResetEmail({
+          to: user.email,
+          firstName: user.firstName,
+          resetUrl: link,
+          expiresInHours: PASSWORD_RESET_TTL_HOURS,
+        }).catch(console.error);
+      }
+    }
+
+    return { expiresInHours: PASSWORD_RESET_TTL_HOURS };
   }
 
   // ─── Provisioning helpers ──────────────────────────────────────────────────

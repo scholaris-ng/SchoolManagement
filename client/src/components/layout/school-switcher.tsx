@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Building2, Check, ChevronsUpDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { membershipLabel } from '@/lib/permissions';
 
@@ -111,10 +111,14 @@ function SchoolMark({
       />
     );
   }
+  // A school administrator picks this colour freely (school-settings-page),
+  // so it can land anywhere on the lightness scale — a pale gold makes white
+  // text on it as illegible as it would on `Avatar`'s hashed initials.
+  const background = color ?? '#4f46e5';
   return (
     <span
-      className="grid size-8 shrink-0 place-items-center rounded-md text-xs font-bold text-white"
-      style={{ backgroundColor: color ?? '#4f46e5' }}
+      className="grid size-8 shrink-0 place-items-center rounded-md text-xs font-bold"
+      style={{ backgroundColor: background, color: contrastingTextColor(background) }}
       aria-hidden="true"
     >
       {name.slice(0, 2).toUpperCase() || <Building2 className="size-4" />}

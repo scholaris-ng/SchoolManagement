@@ -7,7 +7,7 @@ import { GraduationCap, Lock, Mail } from 'lucide-react';
 import { isApiError } from '@/lib/api-error';
 import { useAuth } from '@/app/providers/auth-provider';
 import { Button } from '@/components/ui/button';
-import { TextField } from '@/components/forms/form-field';
+import { PasswordField, TextField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
 import { FullPageLoader } from '@/components/layout/full-page-loader';
 
@@ -131,11 +131,10 @@ export function SignInPage() {
               placeholder="you@school.edu.ng"
               leadingIcon={<Mail />}
             />
-            <TextField
+            <PasswordField
               control={form.control}
               name="password"
               label="Password"
-              type="password"
               autoComplete="current-password"
               required
               leadingIcon={<Lock />}

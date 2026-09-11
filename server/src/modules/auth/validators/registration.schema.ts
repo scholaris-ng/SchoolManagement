@@ -52,6 +52,11 @@ export const resendVerificationSchema = z.object({
   body: z.object({ email }).strict(),
 });
 
+export const forgotPasswordSchema = z.object({
+  body: z.object({ email }).strict(),
+});
+
 export type RegisterSchoolInput = z.infer<typeof registerSchoolSchema>['body'];
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>['body'];
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>['body'];
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>['body'];

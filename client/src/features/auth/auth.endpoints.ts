@@ -45,4 +45,15 @@ export const AuthEndpoints = {
    */
   resendVerification: (email: string) =>
     http.post<{ expiresInMinutes: number }>('/auth/resend-verification', { email }),
+
+  /**
+   * Emails a link for setting a new password.
+   *
+   * Goes through our API rather than straight to Firebase from the browser, so
+   * the message arrives in the Scholaris template like every other mail the
+   * school sends instead of unbranded from a service the recipient has never
+   * heard of. Answers the same way whether or not the address has an account.
+   */
+  forgotPassword: (email: string) =>
+    http.post<{ expiresInHours: number }>('/auth/forgot-password', { email }),
 };

@@ -6,7 +6,7 @@ import * as AvatarPrimitive from '@radix-ui/react-avatar';
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import { Check, Minus } from 'lucide-react';
-import { cn, initials as toInitials, colorFromString } from '@/lib/utils';
+import { cn, initials as toInitials, colorFromString, contrastingTextColor } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */
 /* Card                                                                        */
@@ -145,6 +145,10 @@ export interface AvatarProps {
 
 export function Avatar({ name, src, size = 'md', className, suppressPhoto }: AvatarProps) {
   const showImage = Boolean(src) && !suppressPhoto;
+  // The hashed hue can land anywhere on the lightness scale — pale gold and
+  // lime included — so the initials pick whichever of white or the app's
+  // near-black actually reads against it, rather than assuming white.
+  const background = colorFromString(name);
   return (
     <AvatarPrimitive.Root
       className={cn(
@@ -162,8 +166,8 @@ export function Avatar({ name, src, size = 'md', className, suppressPhoto }: Ava
       )}
       <AvatarPrimitive.Fallback
         delayMs={showImage ? 300 : 0}
-        className="flex h-full w-full items-center justify-center font-semibold text-white"
-        style={{ backgroundColor: colorFromString(name) }}
+        className="flex h-full w-full items-center justify-center font-semibold"
+        style={{ backgroundColor: background, color: contrastingTextColor(background) }}
       >
         {toInitials(name) || '?'}
       </AvatarPrimitive.Fallback>

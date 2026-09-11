@@ -8,7 +8,7 @@ import { useAuth } from '@/app/providers/auth-provider';
 import { AuthEndpoints } from './auth.endpoints';
 import { AuthLayout } from './auth-layout';
 import { Button } from '@/components/ui/button';
-import { TextField } from '@/components/forms/form-field';
+import { PasswordField, TextField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
 import { FullPageLoader } from '@/components/layout/full-page-loader';
 import { errorMessage, isApiError } from '@/lib/api-error';
@@ -159,22 +159,20 @@ export function SignUpPage() {
           description="We will send a six-digit code here to confirm it is yours."
         />
 
-        <TextField
+        <PasswordField
           control={form.control}
           name="password"
           label="Password"
-          type="password"
           autoComplete="new-password"
           required
           leadingIcon={<Lock />}
           description="At least 8 characters."
         />
 
-        <TextField
+        <PasswordField
           control={form.control}
           name="confirmPassword"
           label="Confirm password"
-          type="password"
           autoComplete="new-password"
           required
           leadingIcon={<Lock />}

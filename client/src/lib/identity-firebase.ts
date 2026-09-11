@@ -1,9 +1,11 @@
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   onAuthStateChanged,
-  sendPasswordResetEmail,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
   updateProfile,
   type User as FirebaseUser,
 } from 'firebase/auth';
@@ -39,6 +41,28 @@ function translateAuthError(error: unknown): Error {
   return new Error(messages[code] ?? 'Sign-in failed. Please try again.');
 }
 
+/**
+ * The same codes mean something else when changing a password.
+ *
+ * `auth/wrong-password` during sign-in means "that pair does not match an
+ * account"; here the account is not in question and the message has to point
+ * at the one box that is actually wrong, or the person retypes everything.
+ */
+function translateChangePasswordError(error: unknown): Error {
+  const code = (error as { code?: string })?.code ?? '';
+  const messages: Record<string, string> = {
+    'auth/invalid-credential': 'That is not your current password.',
+    'auth/wrong-password': 'That is not your current password.',
+    'auth/weak-password': 'Please choose a password of at least 8 characters.',
+    'auth/too-many-requests': 'Too many attempts. Please wait a few minutes and try again.',
+    // Firebase refuses a password change on a session that has been open a
+    // long time, and the only cure is signing in again.
+    'auth/requires-recent-login': 'Please sign out and back in, then change your password.',
+    'auth/network-request-failed': 'Could not reach the sign-in service. Check your connection.',
+  };
+  return new Error(messages[code] ?? 'Could not change your password. Please try again.');
+}
+
 export class FirebaseIdentityProvider implements IdentityProvider {
   readonly kind = 'firebase' as const;
 
@@ -71,11 +95,23 @@ export class FirebaseIdentityProvider implements IdentityProvider {
     await signOut(this.auth);
   }
 
-  async sendPasswordReset(email: string): Promise<void> {
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user?.email) throw new Error('You are not signed in.');
+
     try {
-      await sendPasswordResetEmail(this.auth, email);
+      /*
+        Re-authenticating first is what makes this safe, and it is also what
+        Firebase requires: it refuses `updatePassword` on a stale session. A
+        wrong current password therefore fails here, before anything changes.
+      */
+      await reauthenticateWithCredential(
+        user,
+        EmailAuthProvider.credential(user.email, currentPassword),
+      );
+      await updatePassword(user, newPassword);
     } catch (error) {
-      throw translateAuthError(error);
+      throw translateChangePasswordError(error);
     }
   }
 

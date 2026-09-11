@@ -297,6 +297,28 @@ const folders = [
           STD[422]('firstName', 'Please enter your first name.'),
         ],
       },
+      {
+        name: 'Forgot password',
+        req: {
+          method: 'POST',
+          path: '/auth/forgot-password',
+          body: { email: 'ada@brightfield.edu.ng' },
+        },
+        examples: [
+          [
+            '200 Link on its way',
+            200,
+            ok({ expiresInHours: 1 }, 'If that address has an account, a reset link is on its way.'),
+          ],
+          [
+            '200 No such account',
+            200,
+            ok({ expiresInHours: 1 }, 'If that address has an account, a reset link is on its way.'),
+          ],
+          STD[422]('email', 'Enter a valid email address.'),
+          STD[429](),
+        ],
+      },
     ],
   },
   {

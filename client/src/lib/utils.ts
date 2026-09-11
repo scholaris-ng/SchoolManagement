@@ -75,6 +75,83 @@ export function colorFromString(value: string): string {
   return `hsl(${hue} 62% 45%)`;
 }
 
+function srgbChannelLuminance(value255: number): number {
+  const c = value255 / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG relative luminance from 0-255 channels. */
+function relativeLuminance(r: number, g: number, b: number): number {
+  return (
+    0.2126 * srgbChannelLuminance(r) +
+    0.7152 * srgbChannelLuminance(g) +
+    0.0722 * srgbChannelLuminance(b)
+  );
+}
+
+/** `hsl(h s% l%)`, as `colorFromString` emits it, as 0-255 RGB. */
+function hslStringToRgb(h: number, s: number, l: number): [number, number, number] {
+  const sat = s / 100;
+  const light = l / 100;
+  const c = (1 - Math.abs(2 * light - 1)) * sat;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = light - c / 2;
+  const [r1, g1, b1] =
+    h < 60
+      ? [c, x, 0]
+      : h < 120
+        ? [x, c, 0]
+        : h < 180
+          ? [0, c, x]
+          : h < 240
+            ? [0, x, c]
+            : h < 300
+              ? [x, 0, c]
+              : [c, 0, x];
+  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+
+/** Parses `#rrggbb` or `hsl(h s% l%)`; falls back to mid-grey on anything else. */
+function toRgb(color: string): [number, number, number] {
+  const hex = color.trim().match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const hsl = color.trim().match(/^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*\)$/i);
+  if (hsl) return hslStringToRgb(Number(hsl[1]), Number(hsl[2]), Number(hsl[3]));
+  return [148, 148, 148];
+}
+
+const WHITE_LUMINANCE = 1;
+// The app's own near-black (`222 47% 8%` in `styles/index.css`), not pure
+// `#000` — keeps a colour swatch's dark text matching the rest of the app.
+const DARK_TEXT_LUMINANCE = relativeLuminance(11, 17, 30);
+
+function contrastRatio(l1: number, l2: number): number {
+  const [lighter, darker] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * White or the app's near-black, whichever reads better on `color`.
+ *
+ * For text sitting directly on a colour swatch — an avatar initial, a
+ * school's own brand mark — the swatch decides the contrast, not the
+ * surrounding light/dark theme. `color` can be a hash-generated hue
+ * (`colorFromString`) or a school's own picked brand colour, and either can
+ * land anywhere on the lightness scale: a pale gold or lime swatch drops
+ * white text to roughly 2:1, well under WCAG's 4.5:1 floor. Always pick
+ * whichever of the two options actually passes rather than assuming white.
+ */
+export function contrastingTextColor(color: string): string {
+  const [r, g, b] = toRgb(color);
+  const backgroundLuminance = relativeLuminance(r, g, b);
+  const withWhite = contrastRatio(backgroundLuminance, WHITE_LUMINANCE);
+  const withDark = contrastRatio(backgroundLuminance, DARK_TEXT_LUMINANCE);
+  return withWhite >= withDark ? '#ffffff' : '#0b111e';
+}
+
 export function debounce<A extends unknown[]>(fn: (...args: A) => void, delay = 300) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const debounced = (...args: A) => {
