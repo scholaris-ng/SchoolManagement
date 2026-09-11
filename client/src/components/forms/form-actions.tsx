@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { unstable_usePrompt as usePrompt } from 'react-router-dom';
+import { useBlocker } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { isApiError } from '@/lib/api-error';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { Alert } from '@/components/ui/feedback';
 
 /**
@@ -72,10 +73,7 @@ export function FormActions({
 
 /** Blocks in-app navigation and browser unload while a form is dirty. */
 export function UnsavedChangesGuard({ when }: { when: boolean }) {
-  usePrompt({
-    when,
-    message: 'You have unsaved changes. Leave this page and lose them?',
-  });
+  const blocker = useBlocker(when);
 
   useEffect(() => {
     if (!when) return;
@@ -87,7 +85,39 @@ export function UnsavedChangesGuard({ when }: { when: boolean }) {
     return () => window.removeEventListener('beforeunload', handler);
   }, [when]);
 
-  return null;
+  /*
+    A save landing while the question is still on screen makes it moot: there
+    is nothing left to lose, so drop the block rather than leave a dead dialog
+    sitting over the page.
+  */
+  useEffect(() => {
+    if (blocker.state === 'blocked' && !when) blocker.reset();
+  }, [blocker, when]);
+
+  return (
+    <ConfirmDialog
+      open={blocker.state === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open && blocker.state === 'blocked') blocker.reset();
+      }}
+      title="Leave without saving?"
+      description="The changes you made on this page have not been saved. Leaving now loses them."
+      confirmLabel="Leave page"
+      cancelLabel="Stay on page"
+      tone="danger"
+      onConfirm={() => {
+        if (blocker.state !== 'blocked') return;
+        /*
+          A back-button navigation reverts the history entry while the question
+          is still open, so hand the proceed to the next tick and let that
+          settle first.
+        */
+        const { proceed } = blocker;
+        setTimeout(proceed, 0);
+      }}
+      data-cy="unsaved-changes-dialog"
+    />
+  );
 }
 
 /**

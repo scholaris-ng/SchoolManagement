@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
 import { ROLES, ROLE_LABEL } from '@/types/rbac';
 import { useClassOptions, useSubjectOptions } from '@/features/academics/api';
+import { useSchool } from '@/features/settings/api';
 import { useCreateStaff, useStaffMember, useUpdateStaff } from './api';
 import { staffFormSchema, type StaffFormValues } from './schema';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -15,11 +16,13 @@ import {
   DateField,
   FormSection,
   MultiSelectField,
+  PhoneField,
   SelectField,
   SwitchField,
   TextField,
 } from '@/components/forms/form-field';
 import { FileUpload } from '@/components/forms/file-upload';
+import { NewStaffCredentialsDialog, type NewStaffCredentials } from './new-staff-credentials-dialog';
 import { Alert, LoadingState } from '@/components/ui/feedback';
 
 const GENDER_OPTIONS = [
@@ -76,6 +79,10 @@ export function StaffFormPage() {
 
   const subjectOptions = useSubjectOptions();
   const classOptions = useClassOptions();
+  const school = useSchool();
+
+  const [newCredentials, setNewCredentials] = useState<NewStaffCredentials | null>(null);
+  const [createdStaffId, setCreatedStaffId] = useState<string | null>(null);
 
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffFormSchema),
@@ -116,7 +123,18 @@ export function StaffFormPage() {
         navigate(`/staff/${member.id}`);
       } else {
         const member = await createStaff.mutateAsync(values);
-        navigate(`/staff/${member.id}`);
+        // Otherwise the unsaved-changes guard reads the form as still dirty
+        // and blocks the very navigation the "continue" button below asks for.
+        form.reset(values, { keepValues: true });
+        // The password only ever comes back on this one response, so it is
+        // shown before moving on rather than after — there is no later screen
+        // that could still offer it.
+        setCreatedStaffId(member.id);
+        setNewCredentials({
+          fullName: member.fullName,
+          email: member.email,
+          temporaryPassword: member.temporaryPassword,
+        });
       }
     } catch (error) {
       if (isApiError(error) && error.isValidation) {
@@ -185,7 +203,13 @@ export function StaffFormPage() {
                 required
                 hint="Used to sign in."
               />
-              <TextField control={form.control} name="phone" label="Phone" type="tel" required />
+              <PhoneField
+                control={form.control}
+                name="phone"
+                label="Phone"
+                required
+                defaultCountry={school.data?.settings.country}
+              />
             </FormSection>
 
             <FormSection title="Photograph" columns={1}>
@@ -299,6 +323,14 @@ export function StaffFormPage() {
           />
         </Card>
       </form>
+
+      <NewStaffCredentialsDialog
+        credentials={newCredentials}
+        onClose={() => {
+          setNewCredentials(null);
+          if (createdStaffId) navigate(`/staff/${createdStaffId}`);
+        }}
+      />
     </PageContainer>
   );
 }

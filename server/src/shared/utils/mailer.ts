@@ -234,3 +234,44 @@ export async function sendSchoolReadyEmail(params: {
     text: `Hello ${firstName}, ${schoolName} (code ${schoolCode}) is set up on Scholaris and you are its administrator. Open ${env.appUrl}/settings to define your levels, classes and subjects.`,
   });
 }
+
+/**
+ * Recipient: a newly hired member of staff. Trigger: `POST /staff`, once the
+ * account behind their new record exists. Tone: transactional — no emoji.
+ *
+ * The account is created with the password already set — there is no invite
+ * code to enter first, unlike the guardian and registration flows above — so
+ * this is the one email in this file that carries a credential rather than a
+ * code. It is shown here exactly once: like the admin's own copy in the
+ * create-staff dialog, the server keeps no record of it after this send.
+ */
+export async function sendStaffAccountEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  temporaryPassword: string;
+}): Promise<void> {
+  const { to, firstName, schoolName, temporaryPassword } = params;
+
+  const body = [
+    heading(`Welcome to ${schoolName}`),
+    paragraph(
+      `Hello ${firstName}, an account has been created for you on <strong>${schoolName}</strong>'s Scholaris portal.`,
+    ),
+    infoBox([
+      ['Email', to],
+      ['Temporary password', temporaryPassword],
+    ]),
+    button('Sign in', `${env.appUrl}/sign-in`),
+    footnote(
+      'Change this password as soon as you sign in. If you were not expecting this account, please contact the school directly.',
+    ),
+  ].join('');
+
+  await send({
+    to,
+    subject: `Your account is ready — ${schoolName} — Scholaris`,
+    html: emailLayout(body),
+    text: `Hello ${firstName}, an account has been created for you on ${schoolName}'s Scholaris portal. Sign in at ${env.appUrl}/sign-in with ${to} and temporary password ${temporaryPassword}. Change it as soon as you sign in.`,
+  });
+}

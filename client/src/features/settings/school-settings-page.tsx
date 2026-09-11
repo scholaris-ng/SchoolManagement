@@ -212,10 +212,11 @@ export function SchoolSettingsPage() {
             </Field>
             <Field label="Phone" required error={fieldErrors.phone}>
               <PhoneField
+                data-cy="school-settings-phone"
                 value={draft.phone ?? ''}
                 onChange={(phone) => set({ phone })}
                 defaultCountry={draft.settings?.country}
-                error={fieldErrors.phone}
+                invalid={Boolean(fieldErrors.phone)}
               />
             </Field>
             <Field

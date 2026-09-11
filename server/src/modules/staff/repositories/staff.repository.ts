@@ -1,3 +1,4 @@
+import type { DeepPartial } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -97,11 +98,6 @@ export interface StaffFilter {
   department?: string;
 }
 
-/**
- * The staff module has no write path yet — this reads the roster and one
- * record, which is what the staff list, the staff profile and the analytics
- * screen ask for. Creating and updating employees comes with the rest of HR.
- */
 export class StaffRepository extends TenantRepository<Staff> {
   static Instance = new StaffRepository();
 
@@ -121,6 +117,37 @@ export class StaffRepository extends TenantRepository<Staff> {
       [schoolId],
     );
     return Number(row?.total ?? 0);
+  }
+
+  async findByStaffNo(schoolId: string, staffNo: string): Promise<Staff | null> {
+    return this.repo.findOne({ where: { schoolId, staffNo }, withDeleted: true });
+  }
+
+  async findByEmail(schoolId: string, email: string): Promise<Staff | null> {
+    return this.repo.findOne({ where: { schoolId, email }, withDeleted: true });
+  }
+
+  async create(data: DeepPartial<Staff>): Promise<Staff> {
+    return this.repo.save(this.repo.create(data));
+  }
+
+  /** Guarded by the version the caller loaded (spec section 34). */
+  async updateIfVersionMatches(
+    id: string,
+    expectedVersion: number,
+    patch: DeepPartial<Staff>,
+  ): Promise<boolean> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .update(Staff)
+      .set({ ...patch, version: () => 'version + 1' } as never)
+      .where('id = :id AND version = :expectedVersion', { id, expectedVersion })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+  async update(id: string, patch: DeepPartial<Staff>): Promise<void> {
+    await this.repo.update(id, patch as never);
   }
 
   async fetchPaginated(schoolId: string, filter: StaffFilter): Promise<Paginated<StaffMemberDTO>> {

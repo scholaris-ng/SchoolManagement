@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
 import { useClassOptions, useHouseOptions } from '@/features/academics/api';
@@ -20,6 +20,13 @@ import {
 } from '@/components/forms/form-field';
 import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, LoadingState } from '@/components/ui/feedback';
+import {
+  BLOOD_GROUP_OPTIONS,
+  NATIONALITY_OPTIONS,
+  RELIGION_OPTIONS,
+  statesOfNationality,
+  withStoredValue,
+} from '@/lib/demographics';
 
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Male' },
@@ -44,7 +51,7 @@ const emptyValues: StudentFormValues = {
   emergencyContactName: '',
   emergencyContactPhone: '',
   address: '',
-  nationality: 'Nigerian',
+  nationality: 'Nigeria',
   stateOfOrigin: '',
   religion: '',
 };
@@ -130,6 +137,11 @@ export function StudentFormPage() {
 
   const photoUrl = form.watch('photoUrl');
   const photoConsent = form.watch('photoConsent');
+  const nationality = form.watch('nationality');
+  const stateOfOrigin = form.watch('stateOfOrigin');
+  const religion = form.watch('religion');
+  const bloodGroup = form.watch('bloodGroup');
+  const stateOptions = statesOfNationality(nationality);
 
   return (
     <PageContainer width="narrow">
@@ -225,6 +237,17 @@ export function StudentFormPage() {
                 options={classOptions}
                 placeholder="Select a class"
                 native
+                hint={
+                  classOptions.length === 0 ? (
+                    <>
+                      No classes yet.{' '}
+                      <Link to="/settings/academics" className="text-primary hover:underline">
+                        Create one in Academics settings
+                      </Link>
+                      .
+                    </>
+                  ) : undefined
+                }
               />
               <SelectField
                 control={form.control}
@@ -233,6 +256,17 @@ export function StudentFormPage() {
                 options={houseOptions}
                 placeholder="No house"
                 native
+                hint={
+                  houseOptions.length === 0 ? (
+                    <>
+                      No houses yet.{' '}
+                      <Link to="/settings/academics" className="text-primary hover:underline">
+                        Create one in Academics settings
+                      </Link>
+                      .
+                    </>
+                  ) : undefined
+                }
               />
               <DateField
                 control={form.control}
@@ -244,10 +278,48 @@ export function StudentFormPage() {
             </FormSection>
 
             <FormSection title="Background" columns={2}>
-              <TextField control={form.control} name="nationality" label="Nationality" />
-              <TextField control={form.control} name="stateOfOrigin" label="State of origin" />
-              <TextField control={form.control} name="religion" label="Religion" />
-              <TextField control={form.control} name="bloodGroup" label="Blood group" placeholder="e.g. O+" />
+              <SelectField
+                control={form.control}
+                name="nationality"
+                label="Nationality"
+                options={withStoredValue(NATIONALITY_OPTIONS, nationality)}
+                placeholder="Select a nationality"
+                // The state list below belongs to this country, so the old
+                // state cannot stand once the country changes.
+                onValueChange={() => form.setValue('stateOfOrigin', '', { shouldDirty: true })}
+              />
+              {stateOptions.length > 0 ? (
+                <SelectField
+                  control={form.control}
+                  name="stateOfOrigin"
+                  label="State of origin"
+                  options={withStoredValue(stateOptions, stateOfOrigin)}
+                  placeholder="Select a state"
+                />
+              ) : (
+                // Not every country has states in the dataset, and nationality
+                // may not be filled in yet. Typing beats an empty list.
+                <TextField
+                  control={form.control}
+                  name="stateOfOrigin"
+                  label="State of origin"
+                  hint={!nationality ? 'Pick a nationality to choose from a list.' : undefined}
+                />
+              )}
+              <SelectField
+                control={form.control}
+                name="religion"
+                label="Religion"
+                options={withStoredValue(RELIGION_OPTIONS, religion)}
+                placeholder="Select a religion"
+              />
+              <SelectField
+                control={form.control}
+                name="bloodGroup"
+                label="Blood group"
+                options={withStoredValue(BLOOD_GROUP_OPTIONS, bloodGroup)}
+                placeholder="Select a blood group"
+              />
               <TextareaField
                 control={form.control}
                 name="address"

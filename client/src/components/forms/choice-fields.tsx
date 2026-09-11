@@ -17,11 +17,14 @@ export function SelectField<T extends FieldValues>({
   options,
   placeholder,
   native,
+  onValueChange,
 }: BaseFieldProps<T> & {
   options: SelectOption[];
   placeholder?: string;
   /** Native selects are noticeably better on low-end Android devices. */
   native?: boolean;
+  /** Runs after the form value is set, for a field that steers another field. */
+  onValueChange?: (value: string) => void;
 }) {
   return (
     <Controller
@@ -46,6 +49,10 @@ export function SelectField<T extends FieldValues>({
                 disabled={disabled}
                 {...field}
                 value={(field.value as string | undefined) ?? ''}
+                onChange={(event) => {
+                  field.onChange(event);
+                  onValueChange?.(event.target.value);
+                }}
               >
                 <option value="">{placeholder ?? 'Select…'}</option>
                 {options.map((option) => (
@@ -63,7 +70,10 @@ export function SelectField<T extends FieldValues>({
                 disabled={disabled}
                 invalid={invalid}
                 value={(field.value as string | undefined) ?? undefined}
-                onValueChange={field.onChange}
+                onValueChange={(next) => {
+                  field.onChange(next);
+                  onValueChange?.(next);
+                }}
                 aria-label={label}
               />
             )

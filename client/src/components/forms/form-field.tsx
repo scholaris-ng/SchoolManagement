@@ -9,3 +9,4 @@ export * from './text-fields';
 export * from './choice-fields';
 export * from './toggle-fields';
 export * from './form-section';
+export * from './phone-field';

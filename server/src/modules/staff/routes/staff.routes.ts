@@ -3,14 +3,14 @@ import { authMiddleware } from '../../../shared/middleware/auth.middleware';
 import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
-import { fetchStaffSchema, staffIdParamSchema } from '../validators/staff.schema';
+import {
+  createStaffSchema,
+  fetchStaffSchema,
+  staffIdParamSchema,
+  updateStaffSchema,
+} from '../validators/staff.schema';
 import { StaffController } from '../controllers/staff.controller';
 
-/**
- * Reading the staff roster. Creating and updating employees is not here yet:
- * those are writes against records that carry employment history, and they land
- * with the rest of HR rather than ahead of it.
- */
 const router = Router();
 
 router.use(authMiddleware, tenantMiddleware);
@@ -27,6 +27,20 @@ router.get(
   authorise('staff.read'),
   validate(staffIdParamSchema),
   StaffController.fetchOne,
+);
+
+router.post(
+  '/staff',
+  authorise('staff.manage'),
+  validate(createStaffSchema),
+  StaffController.create,
+);
+
+router.patch(
+  '/staff/:id',
+  authorise('staff.manage'),
+  validate(updateStaffSchema),
+  StaffController.update,
 );
 
 export default router;
