@@ -123,14 +123,20 @@ export class StaffImportHandler implements ImportEntityHandler {
     return {
       issues,
       willUpdate,
+      // Every column the template offers appears here: the wizard draws one
+      // cell per mapped column, so anything left out reads as blank to a
+      // school checking its file.
       preview: {
         staffNo,
         firstName,
         lastName,
         email,
+        phone,
         gender,
         designation,
+        department: normaliseSpacing(row.department ?? ''),
         roleNames: (roles.length > 0 ? roles : [DEFAULT_ROLE]).join(';'),
+        employmentDate: employmentDate || todayIso(),
       },
     };
   }

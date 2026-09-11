@@ -79,6 +79,9 @@ export class GuardiansImportHandler implements ImportEntityHandler {
     return {
       issues,
       willUpdate: Boolean(existing),
+      // Every column the template offers appears here: the wizard draws one
+      // cell per mapped column, so anything left out reads as blank to a
+      // school checking its file.
       preview: {
         firstName,
         lastName,
@@ -86,6 +89,8 @@ export class GuardiansImportHandler implements ImportEntityHandler {
         phone,
         relationship: this.relationshipOf(row),
         studentAdmissionNo: admissionNo,
+        occupation: normaliseSpacing(row.occupation ?? ''),
+        address: normaliseSpacing(row.address ?? ''),
       },
     };
   }

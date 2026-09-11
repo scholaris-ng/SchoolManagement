@@ -316,7 +316,12 @@ export class ImportsService {
         rowNumber,
         row,
         issues,
-        preview: result.preview,
+        // The wizard draws one preview cell per mapped column, so a column the
+        // handler does not speak for would read as blank — as though the file
+        // were missing data it plainly has. Starting from the mapped row means
+        // every column shows something; the handler's normalised values win
+        // wherever it has an opinion.
+        preview: { ...row, ...result.preview },
         willUpdate: result.willUpdate,
         hasError: issues.some((entry) => entry.severity === 'ERROR'),
       });

@@ -141,14 +141,23 @@ export class StudentsImportHandler implements ImportEntityHandler {
     return {
       issues,
       willUpdate,
+      // Every column the template offers appears here: the wizard draws one
+      // cell per mapped column, so anything left out reads as blank to a
+      // school checking its file.
       preview: {
         admissionNo,
         firstName,
+        middleName: normaliseSpacing(row.middleName ?? ''),
         lastName,
         gender,
         dateOfBirth: (row.dateOfBirth ?? '').trim(),
         className: resolvedClass?.displayName ?? className,
         houseName,
+        admissionDate: (row.admissionDate ?? '').trim() || todayIso(),
+        address: normaliseSpacing(row.address ?? ''),
+        guardianName,
+        guardianPhone: (row.guardianPhone ?? '').trim(),
+        guardianEmail,
       },
     };
   }

@@ -56,7 +56,11 @@ function localPart(value: string, dialCode: string): string {
   if (!value.startsWith(dialCode)) return value;
   const rest = value.slice(dialCode.length);
   const dialDigits = dialCode.replace(/\D/g, '');
-  return rest.startsWith(dialDigits) ? rest.slice(dialDigits.length) : rest;
+  const local = rest.startsWith(dialDigits) ? rest.slice(dialDigits.length) : rest;
+  // A number written out by hand — or imported from a spreadsheet — usually
+  // separates the dial code from the rest, and that separator would otherwise
+  // show up as a leading space sitting in the box.
+  return local.replace(/^[\s-]+/, '');
 }
 
 export interface PhoneNumberInputProps {

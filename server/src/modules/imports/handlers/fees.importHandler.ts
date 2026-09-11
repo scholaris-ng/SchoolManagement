@@ -74,12 +74,16 @@ export class FeesImportHandler implements ImportEntityHandler {
     return {
       issues,
       willUpdate: Boolean(existing),
+      // Every column the template offers appears here: the wizard draws one
+      // cell per mapped column, so anything left out reads as blank to a
+      // school checking its file.
       preview: {
         name,
         code,
         amount: amount === null ? '' : amount.toFixed(2),
         category: category ?? '',
         isOptional: optional.value ? 'TRUE' : 'FALSE',
+        description: normaliseSpacing(row.description ?? ''),
       },
     };
   }
