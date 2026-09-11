@@ -196,7 +196,11 @@ export function ImportPage() {
                 void exportRowsToXlsx(
                   `${entity.toLowerCase()}-import-template.xlsx`,
                   template.rows,
-                  { headers: template.headers, sheetName: IMPORT_ENTITY_LABEL[entity] },
+                  {
+                    headers: template.headers,
+                    sheetName: IMPORT_ENTITY_LABEL[entity],
+                    dropdowns: template.dropdowns,
+                  },
                 );
               }}
             >

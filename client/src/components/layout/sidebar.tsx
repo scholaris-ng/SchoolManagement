@@ -128,8 +128,23 @@ export function Sidebar({
                         'group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                         collapsed && 'justify-center px-2',
                         isActive
-                          ? 'bg-primary-subtle text-primary'
-                          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                          ? // White in dark mode: on the pale, near-white tint
+                            // `bg-primary-subtle` resolves to in light mode,
+                            // `text-primary` blue is what reads there, but that
+                            // same class resolves to a dark navy tint in dark
+                            // mode, where blue text looks muted next to plain
+                            // white — the override applies only where it's
+                            // wanted.
+                            'bg-primary-subtle text-primary dark:text-white'
+                          : cn(
+                              'text-muted-foreground hover:bg-accent hover:text-foreground',
+                              // Collapsed, there is no label next to the icon to
+                              // carry the eye, so `muted-foreground`'s already-low
+                              // contrast against the dark card background reads as
+                              // barely-there. Expanded, the label supplies that
+                              // contrast, so this override is collapsed-only.
+                              collapsed && 'dark:text-white/80',
+                            ),
                       )
                     }
                   >
@@ -169,7 +184,11 @@ export function Sidebar({
           size={collapsed ? 'icon' : 'sm'}
           data-cy="sidebar-toggle"
           onClick={onToggleCollapsed}
-          className={cn('text-muted-foreground', !collapsed && 'w-full justify-start')}
+          className={cn(
+            'text-muted-foreground',
+            collapsed && 'dark:text-white/80',
+            !collapsed && 'w-full justify-start',
+          )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <ChevronsLeft className={cn('transition-transform', collapsed && 'rotate-180')} />

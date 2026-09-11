@@ -1,28 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+// import { Link } from 'react-router-dom';
 import {
-  Bell,
-  Check,
-  CloudOff,
+  // Bell,
+  // Check,
+  // CloudOff,
   KeyRound,
-  Monitor,
-  Moon,
+  // Monitor,
+  // Moon,
   Save,
   Shield,
-  Sun,
+  // Sun,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useTheme, type ThemeMode } from '@/app/providers/theme-provider';
-import { useOutbox } from '@/hooks/use-outbox';
-import { membershipLabel } from '@/lib/permissions';
+// import { useTheme, type ThemeMode } from '@/app/providers/theme-provider';
+// import { useOutbox } from '@/hooks/use-outbox';
+// import { membershipLabel } from '@/lib/permissions';
 import { AuthEndpoints } from '@/features/auth/auth.endpoints';
 import { useUpdateProfile } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
-  Avatar,
-  Badge,
+  // Avatar,
+  // Badge,
   Card,
   CardContent,
   CardDescription,
@@ -35,14 +35,14 @@ import { Input } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
 import { PhoneNumberInput } from '@/components/forms/form-field';
 import { ChangePasswordDialog } from './change-password-dialog';
-import { Alert } from '@/components/ui/feedback';
+// import { Alert } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 
-const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'Match device', icon: Monitor },
-];
+// const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
+//   { value: 'light', label: 'Light', icon: Sun },
+//   { value: 'dark', label: 'Dark', icon: Moon },
+//   { value: 'system', label: 'Match device', icon: Monitor },
+// ];
 
 /**
  * The signed-in user's own account.
@@ -52,9 +52,10 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
  * on the Roles & access screen, and the API enforces that regardless.
  */
 export function ProfilePage() {
-  const { user, identityUser, memberships, membership, switchSchool } = useAuth();
-  const { mode, setMode } = useTheme();
-  const outbox = useOutbox();
+  // const { user, identityUser, memberships, membership, switchSchool } = useAuth();
+  // const { mode, setMode } = useTheme();
+  // const outbox = useOutbox();
+  const { user, identityUser } = useAuth();
   const update = useUpdateProfile();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
@@ -223,7 +224,7 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Schools and access</CardTitle>
           <CardDescription>
@@ -261,9 +262,9 @@ export function ProfilePage() {
             })}
           </ul>
         </CardContent>
-      </Card>
+      </Card> */}
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
           <CardDescription>Stored on this device only.</CardDescription>
@@ -298,9 +299,9 @@ export function ProfilePage() {
             </div>
           </fieldset>
         </CardContent>
-      </Card>
+      </Card> */}
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Notifications</CardTitle>
           <CardDescription>
@@ -315,9 +316,9 @@ export function ProfilePage() {
             </Link>
           </Button>
         </CardContent>
-      </Card>
+      </Card> */}
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Offline work</CardTitle>
           <CardDescription>
@@ -352,7 +353,7 @@ export function ProfilePage() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       <Card>
         <CardHeader>

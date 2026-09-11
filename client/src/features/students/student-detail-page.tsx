@@ -156,7 +156,9 @@ export function StudentDetailPage() {
                 'relative flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
                 'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full',
                 currentTab?.id === tab.id
-                  ? 'text-primary after:bg-primary'
+                  ? // White in dark mode, matching the sidebar's active item —
+                    // see the identical note in `tab-strip.tsx`.
+                    'text-primary after:bg-primary dark:text-white'
                   : 'text-muted-foreground after:bg-transparent hover:text-foreground',
               )}
             >

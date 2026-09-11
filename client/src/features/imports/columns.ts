@@ -1,9 +1,20 @@
 import type { ImportColumnDefinition, ImportEntity } from '@/types/imports';
+import type { ColumnDropdown } from '@/lib/xlsx';
+import { ROLES } from '@/types/rbac';
 
 export interface ImportTarget extends ImportColumnDefinition {
   /** Extra header spellings matched during automatic column mapping. */
   aliases?: string[];
+  /** Offers this column as an in-cell dropdown on the downloaded template. */
+  dropdown?: { options: string[]; mode?: ColumnDropdown['mode'] };
 }
+
+const GENDERS = ['MALE', 'FEMALE'];
+
+/** Roles a school can hand out on import; platform operators are provisioned elsewhere. */
+const ASSIGNABLE_ROLES = ROLES.filter(
+  (role) => role !== 'SUPER_ADMIN' && role !== 'PARENT' && role !== 'STUDENT',
+);
 
 /**
  * What each import expects.
@@ -71,7 +82,7 @@ export const IMPORT_TARGETS: Record<ImportEntity, ImportTarget[]> = {
     { key: 'lastName', label: 'Surname', required: true },
     { key: 'email', label: 'Work email', required: true },
     { key: 'phone', label: 'Phone', required: true },
-    { key: 'gender', label: 'Gender', required: true, example: 'MALE' },
+    { key: 'gender', label: 'Gender', required: true, example: 'MALE', dropdown: { options: GENDERS } },
     { key: 'designation', label: 'Designation', required: true, example: 'Mathematics teacher' },
     { key: 'department', label: 'Department', required: false },
     {
@@ -80,6 +91,7 @@ export const IMPORT_TARGETS: Record<ImportEntity, ImportTarget[]> = {
       required: false,
       description: 'Separate several with a semicolon.',
       example: 'TEACHER;FORM_TEACHER',
+      dropdown: { options: [...ASSIGNABLE_ROLES], mode: 'suggest' },
     },
     { key: 'employmentDate', label: 'Employment date', required: false, example: '2023-01-09' },
   ],
@@ -131,10 +143,20 @@ export const IMPORT_ENTITY_DESCRIPTION: Record<ImportEntity, string> = {
 export function templateSheetFor(entity: ImportEntity): {
   headers: string[];
   rows: Record<string, string>[];
+  dropdowns: ColumnDropdown[];
 } {
   const targets = IMPORT_TARGETS[entity];
   const headers = targets.map((target) => target.label);
   const example: Record<string, string> = {};
   for (const target of targets) example[target.label] = target.example ?? '';
-  return { headers, rows: [example] };
+  const dropdowns: ColumnDropdown[] = targets
+    .filter((target): target is ImportTarget & { dropdown: NonNullable<ImportTarget['dropdown']> } =>
+      Boolean(target.dropdown),
+    )
+    .map((target) => ({
+      header: target.label,
+      options: target.dropdown.options,
+      mode: target.dropdown.mode,
+    }));
+  return { headers, rows: [example], dropdowns };
 }

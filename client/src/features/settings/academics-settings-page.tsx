@@ -132,7 +132,9 @@ export function AcademicsSettingsPage() {
               'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
               'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full',
               tab === option.id
-                ? 'text-primary after:bg-primary'
+                ? // White in dark mode, matching the sidebar's active item —
+                  // see the identical note in `tab-strip.tsx`.
+                  'text-primary after:bg-primary dark:text-white'
                 : 'text-muted-foreground after:bg-transparent hover:text-foreground',
             )}
           >

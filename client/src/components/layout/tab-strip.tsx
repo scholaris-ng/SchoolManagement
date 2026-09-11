@@ -70,7 +70,10 @@ export function TabStrip({
                 'relative flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
                 'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full',
                 selected
-                  ? 'text-primary after:bg-primary'
+                  ? // White in dark mode, matching the sidebar's active item —
+                    // the underline stays the brand blue as an accent, but the
+                    // label itself reads as plain white rather than muted blue.
+                    'text-primary after:bg-primary dark:text-white'
                   : 'text-muted-foreground after:bg-transparent hover:text-foreground',
               )}
             >

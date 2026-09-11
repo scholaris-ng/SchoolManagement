@@ -18,11 +18,59 @@ function toCellValue(value: unknown): CellValue {
   return text === '' ? null : text;
 }
 
+export interface ColumnDropdown {
+  /** Must match a header in `headers` / the first row's keys. */
+  header: string;
+  options: string[];
+  /**
+   * 'strict' (default) rejects anything outside the list — for columns that
+   * hold exactly one value, like gender. 'suggest' shows the same dropdown
+   * but only warns on other input, for columns that accept a combination of
+   * list values (e.g. semicolon-separated roles) that can't itself be listed.
+   */
+  mode?: 'strict' | 'suggest';
+}
+
 export interface SheetOptions {
   /** Worksheet name; Excel caps this at 31 characters and forbids []:*?/\ */
   sheetName?: string;
   /** Explicit column order. Defaults to the keys of the first row. */
   headers?: string[];
+  /** Columns that should offer an in-cell dropdown of valid values. */
+  dropdowns?: ColumnDropdown[];
+}
+
+/** How many rows past the header a template dropdown reaches, so pasted-in data stays covered. */
+const TEMPLATE_DROPDOWN_ROWS = 500;
+
+/** Applies a list-backed dropdown to a column across a generous row range. */
+function applyDropdown(
+  sheet: ExcelJS.Worksheet,
+  columns: string[],
+  dropdown: ColumnDropdown,
+  lastRow: number,
+): void {
+  const columnIndex = columns.indexOf(dropdown.header);
+  if (columnIndex === -1 || dropdown.options.length === 0) return;
+
+  const strict = (dropdown.mode ?? 'strict') !== 'suggest';
+  const optionList = dropdown.options.join(', ');
+  const validation: ExcelJS.DataValidation = {
+    type: 'list',
+    allowBlank: true,
+    formulae: [`"${dropdown.options.join(',')}"`],
+    showErrorMessage: true,
+    errorStyle: strict ? 'stop' : 'warning',
+    errorTitle: strict ? 'Not a valid option' : 'Not on the list',
+    error: strict
+      ? `Choose one of: ${optionList}.`
+      : `Usually one of: ${optionList}. Separate several with a semicolon if this column allows more than one.`,
+  };
+
+  const column = columnIndex + 1;
+  for (let row = 2; row <= lastRow; row++) {
+    sheet.getCell(row, column).dataValidation = validation;
+  }
 }
 
 /** Excel rejects []:*?/\ in sheet names and truncates past 31 characters. */
@@ -70,6 +118,13 @@ export async function rowsToWorkbook(
     }, columns[index].length);
     column.width = Math.min(Math.max(widest + 2, 10), 60);
   });
+
+  if (options.dropdowns?.length) {
+    const lastRow = Math.max(rows.length + 1, TEMPLATE_DROPDOWN_ROWS);
+    for (const dropdown of options.dropdowns) {
+      applyDropdown(sheet, columns, dropdown, lastRow);
+    }
+  }
 
   return workbook;
 }
