@@ -11,6 +11,7 @@ import { behaviourRoutes } from './routes/behaviour.routes';
 import { communicationRoutes } from './routes/communication.routes';
 import { administrationRoutes } from './routes/administration.routes';
 import { portalRoutes } from './routes/portal.routes';
+import { siteRoute } from '@/features/site/site.routes';
 
 /**
  * The route tree.
@@ -46,9 +47,6 @@ const ForgotPasswordPage = lazy(() =>
 const VerifyPage = lazy(() =>
   import('@/features/public/verify-page').then((m) => ({ default: m.VerifyPage })),
 );
-const SchoolWebsitePage = lazy(() =>
-  import('@/features/public/school-website-page').then((m) => ({ default: m.SchoolWebsitePage })),
-);
 const OnboardingPage = lazy(() =>
   import('@/features/onboarding/onboarding-page').then((m) => ({ default: m.OnboardingPage })),
 );
@@ -62,7 +60,7 @@ export const router = createBrowserRouter([
   { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/verify/:code', element: <VerifyPage /> },
-  { path: '/s/:slug', element: <SchoolWebsitePage /> },
+  siteRoute,
   { path: '/onboarding', element: <OnboardingPage /> },
 
   {

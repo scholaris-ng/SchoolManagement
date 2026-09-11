@@ -1,0 +1,330 @@
+/*
+ * Styling for the public school website.
+ *
+ * The marketing site is visually independent of the admin application: it has
+ * its own palette, its own display typeface and its own rhythm, and it must not
+ * follow the signed-in user's dark-mode preference. So it declares a complete
+ * set of its own custom properties on `.school-site` and never reads the app's
+ * design tokens. The five brand values are re-published inline by `SiteLayout`
+ * from the content model, which is what lets a school swap its colours without
+ * a rebuild.
+ */
+
+.school-site {
+  --site-brand: #16307a;
+  --site-brand-dark: #0c1b49;
+  --site-brand-soft: #eef2fc;
+  --site-accent: #c62031;
+  --site-gold: #e0a526;
+
+  --site-ink: #111827;
+  --site-body: #4b5563;
+  --site-muted: #6b7280;
+  --site-line: #e5e7eb;
+  --site-surface: #ffffff;
+  --site-canvas: #f7f8fb;
+
+  --site-display: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+
+  color-scheme: light;
+  background-color: var(--site-surface);
+  color: var(--site-body);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+/* -- Type ------------------------------------------------------------------ */
+
+/*
+ * Zero specificity, deliberately: a heading that sits on the dark brand band
+ * carries `text-white`, and a utility must always be able to win against the
+ * default ink colour here.
+ */
+:where(.school-site) :where(h1, h2, h3, h4, .site-display) {
+  font-family: var(--site-display);
+  color: var(--site-ink);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.site-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-accent);
+}
+
+.site-eyebrow::before {
+  content: '';
+  width: 1.75rem;
+  height: 2px;
+  background: currentColor;
+}
+
+.site-eyebrow--light {
+  color: var(--site-gold);
+}
+
+:where(.site-lede) {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--site-body);
+}
+
+/* -- Surfaces -------------------------------------------------------------- */
+
+.site-card {
+  background: var(--site-surface);
+  border: 1px solid var(--site-line);
+  border-radius: 0.875rem;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    border-color 180ms ease;
+}
+
+.site-card--hover:hover {
+  border-color: color-mix(in srgb, var(--site-brand) 30%, transparent);
+  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--site-brand) 40%, transparent);
+  transform: translateY(-2px);
+}
+
+.site-chip {
+  display: inline-block;
+  padding: 0.3125rem 0.6875rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--site-brand);
+  background: var(--site-brand-soft);
+  border: 1px solid color-mix(in srgb, var(--site-brand) 14%, transparent);
+}
+
+.site-rule {
+  height: 3px;
+  width: 3.5rem;
+  border-radius: 999px;
+  background: var(--site-gold);
+}
+
+/* -- Buttons --------------------------------------------------------------- */
+
+.site-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.375rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+  white-space: nowrap;
+}
+
+.site-btn:focus-visible {
+  outline: 2px solid var(--site-gold);
+  outline-offset: 2px;
+}
+
+.site-btn--primary {
+  background: var(--site-accent);
+  color: #fff;
+}
+
+.site-btn--primary:hover {
+  background: color-mix(in srgb, var(--site-accent) 85%, #000);
+}
+
+.site-btn--brand {
+  background: var(--site-brand);
+  color: #fff;
+}
+
+.site-btn--brand:hover {
+  background: var(--site-brand-dark);
+}
+
+.site-btn--outline {
+  border-color: var(--site-line);
+  color: var(--site-ink);
+  background: var(--site-surface);
+}
+
+.site-btn--outline:hover {
+  border-color: var(--site-brand);
+  color: var(--site-brand);
+}
+
+.site-btn--ghost-light {
+  border-color: rgb(255 255 255 / 0.45);
+  color: #fff;
+}
+
+.site-btn--ghost-light:hover {
+  background: rgb(255 255 255 / 0.12);
+  border-color: #fff;
+}
+
+.site-btn--sm {
+  padding: 0.5rem 0.9375rem;
+  font-size: 0.875rem;
+}
+
+/* -- Links ----------------------------------------------------------------- */
+
+.site-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+  color: var(--site-brand);
+}
+
+.site-inline-link:hover {
+  color: var(--site-accent);
+}
+
+.site-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--site-ink);
+}
+
+.site-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--site-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 180ms ease;
+}
+
+.site-nav-link:hover::after,
+.site-nav-link[data-active='true']::after {
+  transform: scaleX(1);
+}
+
+.site-nav-link[data-active='true'] {
+  color: var(--site-brand);
+}
+
+/* -- Decoration ------------------------------------------------------------ */
+
+.site-scrim {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--site-brand-dark) 92%, transparent) 0%,
+    color-mix(in srgb, var(--site-brand-dark) 72%, transparent) 45%,
+    color-mix(in srgb, var(--site-brand-dark) 28%, transparent) 100%
+  );
+}
+
+.site-band {
+  background: var(--site-brand-dark);
+  background-image:
+    radial-gradient(
+      ellipse at 15% 0%,
+      color-mix(in srgb, var(--site-brand) 90%, transparent) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at 100% 100%,
+      color-mix(in srgb, var(--site-accent) 35%, transparent) 0%,
+      transparent 50%
+    );
+}
+
+.site-fade-in {
+  animation: site-fade-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes site-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .school-site *,
+  .school-site *::before,
+  .school-site *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* -- Header menus ---------------------------------------------------------- */
+
+.site-menu__panel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 160ms;
+}
+
+.site-menu:hover .site-menu__panel,
+.site-menu:focus-within .site-menu__panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.site-header--stuck {
+  box-shadow: 0 6px 24px -12px rgb(15 23 42 / 0.35);
+}
+
+/* -- Hero ------------------------------------------------------------------ */
+
+.site-hero__slide {
+  opacity: 0;
+  transition: opacity 900ms ease-in-out;
+}
+
+.site-hero__slide[data-active='true'] {
+  opacity: 1;
+}
+
+.site-hero__dot {
+  height: 3px;
+  width: 2rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.35);
+  transition: background-color 200ms ease;
+}
+
+.site-hero__dot[data-active='true'] {
+  background: var(--site-gold);
+}
+
+.site-nav-link {
+  white-space: nowrap;
+}
