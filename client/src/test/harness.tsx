@@ -4,7 +4,7 @@ import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 
 import { render, type RenderResult } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/feedback';
 import type { Permission } from '@/types/rbac';
-import type { SchoolMembership } from '@/types/tenant';
+import type { AuthenticatedUser, SchoolMembership } from '@/types/tenant';
 
 /**
  * Shared test harness.
@@ -122,17 +122,21 @@ export function authStub(permissions: Permission[], over: Record<string, unknown
       photoUrl: null,
       emailVerified: true,
     },
+    // Typed, so a field added to the real user shows up here as an error
+    // rather than as `undefined` in whichever screen reads it first.
     user: {
       id: 'usr_1',
       firebaseUid: 'uid_1',
       email: 'ada@brightfield.edu.ng',
+      firstName: 'Adaeze',
+      lastName: 'Okonkwo',
       displayName: 'Adaeze Okonkwo',
       phone: null,
       photoUrl: null,
       isPlatformAdmin: false,
       memberships: [membership],
       createdAt: new Date().toISOString(),
-    },
+    } satisfies AuthenticatedUser as AuthenticatedUser,
     memberships: [membership],
     membership,
     schoolId: membership.schoolId,

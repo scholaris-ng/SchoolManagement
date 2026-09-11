@@ -727,6 +727,8 @@ const [value, setValue] = useState("");
 
 - **Never** call `window.alert()`, `window.confirm()`, or `window.prompt()` anywhere in the client codebase
 - **Never** use `alert()`, `confirm()`, or `prompt()` without the `window.` prefix either — they refer to the same globals
+- **Never** register a `beforeunload` handler. It draws the same kind of box by a different route: the browser owns what is on screen, discards the message given to it, and no test can drive it. `UnsavedChangesGuard` therefore protects navigation inside the app and leaves tab-close and browser-reload alone
+- **Never** reach for a router hook that wraps one of these. `unstable_usePrompt` calls `window.confirm` internally — use `useBlocker` with a `<ConfirmDialog>` instead, as `UnsavedChangesGuard` does
 - All modals must use the shared `<Modal>` component from `components/shared/Modal`
 - All inline feedback (success, error, info) must use `notify()` from `ToastContext`
 - Submit on Enter (`onKeyDown` handler) is required on single-input prompt modals

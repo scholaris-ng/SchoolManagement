@@ -24,8 +24,22 @@ export const staffFormSchema = z.object({
    * Roles are what the server turns into permissions. Sending role *names*
    * rather than a permission list keeps the client out of the authorisation
    * decision entirely (spec section 5).
+   *
+   * The entry-level message matters here: an unrecognised role fails at
+   * `roleNames.0` rather than at the field, and zod's default text for that
+   * is a list of every valid key. This form can only set the built-in roles,
+   * so someone holding a custom one needs to be told where to go instead.
    */
-  roleNames: z.array(z.enum(ROLES)).min(1, 'Give this member of staff at least one role'),
+  roleNames: z
+    .array(
+      z.enum(ROLES, {
+        errorMap: () => ({
+          message:
+            'This person holds a role this form cannot set. Change it under Settings → Roles.',
+        }),
+      }),
+    )
+    .min(1, 'Give this member of staff at least one role'),
   subjectIds: z.array(z.string()).default([]),
   classIds: z.array(z.string()).default([]),
   isFormTeacher: z.boolean().default(false),

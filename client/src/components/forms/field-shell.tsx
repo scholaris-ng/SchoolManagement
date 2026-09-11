@@ -83,3 +83,25 @@ export interface BaseFieldProps<T extends FieldValues> {
 export function fieldCy(name: string, override?: string): string {
   return override ?? `field-${name}`;
 }
+
+/**
+ * The message to show for a field, including one raised against an entry.
+ *
+ * An array field fails per element: a role the form does not recognise lands
+ * at `roleNames.0`, so the field's own error object carries no `message` of
+ * its own. Reading only that message showed the user nothing at all while the
+ * form quietly refused to submit, which reads as a dead Save button. The first
+ * entry-level message stands in instead.
+ */
+export function fieldErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const own = (error as { message?: unknown }).message;
+  if (typeof own === 'string' && own.length > 0) return own;
+  if (Array.isArray(error)) {
+    for (const entry of error) {
+      const nested = fieldErrorMessage(entry);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}

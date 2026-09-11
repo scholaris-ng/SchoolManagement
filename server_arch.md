@@ -1759,7 +1759,10 @@ AI agents adding a new email MUST:
 - Answer all seven brand questions (§22.1) before writing any code
 - Wrap all HTML in `emailLayout()` — never produce a standalone `<html>` document in an email function
 - Use only the component blocks from §22.3 — never introduce new inline-style rules
-- Provide a plain-text `text` counterpart for every email (1–3 sentences, no HTML)
+- Pass every interpolated value through `escapeHtml()` at the call site. School, family and child names are typed by people; a name carrying `&` or `<` otherwise produces invalid or truncated markup
+- Give `emailLayout()` a `preheader` — the line an inbox shows beside the subject. Without one the client scrapes whatever text it finds first
+- Pair every CTA button with the plain-text URL beneath it, since some clients strip the styled anchor
+- Provide a plain-text `text` counterpart for every email (no HTML)
 - Follow the subject line convention from §22.5
 - Match the tone from §22.4 to the email's purpose
 - Call send functions with fire-and-forget from services: `.catch(console.error)` — email failure must never throw for the caller
@@ -1773,6 +1776,9 @@ AI agents MUST NOT:
 - Include `<style>` blocks or external CSS links (unsupported in most email clients)
 - Use a dark background inside the body card — only the `emailLayout` header uses `#0f172a`
 - Add emoji outside of celebratory email headings
+- **Put a plan, trial, price, invoice or upgrade prompt in any email except one whose subject is billing.** A teacher, a parent and a newly hired member of staff did not buy anything; the school's commercial relationship is the account owner's business and nobody else's
+- **Put a code, a password or any other secret in the `preheader`.** It renders on a locked phone, in front of whoever is holding it
+- Hardcode a value that belongs to a record. A plan named as a string literal is wrong the moment a school is on a different one
 
 ---
 

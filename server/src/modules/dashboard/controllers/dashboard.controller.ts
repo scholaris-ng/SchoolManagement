@@ -13,4 +13,12 @@ export class DashboardController {
       next(error);
     }
   }
+
+  static async fetchTeacher(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(ApiResponse.ok(await service().fetchTeacher(contextOf(req))));
+    } catch (error) {
+      next(error);
+    }
+  }
 }

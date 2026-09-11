@@ -83,6 +83,12 @@ export interface AuthenticatedUser {
   id: string;
   firebaseUid: string;
   email: string;
+  firstName: string;
+  lastName: string;
+  /**
+   * The two parts joined, kept by the server so every screen has one name
+   * to render without deciding how to assemble it.
+   */
   displayName: string;
   phone?: string | null;
   photoUrl?: string | null;

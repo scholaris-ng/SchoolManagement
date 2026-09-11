@@ -66,3 +66,69 @@ export interface AdminDashboardDTO {
 
   atRiskCount: number;
 }
+
+export interface TeacherTodayClassDTO {
+  id: string;
+  className: string;
+  subjectName: string;
+  startTime: string;
+  endTime: string;
+  roomName?: string | null;
+  attendanceTaken: boolean;
+}
+
+export interface TeacherPendingAttendanceDTO {
+  classId: string;
+  className: string;
+  date: string;
+}
+
+export interface TeacherPendingScoreEntryDTO {
+  scoreSheetId: string;
+  className: string;
+  subjectName: string;
+  enteredCount: number;
+  totalCount: number;
+  status: string;
+}
+
+export interface TeacherLessonNoteDueDTO {
+  id: string;
+  className: string;
+  subjectName: string;
+  weekNumber: number;
+}
+
+export interface TeacherUpcomingAssessmentDTO {
+  id: string;
+  title: string;
+  startsAt: string;
+  className: string;
+}
+
+export interface TeacherCurriculumCoverageDTO {
+  subjectName: string;
+  className: string;
+  coverageRate: number;
+}
+
+/**
+ * A teacher's personal to-do list, mirroring `TeacherDashboard` in
+ * `client/src/types/analytics.ts` exactly.
+ *
+ * Every field here is sourced from a module that has no table yet — timetable
+ * entries, attendance registers, score sheets, lesson notes, assessments and
+ * messaging (see `DashboardService.fetchTeacher`). They are answered empty or
+ * zero rather than dropped, the same choice `AdminDashboardDTO` makes above:
+ * the client's type requires them, and the screen already renders a clean
+ * empty state for each one.
+ */
+export interface TeacherDashboardDTO {
+  todayClasses: TeacherTodayClassDTO[];
+  pendingAttendance: TeacherPendingAttendanceDTO[];
+  pendingScoreEntry: TeacherPendingScoreEntryDTO[];
+  lessonNotesDue: TeacherLessonNoteDueDTO[];
+  upcomingAssessments: TeacherUpcomingAssessmentDTO[];
+  unreadMessages: number;
+  curriculumCoverage: TeacherCurriculumCoverageDTO[];
+}

@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import type { EntityManager } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import type { RequestContext } from '../../../shared/types/context';
 import { AppError } from '../../../shared/errors/AppError';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -144,6 +144,11 @@ export class StaffService {
             firstName: input.firstName,
             lastName: input.lastName,
             displayName,
+            // The administrator has already been asked for these, so the
+            // account starts with them rather than showing the new employee
+            // an empty profile and asking for them a second time.
+            phone: input.phone,
+            photoUrl: input.photoUrl ?? null,
             // Unlike self-registration, nobody typed this address into a form
             // of their own — an administrator who already holds `staff.manage`
             // entered it, so there is no stranger's inbox to prove control of
@@ -244,6 +249,7 @@ export class StaffService {
       to: input.email,
       firstName: input.firstName,
       schoolName: context.membership.schoolName,
+      designation: input.designation,
       temporaryPassword,
     }).catch(console.error);
 
@@ -289,7 +295,22 @@ export class StaffService {
       );
     }
 
-    const { roleNames, subjectIds, classIds, isFormTeacher, ...rest } = patch;
+    /*
+      Everything named here is kept out of the column set on purpose. The
+      first four are relationships written further down; photoStoragePath is
+      not a column on this table at all. The upload hands the path to the
+      form and the form sends it back with everything else, but only the
+      student record has somewhere to keep it, so letting it through turned
+      every staff edit into a failure on a column that does not exist.
+    */
+    const {
+      roleNames,
+      subjectIds,
+      classIds,
+      isFormTeacher,
+      photoStoragePath: _photoStoragePath,
+      ...rest
+    } = patch;
     const columns: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rest)) {
       if (value === undefined) continue;
@@ -356,6 +377,32 @@ export class StaffService {
         }
       }
     });
+
+    /*
+      The same person, the other way round. An administrator correcting a
+      misspelt surname here must reach the account too, or the staff list and
+      the name that person signs in under disagree from then on. Only the
+      fields that describe the person travel: the staff number, designation
+      and employment terms are the school's record of the job, not of them.
+    */
+    if (existing.userId) {
+      const identity: DeepPartial<User> = {};
+      if (patch.firstName !== undefined) identity.firstName = patch.firstName;
+      if (patch.lastName !== undefined) identity.lastName = patch.lastName;
+      if (patch.phone !== undefined) identity.phone = patch.phone;
+      if (patch.photoUrl !== undefined) identity.photoUrl = patch.photoUrl;
+      if (patch.firstName !== undefined || patch.lastName !== undefined) {
+        identity.displayName = [
+          patch.firstName ?? existing.firstName,
+          patch.lastName ?? existing.lastName,
+        ]
+          .filter(Boolean)
+          .join(' ');
+      }
+      if (Object.keys(identity).length > 0) {
+        await this.users.update(existing.userId, identity);
+      }
+    }
 
     await this.audit.record(context, {
       action: 'staff.updated',

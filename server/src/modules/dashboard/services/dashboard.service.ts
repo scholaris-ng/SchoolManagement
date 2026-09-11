@@ -5,7 +5,7 @@ import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { AuditRepository } from '../../audit/repositories/audit.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
-import type { AdminDashboardDTO, StatDeltaDTO } from '../dto/dashboard.dto';
+import type { AdminDashboardDTO, StatDeltaDTO, TeacherDashboardDTO } from '../dto/dashboard.dto';
 
 /** How far back the student figure is compared against. */
 const DELTA_WINDOW_DAYS = 30;
@@ -93,6 +93,35 @@ export class DashboardService {
       // Retention risk is derived from fee arrears and attendance, neither of
       // which exists yet.
       atRiskCount: 0,
+    };
+  }
+
+  /**
+   * A teacher's personal to-do list.
+   *
+   * Every field is sourced from a module with no table yet: timetable entries
+   * (so no lesson has a slot), attendance registers, score sheets, lesson
+   * notes, assessments, and messaging. Each is answered empty or zero — the
+   * same honest-absence choice `fetchAdmin` makes above — rather than
+   * fabricating a lesson, a register, or a class this teacher's own
+   * assignment cannot back.
+   */
+  async fetchTeacher(_context: RequestContext): Promise<TeacherDashboardDTO> {
+    return {
+      // Timetable module: no entry table, so nothing has a slot today.
+      todayClasses: [],
+      // Attendance module: no register table, so nothing is pending.
+      pendingAttendance: [],
+      // Assessment module: no score sheet table.
+      pendingScoreEntry: [],
+      // Curriculum module: no lesson note table.
+      lessonNotesDue: [],
+      // Assessment module again: no assessment table.
+      upcomingAssessments: [],
+      // Engagement module: no message table.
+      unreadMessages: 0,
+      // Curriculum module again: no coverage data to report.
+      curriculumCoverage: [],
     };
   }
 }

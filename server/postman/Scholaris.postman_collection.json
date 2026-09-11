@@ -583,7 +583,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Adaeze N. Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
+              "raw": "{\n  \"firstName\": \"Adaeze\",\n  \"lastName\": \"Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -623,7 +623,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"displayName\": \"Adaeze N. Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
+                  "raw": "{\n  \"firstName\": \"Adaeze\",\n  \"lastName\": \"Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -673,7 +673,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"displayName\": \"Adaeze N. Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
+                  "raw": "{\n  \"firstName\": \"Adaeze\",\n  \"lastName\": \"Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -723,7 +723,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"displayName\": \"Adaeze N. Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
+                  "raw": "{\n  \"firstName\": \"Adaeze\",\n  \"lastName\": \"Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -773,7 +773,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"displayName\": \"Adaeze N. Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
+                  "raw": "{\n  \"firstName\": \"Adaeze\",\n  \"lastName\": \"Okonkwo\",\n  \"phone\": \"+2348030000009\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -790,7 +790,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": [\n      {\n        \"field\": \"displayName\",\n        \"path\": \"body.displayName\",\n        \"message\": \"Please enter your full name.\",\n        \"code\": \"too_small\"\n      }\n    ]\n  }\n}"
+              "body": "{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": [\n      {\n        \"field\": \"firstName\",\n        \"path\": \"body.firstName\",\n        \"message\": \"Please enter your first name.\",\n        \"code\": \"too_small\"\n      }\n    ]\n  }\n}"
             }
           ]
         }

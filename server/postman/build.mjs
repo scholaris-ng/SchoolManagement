@@ -285,12 +285,16 @@ const folders = [
       },
       {
         name: 'Update my profile',
-        req: { method: 'PATCH', path: '/users/me', body: { displayName: 'Adaeze N. Okonkwo', phone: '+2348030000009' } },
+        req: {
+          method: 'PATCH',
+          path: '/users/me',
+          body: { firstName: 'Adaeze', lastName: 'Okonkwo', phone: '+2348030000009' },
+        },
         examples: [
           ['200 Updated', 200, ok(SESSION.user, 'Profile updated')],
           STD[401](),
           STD['403.school'](),
-          STD[422]('displayName', 'Please enter your full name.'),
+          STD[422]('firstName', 'Please enter your first name.'),
         ],
       },
     ],

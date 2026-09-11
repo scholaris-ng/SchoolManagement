@@ -3,7 +3,7 @@ import { Controller, type FieldValues } from 'react-hook-form';
 import { cn } from '@/lib/utils';
 import { Label, Checkbox, Switch } from '@/components/ui/primitives';
 import type { SelectOption } from '@/components/ui/input';
-import { FieldShell, fieldCy, type BaseFieldProps } from './field-shell';
+import { FieldShell, fieldCy, fieldErrorMessage, type BaseFieldProps } from './field-shell';
 
 /** Fields answering yes/no, or several yes/nos at once. */
 
@@ -134,7 +134,7 @@ export function MultiSelectField<T extends FieldValues>({
             required={required}
             description={description}
             hint={hint}
-            error={fieldState.error?.message}
+            error={fieldErrorMessage(fieldState.error)}
             className={className}
           >
             {({ describedBy }) =>

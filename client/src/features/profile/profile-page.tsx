@@ -33,6 +33,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
+import { PhoneNumberInput } from '@/components/forms/form-field';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { Alert } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
@@ -57,7 +58,8 @@ export function ProfilePage() {
   const outbox = useOutbox();
   const update = useUpdateProfile();
 
-  const [displayName, setDisplayName] = useState(user?.displayName ?? '');
+  const [firstName, setFirstName] = useState(user?.firstName ?? '');
+  const [lastName, setLastName] = useState(user?.lastName ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl ?? null);
   const [dirty, setDirty] = useState(false);
@@ -66,14 +68,23 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    setDisplayName(user.displayName);
+    setFirstName(user.firstName);
+    setLastName(user.lastName);
     setPhone(user.phone ?? '');
     setPhotoUrl(user.photoUrl ?? null);
     setDirty(false);
   }, [user]);
 
+  const nameGiven = firstName.trim().length > 0 && lastName.trim().length > 0;
+
   const save = async () => {
-    await update.mutateAsync({ displayName, phone: phone || null, photoUrl });
+    if (!nameGiven) return;
+    await update.mutateAsync({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone: phone || null,
+      photoUrl,
+    });
     setDirty(false);
   };
 
@@ -100,7 +111,12 @@ export function ProfilePage() {
         description="How you appear to the school, and how this app behaves for you."
         breadcrumbs={[{ label: 'My profile' }]}
         actions={
-          <Button data-cy="profile-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
+          <Button
+            data-cy="profile-save-changes"
+            onClick={() => void save()}
+            loading={update.isPending}
+            disabled={!dirty || !nameGiven}
+          >
             <Save />
             Save changes
           </Button>
@@ -136,32 +152,58 @@ export function ProfilePage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="profile-name" required>
-                Full name
+              <Label htmlFor="profile-first-name" required>
+                First name
               </Label>
               <Input
-                data-cy="profile-name"
-                id="profile-name"
-                value={displayName}
+                data-cy="profile-first-name"
+                id="profile-first-name"
+                value={firstName}
                 onChange={(event) => {
-                  setDisplayName(event.target.value);
+                  setFirstName(event.target.value);
                   setDirty(true);
                 }}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="profile-phone">Phone</Label>
+              <Label htmlFor="profile-last-name" required>
+                Surname
+              </Label>
               <Input
-                data-cy="profile-phone"
-                id="profile-phone"
-                type="tel"
-                value={phone}
+                data-cy="profile-last-name"
+                id="profile-last-name"
+                value={lastName}
                 onChange={(event) => {
-                  setPhone(event.target.value);
+                  setLastName(event.target.value);
                   setDirty(true);
                 }}
-                placeholder="For SMS alerts, if your school sends them"
               />
+            </div>
+            {/* Full width: the two name boxes take the split row above it. */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="profile-phone">Phone</Label>
+              {/*
+                The same dial-code widget every other form uses, so the number
+                is stored in the one shape the server and the SMS gateway read
+                rather than however this box happened to be typed into.
+
+                No default country is passed: the country setting needs
+                `school.read`, which a teacher does not hold, so asking for it
+                here would fail for exactly the people this screen is for. A
+                number already on the record carries its own dial code.
+              */}
+              <PhoneNumberInput
+                id="profile-phone"
+                data-cy="profile-phone"
+                value={phone}
+                onChange={(next) => {
+                  setPhone(next);
+                  setDirty(true);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for SMS alerts, if your school sends them.
+              </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="profile-email">Email</Label>

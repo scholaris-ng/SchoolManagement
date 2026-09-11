@@ -9,7 +9,10 @@ import { z } from 'zod';
 export const updateProfileSchema = z.object({
   body: z
     .object({
-      displayName: z.string().trim().min(2, 'Please enter your full name.').max(160).optional(),
+      // The parts, not the joined string: the user row keeps all three and
+      // the joined one is rebuilt from these so they cannot drift apart.
+      firstName: z.string().trim().min(1, 'Please enter your first name.').max(100).optional(),
+      lastName: z.string().trim().min(1, 'Please enter your surname.').max(100).optional(),
       phone: z.string().trim().max(40).nullable().optional(),
       photoUrl: z.string().url('That is not a valid URL.').max(500).nullable().optional(),
     })

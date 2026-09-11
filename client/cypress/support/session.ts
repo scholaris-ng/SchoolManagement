@@ -54,6 +54,8 @@ export function userFor(role: TestRole): AuthenticatedUser {
     id: `e2e-user-${role}`,
     firebaseUid: `mock-e2e-${role}`,
     email: `${role}@e2e.test`,
+    firstName: 'E2E',
+    lastName: role,
     displayName: `E2E ${role}`,
     phone: null,
     photoUrl: null,

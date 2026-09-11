@@ -48,11 +48,20 @@ const PROJECTION = `
 
 const JOINS = `
   LEFT JOIN LATERAL (
-    SELECT array_agg(DISTINCT ro.name) AS names
+    /*
+      The role key, not its display name. Everything that consumes this field
+      treats it as the stable identifier: the write path resolves each entry
+      with findByKey, the request schema validates against the role keys, and
+      the import template documents TEACHER;FORM_TEACHER. Sending the display
+      name back instead left the edit form holding values it could not match
+      to a role, so the roles read as unset and the save was refused.
+    */
+    SELECT array_agg(DISTINCT ro.key) AS names
     FROM school_memberships sm
     JOIN membership_roles mr ON mr.membership_id = sm.id
-    JOIN roles ro            ON ro.id = mr.role_id
+    JOIN roles ro            ON ro.id = mr.role_id AND ro.deleted_at IS NULL
     WHERE sm.user_id = s.user_id AND sm.school_id = s.school_id
+      AND sm.deleted_at IS NULL
   ) r ON TRUE
   LEFT JOIN LATERAL (
     SELECT
@@ -148,6 +157,29 @@ export class StaffRepository extends TenantRepository<Staff> {
 
   async update(id: string, patch: DeepPartial<Staff>): Promise<void> {
     await this.repo.update(id, patch as never);
+  }
+
+  /**
+   * Carries a change to the person onto every employee row that is theirs.
+   *
+   * Deliberately not school-scoped, and the only method here that is not:
+   * someone editing their own account is not acting inside one school, and a
+   * person can be on staff at more than one. Their name has to follow them
+   * into every directory they appear in, or an administrator goes on seeing
+   * whatever was typed for them on the day they were added.
+   *
+   * The version is bumped like any other write, so an administrator holding
+   * the edit form is told their copy is stale rather than silently putting
+   * the old name back.
+   */
+  async updateForUser(userId: string, patch: DeepPartial<Staff>): Promise<void> {
+    if (Object.keys(patch).length === 0) return;
+    await this.repo
+      .createQueryBuilder()
+      .update(Staff)
+      .set({ ...patch, version: () => 'version + 1' } as never)
+      .where('user_id = :userId AND deleted_at IS NULL', { userId })
+      .execute();
   }
 
   async fetchPaginated(schoolId: string, filter: StaffFilter): Promise<Paginated<StaffMemberDTO>> {

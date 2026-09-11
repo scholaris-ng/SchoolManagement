@@ -71,19 +71,19 @@ export function FormActions({
   );
 }
 
-/** Blocks in-app navigation and browser unload while a form is dirty. */
+/**
+ * Asks before a dirty form is navigated away from, in the app dialog.
+ *
+ * It guards navigation inside the app only. Closing the tab or hitting the
+ * browser's own reload is deliberately not caught: the only way to intercept
+ * that is the `beforeunload` event, and what it puts on screen is the
+ * browser's own box, which ignores the message given to it and cannot be
+ * styled, translated or tested. Section 19 bans dialogs like that, so the
+ * work is protected where this application can do it properly and left alone
+ * where it cannot.
+ */
 export function UnsavedChangesGuard({ when }: { when: boolean }) {
   const blocker = useBlocker(when);
-
-  useEffect(() => {
-    if (!when) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [when]);
 
   /*
     A save landing while the question is still on screen makes it moot: there

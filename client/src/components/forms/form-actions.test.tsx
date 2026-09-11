@@ -72,6 +72,14 @@ describe('UnsavedChangesGuard', () => {
     expect(await screen.findByRole('heading', { name: 'Student register' })).toBeInTheDocument();
   });
 
+  it('registers no beforeunload handler, which only the browser can draw', async () => {
+    const addListener = vi.spyOn(window, 'addEventListener');
+    renderGuarded();
+
+    expect(addListener.mock.calls.map(([type]) => type)).not.toContain('beforeunload');
+    addListener.mockRestore();
+  });
+
   it('does not interrupt navigation when the form is clean', async () => {
     const user = userEvent.setup();
     const { router } = renderGuarded({ dirty: false });

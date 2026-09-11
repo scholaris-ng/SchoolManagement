@@ -47,7 +47,8 @@ export interface SessionDTO {
 }
 
 export interface UpdateProfileDTO {
-  displayName?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string | null;
   photoUrl?: string | null;
 }
