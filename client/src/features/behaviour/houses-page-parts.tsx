@@ -70,6 +70,7 @@ export function AwardDialog({
                   value={query}
                   onValueChange={setQuery}
                   placeholder="Search by name or admission number…"
+                  isSearching={results.isSearching}
                 />
                 {results.data && results.data.length > 0 && (
                   <ul className="max-h-40 overflow-y-auto rounded-md border border-border">

@@ -124,6 +124,7 @@ export function ScoreEntryPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by class or subject…"
+        isSearching={list.isSearchPending || sheets.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

@@ -152,6 +152,7 @@ export function GuardiansListPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by name, phone or email…"
+        isSearching={list.isSearchPending || guardians.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CornerDownLeft, Search, Users } from 'lucide-react';
+import { CornerDownLeft, Loader2, Search, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAuth } from '@/app/providers/auth-provider';
 import { NAV_SECTIONS, QUICK_ACTIONS } from '@/app/navigation';
 import { useStudentSearch } from '@/features/students/api';
@@ -33,10 +32,10 @@ export function CommandPalette({
   const { can, persona } = useAuth();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const debouncedQuery = useDebouncedValue(query, 250);
 
-  const studentSearch = useStudentSearch(debouncedQuery, {
-    enabled: open && can('student.read') && debouncedQuery.trim().length >= 2,
+  // Debounces internally, so this passes every keystroke straight through.
+  const studentSearch = useStudentSearch(query, {
+    enabled: open && can('student.read'),
   });
 
   useEffect(() => {
@@ -142,7 +141,14 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg" hideClose data-cy="command-palette" className="top-[12%] translate-y-0 p-0">
         <div className="flex items-center gap-2 border-b border-border px-4">
-          <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          {studentSearch.isSearching ? (
+            <Loader2
+              className="size-4 shrink-0 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : (
+            <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          )}
           <input
             autoFocus
             data-cy="command-palette-input"
@@ -158,7 +164,7 @@ export function CommandPalette({
         <div className="scrollbar-thin max-h-[min(28rem,60vh)] overflow-y-auto p-2">
           {entries.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-              {studentSearch.isFetching ? 'Searching…' : 'No matches.'}
+              {studentSearch.isSearching ? 'Searching…' : 'No matches.'}
             </p>
           ) : (
             <ul role="listbox" aria-label="Results">

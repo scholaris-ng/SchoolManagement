@@ -21,6 +21,8 @@ export interface FilterBarProps {
   search?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
+  /** Shows a spinner in the search box — a debounce is pending, or the search request is in flight. */
+  isSearching?: boolean;
   filters?: FilterDefinition[];
   values?: Record<string, string | undefined>;
   onFilterChange?: (key: string, value: string | undefined) => void;
@@ -39,6 +41,7 @@ export function FilterBar({
   search,
   onSearchChange,
   searchPlaceholder = 'Search…',
+  isSearching,
   filters = [],
   values = {},
   onFilterChange,
@@ -68,6 +71,7 @@ export function FilterBar({
               value={search ?? ''}
               onValueChange={onSearchChange}
               placeholder={searchPlaceholder}
+              isSearching={isSearching}
               className="w-full sm:w-64"
             />
           )}

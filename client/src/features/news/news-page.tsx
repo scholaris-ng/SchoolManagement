@@ -53,6 +53,7 @@ export function NewsPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search posts…"
+        isSearching={list.isSearchPending || posts.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

@@ -214,6 +214,7 @@ export function PaymentsPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by receipt, reference or student…"
+        isSearching={list.isSearchPending || payments.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

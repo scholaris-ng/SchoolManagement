@@ -153,6 +153,7 @@ export function QuestionBankPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search question text…"
+        isSearching={list.isSearchPending || questions.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

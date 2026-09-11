@@ -1,6 +1,6 @@
 import { forwardRef, useId } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const fieldBase =
@@ -193,6 +193,8 @@ export interface SearchInputProps
   value: string;
   onValueChange: (value: string) => void;
   label?: string;
+  /** Shows a spinner in place of the search icon — a debounce is pending, or the request it fired is still in flight. */
+  isSearching?: boolean;
   /** Cypress hook. Lands on the input; the clear button gets `<cy>-clear`. */
   'data-cy'?: string;
 }
@@ -202,6 +204,7 @@ export function SearchInput({
   onValueChange,
   placeholder = 'Search…',
   label = 'Search',
+  isSearching,
   className,
   ...props
 }: SearchInputProps) {
@@ -214,10 +217,18 @@ export function SearchInput({
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <Search
-        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        aria-hidden="true"
-      />
+      {isSearching ? (
+        <Loader2
+          data-cy={dataCy ? `${dataCy}-searching` : undefined}
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+          aria-hidden="true"
+        />
+      ) : (
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+      )}
       <input
         id={id}
         type="search"

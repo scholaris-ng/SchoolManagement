@@ -6,6 +6,8 @@ export interface ListQueryState {
   page: number;
   pageSize: number;
   search: string;
+  /** True between a keystroke and the debounced value catching up to it. */
+  isSearchPending: boolean;
   sortBy?: string;
   sortDir?: SortDirection;
   filters: Record<string, string | undefined>;

@@ -87,5 +87,6 @@ export function useListQuery(options: {
     setFilter,
     reset,
     isFiltered: Boolean(debouncedSearch) || Object.values(filters).some(Boolean),
+    isSearchPending: search !== debouncedSearch,
   };
 }

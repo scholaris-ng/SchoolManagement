@@ -80,6 +80,7 @@ export function MessagesPage() {
                 value={list.search}
                 onValueChange={list.setSearch}
                 placeholder="Search conversations…"
+                isSearching={list.isSearchPending || conversations.isFetching}
               />
             </div>
             <div className="scrollbar-thin flex-1 overflow-y-auto">

@@ -107,6 +107,7 @@ export function TranscriptsPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by name or admission number…"
+        isSearching={list.isSearchPending || students.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

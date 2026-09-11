@@ -175,6 +175,7 @@ export function InvoicesPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by invoice number, student or admission number…"
+        isSearching={list.isSearchPending || invoices.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

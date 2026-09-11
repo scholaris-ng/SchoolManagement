@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import type { StudentFormValues, PromotionValues, StatusChangeValues } from './schema';
@@ -42,18 +43,27 @@ export function useStudent(id: string | undefined) {
   });
 }
 
-/** Typeahead used by the command palette and every student picker. */
+/**
+ * Typeahead used by the command palette and every student picker.
+ *
+ * Debounces internally so every caller gets it for free — six pickers across
+ * the app used to pass every keystroke straight through, firing a live
+ * request per character. `isSearching` covers both halves of that wait: the
+ * debounce itself, and the request it eventually fires.
+ */
 export function useStudentSearch(term: string, options: { enabled?: boolean } = {}) {
   const schoolId = useSchoolId();
-  return useQuery({
-    queryKey: queryKeys.students.list(schoolId, { search: term, pageSize: 8, mode: 'summary' }),
+  const debouncedTerm = useDebouncedValue(term, 300);
+  const query = useQuery({
+    queryKey: queryKeys.students.list(schoolId, { search: debouncedTerm, pageSize: 8, mode: 'summary' }),
     queryFn: async () => {
-      const result = await StudentEndpoints.search(term);
+      const result = await StudentEndpoints.search(debouncedTerm);
       return result.items;
     },
-    enabled: Boolean(schoolId) && term.trim().length >= 2 && options.enabled !== false,
+    enabled: Boolean(schoolId) && debouncedTerm.trim().length >= 2 && options.enabled !== false,
     staleTime: 30_000,
   });
+  return { ...query, isSearching: term.trim() !== debouncedTerm.trim() || query.isFetching };
 }
 
 export function useCreateStudent() {

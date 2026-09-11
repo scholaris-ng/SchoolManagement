@@ -179,6 +179,7 @@ export function AssessmentsPage() {
           search={list.search}
           onSearchChange={list.setSearch}
           searchPlaceholder="Search by title…"
+          isSearching={list.isSearchPending || assessments.isFetching}
           values={list.filters}
           onFilterChange={list.setFilter}
           onReset={list.isFiltered ? list.reset : undefined}

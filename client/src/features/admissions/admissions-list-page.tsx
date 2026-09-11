@@ -235,6 +235,7 @@ export function AdmissionsListPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by applicant name or application number…"
+        isSearching={list.isSearchPending || applications.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

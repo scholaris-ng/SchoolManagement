@@ -109,6 +109,7 @@ export function SchemesPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by subject or class…"
+        isSearching={list.isSearchPending || schemes.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

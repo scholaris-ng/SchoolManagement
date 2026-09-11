@@ -125,6 +125,7 @@ export function LessonNotesPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by topic or teacher…"
+        isSearching={list.isSearchPending || notes.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

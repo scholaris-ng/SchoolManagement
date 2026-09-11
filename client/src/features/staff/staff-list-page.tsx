@@ -36,6 +36,10 @@ export function StaffListPage() {
   const list = useListQuery({
     filterKeys: ['status', 'employmentType', 'department'],
     defaultSortBy: 'lastName',
+    // The staff query is slower than most list screens, so it gets the
+    // longer of the two debounce delays client_arch.md calls for (§12) —
+    // waiting the extra time is cheaper than firing a search per keystroke.
+    searchDebounceMs: 2000,
   });
   const staff = useStaffList(list.query);
   const bulkExit = useBulkExitStaff();
@@ -167,6 +171,7 @@ export function StaffListPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by name, staff number or email…"
+        isSearching={list.isSearchPending || staff.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

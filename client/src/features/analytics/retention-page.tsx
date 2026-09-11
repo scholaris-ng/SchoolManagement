@@ -221,6 +221,7 @@ export function RetentionPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by student name or admission number…"
+        isSearching={list.isSearchPending || risk.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}

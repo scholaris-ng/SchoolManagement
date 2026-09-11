@@ -134,6 +134,7 @@ export function DisciplineListPage() {
         search={list.search}
         onSearchChange={list.setSearch}
         searchPlaceholder="Search by student, reference or category…"
+        isSearching={list.isSearchPending || incidents.isFetching}
         values={list.filters}
         onFilterChange={list.setFilter}
         onReset={list.isFiltered ? list.reset : undefined}
