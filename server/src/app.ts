@@ -6,6 +6,8 @@ import compression from 'compression';
 import { env } from './config/env';
 import { requestIdMiddleware } from './shared/middleware/requestId.middleware';
 import { apiRateLimiter } from './shared/middleware/rateLimiter.middleware';
+import { authMiddleware } from './shared/middleware/auth.middleware';
+import { tenantMiddleware } from './shared/middleware/tenant.middleware';
 import {
   globalErrorHandler,
   notFoundHandler,
@@ -56,9 +58,27 @@ export function createApp(): Express {
 
   app.use(env.apiPrefix, apiRateLimiter);
 
+  // `authRoutes` and `schoolRoutes` carry the API's only unauthenticated
+  // routes (registration, email verification, the public school page), mixed
+  // in alongside authenticated ones — each of those applies `authMiddleware`
+  // / `tenantMiddleware` itself, route by route. Every router after this point
+  // requires both on every route it has, so that pair runs exactly once here
+  // rather than being repeated inside each of the eighteen router files below.
+  //
+  // Repeating it per router used to cost far more than it looks like it
+  // should: every router in this list is mounted on the identical
+  // `env.apiPrefix`, so Express ran each router's *own* top-level `.use()` in
+  // turn while searching for a match, whether or not that router turned out
+  // to hold the route at all. A request to the last router here re-resolved
+  // identity and tenant membership once for every router ahead of it that
+  // still declared its own copy — several seconds of redundant, serial
+  // database round trips per request, worst for whichever route happened to
+  // be registered last.
+  app.use(env.apiPrefix, authRoutes);
+  app.use(env.apiPrefix, schoolRoutes);
+  app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
+
   const api = [
-    authRoutes,
-    schoolRoutes,
     roleRoutes,
     auditRoutes,
     academicsRoutes,

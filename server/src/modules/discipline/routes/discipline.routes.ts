@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/unbuiltModule';
@@ -13,9 +11,8 @@ import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/un
  * child with a review process attached, and neither reading a fabricated one
  * nor pretending to advance it is acceptable.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get('/discipline', authorise('discipline.read'), validate(placeholderListSchema), emptyPage);
 

@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
@@ -21,9 +19,8 @@ import {
  * sitting a test, answering a question and submitting a paper are all writes
  * against a candidate's record, and a stub there would report a paper as taken.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get('/assessments', authorise('cbt.read'), validate(placeholderListSchema), emptyPage);
 

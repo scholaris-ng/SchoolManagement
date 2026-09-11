@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
@@ -14,9 +12,8 @@ import {
 } from '../validators/guardians.schema';
 import { GuardiansController } from '../controllers/guardians.controller';
 
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/guardians',

@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ApiResponse } from '../../../shared/response/apiResponse';
@@ -24,9 +22,8 @@ import { fetchAdmissionsSchema, type FetchAdmissionsQuery } from '../validators/
  * The funnel chart lives in the analytics module with the other aggregates,
  * because it is read by the analytics screen as well as this one.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/admissions',

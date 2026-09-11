@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { DashboardController } from '../controllers/dashboard.controller';
 
@@ -20,9 +18,8 @@ import { DashboardController } from '../controllers/dashboard.controller';
  * it unconditionally for that persona. An honest empty to-do list is a
  * better landing screen than a broken request.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get('/dashboard/admin', authorise('analytics.read'), DashboardController.fetchAdmin);
 router.get('/dashboard/teacher', authorise('curriculum.read'), DashboardController.fetchTeacher);

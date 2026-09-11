@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ImportsController } from '../controllers/imports.controller';
@@ -25,9 +23,8 @@ import {
  * network failure while the rows were landing. Progress is followed through
  * `GET /imports/:id`.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/imports',

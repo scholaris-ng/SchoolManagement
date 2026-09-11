@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
   fetchNotificationsSchema,
@@ -19,9 +17,8 @@ import { NotificationsController } from '../controllers/notifications.controller
  * `notification.send` permission guards administrator-initiated broadcasts,
  * which are not part of this module yet.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 // Ahead of `/notifications/:id/read` so the literal path is not read as an id.
 router.get('/notifications/unread-count', NotificationsController.unreadCount);

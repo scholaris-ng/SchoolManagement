@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ApiResponse } from '../../../shared/response/apiResponse';
@@ -15,9 +13,8 @@ import { fetchCalendarSchema } from '../validators/calendar.schema';
  * than a 404, so the month grid draws and a school sees an empty term instead
  * of a failed page. Creating and editing events waits for the table.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 /** The client types this as a bare array, not a page. */
 router.get(

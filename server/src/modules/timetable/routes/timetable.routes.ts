@@ -1,8 +1,6 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ApiResponse } from '../../../shared/response/apiResponse';
@@ -13,6 +11,8 @@ import { TimetableService } from '../services/timetable.service';
  * Reading the current timetable. Saving an entry, clearing a grid and checking
  * it for clashes are all writes against a table that does not exist, so none of
  * them is routed.
+ *
+ * `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts.
  */
 const router = Router();
 
@@ -30,8 +30,6 @@ const fetchCurrentTimetableSchema = z.object({
     })
     .strict(),
 });
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/timetables/current',

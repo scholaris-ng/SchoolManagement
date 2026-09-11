@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
@@ -31,11 +29,10 @@ import { AcademicsResourcesController as Resources } from '../controllers/academ
 const router = Router();
 
 /**
- * Every route below is authenticated and tenant-scoped. Reads need
- * `academics.read`; writes need `academics.manage`.
+ * Every route below is authenticated and tenant-scoped, via the global
+ * `authMiddleware`/`tenantMiddleware` in app.ts. Reads need `academics.read`;
+ * writes need `academics.manage`.
  */
-router.use(authMiddleware, tenantMiddleware);
-
 const read = authorise('academics.read');
 const manage = authorise('academics.manage');
 

@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ApiResponse } from '../../../shared/response/apiResponse';
@@ -25,9 +23,8 @@ import {
  * builds a term of weekly plans from a curriculum, and generating them from a
  * curriculum that does not exist would produce a document nobody asked for.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 /** The client types this one as a bare array, not a page. */
 router.get(

@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
@@ -28,9 +26,8 @@ import { AnalyticsController } from '../controllers/analytics.controller';
  * performing is `analytics.staff`, and seeing which families may withdraw is
  * `analytics.retention`. A teacher holds the first and neither of the others.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/analytics/results',

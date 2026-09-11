@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { authMiddleware } from '../../../shared/middleware/auth.middleware';
-import { contextOf, tenantMiddleware } from '../../../shared/middleware/tenant.middleware';
+import { contextOf } from '../../../shared/middleware/tenant.middleware';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { ApiResponse } from '../../../shared/response/apiResponse';
@@ -30,9 +29,8 @@ const fetchLeaderboardSchema = z.object({
  * Nothing that writes is routed. A behaviour observation is a note about a
  * named child that a parent may later read, and it must never be invented.
  */
+/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
-
-router.use(authMiddleware, tenantMiddleware);
 
 router.get(
   '/behaviour/observations',
