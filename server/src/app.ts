@@ -19,6 +19,7 @@ import schoolRoutes from './modules/school/routes/school.routes';
 import roleRoutes from './modules/rbac/routes/role.routes';
 import auditRoutes from './modules/audit/routes/audit.routes';
 import academicsRoutes from './modules/academics/routes/academics.routes';
+import attendanceRoutes from './modules/attendance/routes/attendance.routes';
 import studentsRoutes from './modules/students/routes/students.routes';
 import guardiansRoutes from './modules/guardians/routes/guardians.routes';
 import notificationsRoutes from './modules/notifications/routes/notifications.routes';
@@ -63,7 +64,7 @@ export function createApp(): Express {
   // in alongside authenticated ones — each of those applies `authMiddleware`
   // / `tenantMiddleware` itself, route by route. Every router after this point
   // requires both on every route it has, so that pair runs exactly once here
-  // rather than being repeated inside each of the eighteen router files below.
+  // rather than being repeated inside each of the router files below.
   //
   // Repeating it per router used to cost far more than it looks like it
   // should: every router in this list is mounted on the identical
@@ -82,6 +83,7 @@ export function createApp(): Express {
     roleRoutes,
     auditRoutes,
     academicsRoutes,
+    attendanceRoutes,
     studentsRoutes,
     guardiansRoutes,
     notificationsRoutes,

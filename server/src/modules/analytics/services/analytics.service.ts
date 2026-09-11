@@ -5,8 +5,9 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { SessionRepository } from '../../academics/repositories/session.repository';
-import { ClassRepository } from '../../academics/repositories/class.repository';
+import { AcademicScopeService } from '../../academics/services/academicScope.service';
 import { StaffRepository } from '../../staff/repositories/staff.repository';
+import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
 import type {
   AdmissionFunnelDTO,
   AttendanceTrendPointDTO,
@@ -20,15 +21,17 @@ import type {
 /**
  * The management analytics screen.
  *
- * Read-only aggregation, and for now mostly an honest nothing. Assessment,
- * attendance, finance and admissions have no tables — the same four gaps the
- * admin dashboard already reports as zero. Each panel is still served rather
- * than left to 404, because a screen that renders "no data yet" tells the truth
- * about an unbuilt module, while a wall of failed requests only looks broken.
+ * Read-only aggregation. Attendance is real, and reads the register the
+ * attendance module now keeps; assessment, finance and admissions still have no
+ * tables and are an honest nothing — the same three gaps the admin dashboard
+ * reports as zero. Each panel is still served rather than left to 404, because
+ * a screen that renders "no data yet" tells the truth about an unbuilt module,
+ * while a wall of failed requests only looks broken.
  *
- * Every method below returns real rows for the dimensions that do exist
- * (classes, staff, terms, sessions) and zero for the measures that do not, so
- * when a module lands only the measure has to change, not the shape.
+ * The methods still waiting on a module return real rows for the dimensions
+ * that do exist (classes, staff, terms, sessions) and zero for the measures
+ * that do not, so when a module lands only the measure has to change, not the
+ * shape.
  */
 export class AnalyticsService {
   static Instance = new AnalyticsService();
@@ -37,8 +40,9 @@ export class AnalyticsService {
     private readonly schools = SchoolRepository.Instance,
     private readonly terms = TermRepository.Instance,
     private readonly sessions = SessionRepository.Instance,
-    private readonly classes = ClassRepository.Instance,
     private readonly staff = StaffRepository.Instance,
+    private readonly attendance = AttendanceRepository.Instance,
+    private readonly scope = AcademicScopeService.Instance,
   ) {}
 
   /* -- Academic ----------------------------------------------------------- */
@@ -67,43 +71,52 @@ export class AnalyticsService {
   /* -- Attendance --------------------------------------------------------- */
 
   /**
-   * One row per class, so the table lists the school even before a register has
-   * ever been taken. `classId` narrows it to a single class for the class-level
-   * view; the date window is accepted and ignored until there are marks to
-   * window over.
+   * The rate per class over a window, lowest first — the order the attendance
+   * screen's table promises, and the one that puts the classes worth a
+   * conversation at the top.
+   *
+   * Only classes with marks in the window appear. A class whose register has
+   * never been taken has no rate, and reporting it at 0% would say every child
+   * was absent; the screen draws its own "no attendance recorded yet" instead.
+   *
+   * Narrowed to the caller's own classes, because `attendance.read` reaches
+   * further than the staffroom: a parent holds it for their own child, and a
+   * subject teacher for the classes they teach.
    */
   async fetchAttendanceSummary(
     context: RequestContext,
-    filter: { classId?: string },
+    filter: { classId?: string; from?: string; to?: string },
   ): Promise<ClassAttendanceSummaryDTO[]> {
-    const classes = await this.classes.fetchForSchool(context.schoolId, {
-      allowedIds: filter.classId ? [filter.classId] : null,
+    const [scope, window] = await Promise.all([
+      this.scope.forContext(context),
+      this.attendanceWindow(context.schoolId, filter),
+    ]);
+
+    return this.attendance.rateByClass(context.schoolId, {
+      classId: filter.classId,
+      from: window.from,
+      to: window.to,
+      allowedIds: scope.classIds,
     });
-
-    return classes.map((row) => ({
-      classId: row.id,
-      // `name` is the full label already ("JSS 1 Gold"); `arm` is the same tail
-      // held separately for grouping, so appending it would stutter.
-      className: row.name,
-
-      // Attendance module: no register is taken anywhere yet, so no class has a
-      // rate and no day has been marked.
-      attendanceRate: 0,
-      totalDays: 0,
-    }));
   }
 
   /**
-   * The same missing marks as the summary above, viewed over time instead of
-   * across classes. Empty rather than a flat line at zero: a chart of zeroes
-   * claims the school had nobody present, which is a different statement from
-   * having taken no register.
+   * The same marks as a day-by-day line. A day with no register is left out of
+   * the series rather than plotted as zero: a chart of zeroes claims the school
+   * had nobody present, which is a different statement from having taken no
+   * register.
    */
   async fetchAttendanceTrend(
-    _context: RequestContext,
-    _filter: { classId?: string; days: number },
+    context: RequestContext,
+    filter: { classId?: string; days: number },
   ): Promise<AttendanceTrendPointDTO[]> {
-    return [];
+    const scope = await this.scope.forContext(context);
+
+    return this.attendance.fetchTrend(context.schoolId, {
+      classId: filter.classId,
+      days: filter.days,
+      allowedIds: scope.classIds,
+    });
   }
 
   /* -- Finance ------------------------------------------------------------ */
@@ -162,18 +175,29 @@ export class AnalyticsService {
   /* -- Staff -------------------------------------------------------------- */
 
   /**
-   * The active roster with its real form-teacher load. Every compliance measure
-   * is zero: each one counts something a teacher did or failed to do in a
-   * module that does not exist yet.
+   * The active roster with its real form-teacher load, and how reliably each of
+   * them takes the register.
+   *
+   * Compliance is measured over the current term, against the days the school
+   * demonstrably marked *something* — there is no calendar of term dates minus
+   * holidays to compare against, so the days it was open are the fairest
+   * denominator available. A teacher with no form class has nothing to comply
+   * with and scores zero, which is also what the other four measures still
+   * report while their modules are unbuilt.
    */
   async fetchStaffPerformance(context: RequestContext): Promise<StaffPerformanceDTO[]> {
-    const roster = await this.staff.fetchRoster(context.schoolId);
+    const window = await this.attendanceWindow(context.schoolId, {});
+    const [roster, compliance] = await Promise.all([
+      this.staff.fetchRoster(context.schoolId),
+      this.attendance.complianceByStaff(context.schoolId, window),
+    ]);
+
+    const complianceOf = new Map(compliance.map((row) => [row.staffId, row.compliance]));
 
     return roster.map((person) => {
-      // Attendance module: registers are not taken, so there is nothing to
-      // comply with. Curriculum module: no lesson notes or schemes of work.
-      // Assessment module: no score sheets, so no deadline to be timely about.
-      const attendanceCompliance = 0;
+      // Curriculum module: no lesson notes or schemes of work. Assessment
+      // module: no score sheets, so no deadline to be timely about.
+      const attendanceCompliance = complianceOf.get(person.staffId) ?? 0;
       const lessonNoteCompliance = 0;
       const scoreEntryTimeliness = 0;
       const curriculumCoverage = 0;
@@ -220,6 +244,30 @@ export class AnalyticsService {
 
   /* -- Shared lookups ----------------------------------------------------- */
 
+  /**
+   * The window an attendance figure covers: what the caller asked for, else the
+   * current term up to today.
+   *
+   * A school with no current term marked falls back to the last thirty days —
+   * the alternative is every mark ever taken, which would average this term's
+   * attendance with a session that ended two years ago.
+   */
+  private async attendanceWindow(
+    schoolId: string,
+    filter: { from?: string; to?: string },
+  ): Promise<{ from: string; to: string }> {
+    const today = new Date().toISOString().slice(0, 10);
+    if (filter.from && filter.to) return { from: filter.from, to: filter.to };
+
+    const terms = await this.terms.fetchForSchool(schoolId);
+    const current = terms.find((term) => term.isCurrent);
+
+    return {
+      from: filter.from ?? current?.startDate ?? daysBefore(today, 30),
+      to: filter.to ?? today,
+    };
+  }
+
   /** The term asked for, or the one the school has marked current. */
   private async resolveTerm(schoolId: string, termId?: string) {
     if (termId) {
@@ -241,6 +289,12 @@ export class AnalyticsService {
     const sessions = await this.sessions.fetchForSchool(schoolId);
     return sessions.find((session) => session.isCurrent) ?? null;
   }
+}
+
+function daysBefore(date: string, days: number): string {
+  const cursor = new Date(`${date}T00:00:00Z`);
+  cursor.setUTCDate(cursor.getUTCDate() - days);
+  return cursor.toISOString().slice(0, 10);
 }
 
 function mean(values: number[]): number {

@@ -23,6 +23,7 @@ import { SubjectLevel } from '../../modules/academics/entities/subjectLevel.enti
 import { Room } from '../../modules/academics/entities/room.entity';
 import { House } from '../../modules/academics/entities/house.entity';
 import { TimetablePeriod } from '../../modules/academics/entities/timetablePeriod.entity';
+import { AttendanceRecord } from '../../modules/attendance/entities/attendanceRecord.entity';
 import { Staff } from '../../modules/staff/entities/staff.entity';
 import { Student } from '../../modules/students/entities/student.entity';
 import { StudentEnrollment } from '../../modules/students/entities/studentEnrollment.entity';
@@ -66,6 +67,7 @@ export const entities = [
   Student,
   StudentEnrollment,
   StudentDocument,
+  AttendanceRecord,
   Guardian,
   StudentGuardian,
   FeeItem,

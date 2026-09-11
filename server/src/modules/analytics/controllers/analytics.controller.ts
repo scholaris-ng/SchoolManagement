@@ -42,10 +42,10 @@ export class AnalyticsController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { classId } = req.validated!.query as { classId?: string };
+      const filter = req.validated!.query as { classId?: string; from?: string; to?: string };
       res
         .status(200)
-        .json(ApiResponse.ok(await service().fetchAttendanceSummary(contextOf(req), { classId })));
+        .json(ApiResponse.ok(await service().fetchAttendanceSummary(contextOf(req), filter)));
     } catch (error) {
       next(error);
     }
