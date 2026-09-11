@@ -64,7 +64,7 @@ export function SchoolSettingsPage() {
 
   if (school.isPending || !draft) {
     return (
-      <PageContainer width="narrow">
+      <PageContainer>
         <LoadingState label="Loading school settings…" />
       </PageContainer>
     );
@@ -72,7 +72,7 @@ export function SchoolSettingsPage() {
 
   if (school.isError) {
     return (
-      <PageContainer width="narrow">
+      <PageContainer>
         <ErrorState error={school.error} onRetry={() => void school.refetch()} />
       </PageContainer>
     );
@@ -136,7 +136,7 @@ export function SchoolSettingsPage() {
   const states = draft.settings?.country ? State.getStatesOfCountry(draft.settings.country) : [];
 
   return (
-    <PageContainer width="narrow">
+    <PageContainer>
       <UnsavedChangesGuard when={dirty && !update.isPending} />
 
       <PageHeader
@@ -153,288 +153,296 @@ export function SchoolSettingsPage() {
 
       <SettingsTabs />
 
-      <FormError error={update.error} />
+      {/*
+        The header and tabs above take the page's full standard width, like
+        every other settings screen — only this form's own content narrows,
+        so a single column of fields stays readable instead of stretching
+        edge to edge.
+      */}
+      <div className="max-w-3xl space-y-6">
+        <FormError error={update.error} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Identity</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="School name" required error={fieldErrors.name}>
-            <Input
-              data-cy="school-settings-name"
-              value={draft.name ?? ''}
-              onChange={(event) => set({ name: event.target.value })}
-            />
-          </Field>
-          <Field label="Short name" hint="Used in the sidebar and on documents." error={fieldErrors.shortName}>
-            <Input
-              data-cy="school-settings-short-name"
-              value={draft.shortName ?? ''}
-              onChange={(event) => set({ shortName: event.target.value })}
-            />
-          </Field>
-          {/*
-            Read-only on purpose. The code prefixes every verification code the
-            school has ever issued, so changing it would orphan certificates
-            already in circulation — the API refuses it for that reason, and an
-            editable box here only invited a change that could not be saved.
-          */}
-          <Field
-            label="School code"
-            hint="Prefixes verification codes, so it cannot be changed once issued."
-          >
-            <Input data-cy="school-settings-code" value={draft.code ?? ''} readOnly disabled />
-          </Field>
-          <Field label="Website" error={fieldErrors.website}>
-            <Input
-              data-cy="school-settings-website"
-              type="url"
-              value={draft.website ?? ''}
-              onChange={(event) => set({ website: event.target.value })}
-              placeholder="https://"
-            />
-          </Field>
-          <Field label="Email" required error={fieldErrors.email}>
-            <Input
-              data-cy="school-settings-email"
-              type="email"
-              value={draft.email ?? ''}
-              onChange={(event) => set({ email: event.target.value })}
-            />
-          </Field>
-          <Field label="Phone" required error={fieldErrors.phone}>
-            <PhoneField
-              value={draft.phone ?? ''}
-              onChange={(phone) => set({ phone })}
-              defaultCountry={draft.settings?.country}
-              error={fieldErrors.phone}
-            />
-          </Field>
-          <Field
-            label="Address"
-            required
-            className="sm:col-span-2"
-            error={fieldErrors.addressLine1}
-          >
-            <Input
-              data-cy="school-settings-address-line1"
-              value={draft.addressLine1 ?? ''}
-              onChange={(event) => set({ addressLine1: event.target.value })}
-            />
-          </Field>
-          <Field label="City" required error={fieldErrors.city}>
-            <Input
-              data-cy="school-settings-city"
-              value={draft.city ?? ''}
-              onChange={(event) => set({ city: event.target.value })}
-            />
-          </Field>
-          <Field
-            label="State"
-            required
-            error={fieldErrors.state}
-            hint={!draft.settings?.country ? 'Pick a country under Regional first.' : undefined}
-          >
-            <Select
-              data-cy="school-settings-state"
-              aria-label="State"
-              invalid={Boolean(fieldErrors.state)}
-              disabled={!draft.settings?.country}
-              value={states.find((entry) => entry.name === draft.state)?.isoCode}
-              onValueChange={(isoCode) => {
-                const match = states.find((entry) => entry.isoCode === isoCode);
-                if (match) set({ state: match.name });
-              }}
-              options={states.map((entry) => ({ value: entry.isoCode, label: entry.name }))}
-              placeholder="Select a state"
-            />
-          </Field>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Branding</CardTitle>
-          <CardDescription>
-            Applied across the app, report cards and receipts the moment you save.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <FileUpload
-            variant="avatar"
-            preset="image"
-            purpose="school-logo"
-            label="School logo"
-            description="Appears on report cards, receipts and the public website."
-            value={draft.branding?.logoUrl ? { url: draft.branding.logoUrl } : null}
-            onUploaded={(file) => setBranding({ logoUrl: file.downloadUrl })}
-            onRemove={() => setBranding({ logoUrl: null })}
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Primary colour">
-              <div className="flex items-center gap-2">
-                <input
-                  data-cy="school-settings-primary-color"
-                  type="color"
-                  aria-label="Primary colour"
-                  value={draft.branding?.primaryColor ?? '#4f46e5'}
-                  onChange={(event) => setBranding({ primaryColor: event.target.value })}
-                  className="size-9 shrink-0 cursor-pointer rounded border border-input"
-                />
-                <Input
-                  data-cy="school-settings-primary-color-2"
-                  value={draft.branding?.primaryColor ?? ''}
-                  onChange={(event) => setBranding({ primaryColor: event.target.value })}
-                />
-              </div>
-            </Field>
-            <Field label="Accent colour">
-              <div className="flex items-center gap-2">
-                <input
-                  data-cy="school-settings-accent-color"
-                  type="color"
-                  aria-label="Accent colour"
-                  value={draft.branding?.accentColor ?? '#0ea5e9'}
-                  onChange={(event) => setBranding({ accentColor: event.target.value })}
-                  className="size-9 shrink-0 cursor-pointer rounded border border-input"
-                />
-                <Input
-                  data-cy="school-settings-accent-color-2"
-                  value={draft.branding?.accentColor ?? ''}
-                  onChange={(event) => setBranding({ accentColor: event.target.value })}
-                />
-              </div>
-            </Field>
-            <Field label="Motto" className="sm:col-span-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Identity</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <Field label="School name" required error={fieldErrors.name}>
               <Input
-                data-cy="school-settings-motto"
-                value={draft.branding?.motto ?? ''}
-                onChange={(event) => setBranding({ motto: event.target.value })}
+                data-cy="school-settings-name"
+                value={draft.name ?? ''}
+                onChange={(event) => set({ name: event.target.value })}
               />
             </Field>
-          </div>
-        </CardContent>
-      </Card>
+            <Field label="Short name" hint="Used in the sidebar and on documents." error={fieldErrors.shortName}>
+              <Input
+                data-cy="school-settings-short-name"
+                value={draft.shortName ?? ''}
+                onChange={(event) => set({ shortName: event.target.value })}
+              />
+            </Field>
+            {/*
+              Read-only on purpose. The code prefixes every verification code the
+              school has ever issued, so changing it would orphan certificates
+              already in circulation — the API refuses it for that reason, and an
+              editable box here only invited a change that could not be saved.
+            */}
+            <Field
+              label="School code"
+              hint="Prefixes verification codes, so it cannot be changed once issued."
+            >
+              <Input data-cy="school-settings-code" value={draft.code ?? ''} readOnly disabled />
+            </Field>
+            <Field label="Website" error={fieldErrors.website}>
+              <Input
+                data-cy="school-settings-website"
+                type="url"
+                value={draft.website ?? ''}
+                onChange={(event) => set({ website: event.target.value })}
+                placeholder="https://"
+              />
+            </Field>
+            <Field label="Email" required error={fieldErrors.email}>
+              <Input
+                data-cy="school-settings-email"
+                type="email"
+                value={draft.email ?? ''}
+                onChange={(event) => set({ email: event.target.value })}
+              />
+            </Field>
+            <Field label="Phone" required error={fieldErrors.phone}>
+              <PhoneField
+                value={draft.phone ?? ''}
+                onChange={(phone) => set({ phone })}
+                defaultCountry={draft.settings?.country}
+                error={fieldErrors.phone}
+              />
+            </Field>
+            <Field
+              label="Address"
+              required
+              className="sm:col-span-2"
+              error={fieldErrors.addressLine1}
+            >
+              <Input
+                data-cy="school-settings-address-line1"
+                value={draft.addressLine1 ?? ''}
+                onChange={(event) => set({ addressLine1: event.target.value })}
+              />
+            </Field>
+            <Field label="City" required error={fieldErrors.city}>
+              <Input
+                data-cy="school-settings-city"
+                value={draft.city ?? ''}
+                onChange={(event) => set({ city: event.target.value })}
+              />
+            </Field>
+            <Field
+              label="State"
+              required
+              error={fieldErrors.state}
+              hint={!draft.settings?.country ? 'Pick a country under Regional first.' : undefined}
+            >
+              <Select
+                data-cy="school-settings-state"
+                aria-label="State"
+                invalid={Boolean(fieldErrors.state)}
+                disabled={!draft.settings?.country}
+                value={states.find((entry) => entry.name === draft.state)?.isoCode}
+                onValueChange={(isoCode) => {
+                  const match = states.find((entry) => entry.isoCode === isoCode);
+                  if (match) set({ state: match.name });
+                }}
+                options={states.map((entry) => ({ value: entry.isoCode, label: entry.name }))}
+                placeholder="Select a state"
+              />
+            </Field>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Regional</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Currency">
-            <NativeSelect
-              data-cy="school-settings-currency"
-              value={draft.settings?.currency ?? 'NGN'}
-              onChange={(event) => {
-                const currency = CURRENCIES.find((entry) => entry.code === event.target.value);
-                setSettings({
-                  currency: event.target.value,
-                  currencySymbol: currency?.symbol ?? event.target.value,
-                });
-              }}
-            >
-              {CURRENCIES.map((currency) => (
-                <option key={currency.code} value={currency.code}>
-                  {currency.label} ({currency.symbol})
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Timezone">
-            <NativeSelect
-              data-cy="school-settings-timezone"
-              value={draft.settings?.timezone ?? 'Africa/Lagos'}
-              onChange={(event) => setSettings({ timezone: event.target.value })}
-            >
-              {TIMEZONES.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Country" hint="Also determines the states on offer above, under Identity.">
-            <Select
-              data-cy="school-settings-country"
-              aria-label="Country"
-              value={draft.settings?.country || undefined}
-              onValueChange={(isoCode) => {
-                setSettings({ country: isoCode });
-                // The State box picks from this country's list; the old value
-                // is very unlikely to still be one of them.
-                set({ state: '' });
-              }}
-              options={COUNTRIES.map((country) => ({
-                value: country.isoCode,
-                label: country.name,
-              }))}
-              placeholder="Select a country"
+        <Card>
+          <CardHeader>
+            <CardTitle>Branding</CardTitle>
+            <CardDescription>
+              Applied across the app, report cards and receipts the moment you save.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FileUpload
+              variant="avatar"
+              preset="image"
+              purpose="school-logo"
+              label="School logo"
+              description="Appears on report cards, receipts and the public website."
+              value={draft.branding?.logoUrl ? { url: draft.branding.logoUrl } : null}
+              onUploaded={(file) => setBranding({ logoUrl: file.downloadUrl })}
+              onRemove={() => setBranding({ logoUrl: null })}
             />
-          </Field>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Policies</CardTitle>
-          <CardDescription>
-            These change how the product behaves for everyone at this school.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          <Toggle
-            label="Require photo consent"
-            description="Student photographs are hidden from the public website, the news feed and printed documents unless a guardian has consented. Strongly recommended."
-            checked={draft.settings?.requirePhotoConsent ?? true}
-            onChange={(value) => setSettings({ requirePhotoConsent: value })}
-          />
-          <Toggle
-            label="Same-day absence alerts"
-            description="Notify a guardian the first time their child is marked absent without explanation."
-            checked={draft.settings?.absenceAlertEnabled ?? true}
-            onChange={(value) => setSettings({ absenceAlertEnabled: value })}
-          />
-          {draft.settings?.absenceAlertEnabled && (
-            <div className="pl-1 pt-2">
-              <Field label="Send alerts after" hint="Registers taken later still send once.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Primary colour">
+                <div className="flex items-center gap-2">
+                  <input
+                    data-cy="school-settings-primary-color"
+                    type="color"
+                    aria-label="Primary colour"
+                    value={draft.branding?.primaryColor ?? '#4f46e5'}
+                    onChange={(event) => setBranding({ primaryColor: event.target.value })}
+                    className="size-9 shrink-0 cursor-pointer rounded border border-input"
+                  />
+                  <Input
+                    data-cy="school-settings-primary-color-2"
+                    value={draft.branding?.primaryColor ?? ''}
+                    onChange={(event) => setBranding({ primaryColor: event.target.value })}
+                  />
+                </div>
+              </Field>
+              <Field label="Accent colour">
+                <div className="flex items-center gap-2">
+                  <input
+                    data-cy="school-settings-accent-color"
+                    type="color"
+                    aria-label="Accent colour"
+                    value={draft.branding?.accentColor ?? '#0ea5e9'}
+                    onChange={(event) => setBranding({ accentColor: event.target.value })}
+                    className="size-9 shrink-0 cursor-pointer rounded border border-input"
+                  />
+                  <Input
+                    data-cy="school-settings-accent-color-2"
+                    value={draft.branding?.accentColor ?? ''}
+                    onChange={(event) => setBranding({ accentColor: event.target.value })}
+                  />
+                </div>
+              </Field>
+              <Field label="Motto" className="sm:col-span-2">
                 <Input
-                  data-cy="school-settings-absence-alert-cutoff"
-                  type="time"
-                  value={draft.settings?.absenceAlertCutoff ?? '10:00'}
-                  onChange={(event) => setSettings({ absenceAlertCutoff: event.target.value })}
-                  className="w-auto"
+                  data-cy="school-settings-motto"
+                  value={draft.branding?.motto ?? ''}
+                  onChange={(event) => setBranding({ motto: event.target.value })}
                 />
               </Field>
             </div>
-          )}
-          <Toggle
-            label="Notify parents when results are published"
-            checked={draft.settings?.resultPublishNotification ?? true}
-            onChange={(value) => setSettings({ resultPublishNotification: value })}
-          />
-          <Toggle
-            label="Allow parent–teacher messaging"
-            description="Parents can start a conversation with staff connected to their own children."
-            checked={draft.settings?.allowParentTeacherMessaging ?? true}
-            onChange={(value) => setSettings({ allowParentTeacherMessaging: value })}
-          />
-          <Toggle
-            label="Public website"
-            description="Publishes a school profile at a public address, built from the Website settings."
-            checked={draft.settings?.publicWebsiteEnabled ?? false}
-            onChange={(value) => setSettings({ publicWebsiteEnabled: value })}
-          />
+          </CardContent>
+        </Card>
 
-          {draft.settings?.requirePhotoConsent === false && (
-            <Alert tone="warning" title="Photo consent is off">
-              Student photographs may then appear on public pages and printed documents. Make sure
-              this matches the permission your families have actually given.
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Regional</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <Field label="Currency">
+              <NativeSelect
+                data-cy="school-settings-currency"
+                value={draft.settings?.currency ?? 'NGN'}
+                onChange={(event) => {
+                  const currency = CURRENCIES.find((entry) => entry.code === event.target.value);
+                  setSettings({
+                    currency: event.target.value,
+                    currencySymbol: currency?.symbol ?? event.target.value,
+                  });
+                }}
+              >
+                {CURRENCIES.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.label} ({currency.symbol})
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Timezone">
+              <NativeSelect
+                data-cy="school-settings-timezone"
+                value={draft.settings?.timezone ?? 'Africa/Lagos'}
+                onChange={(event) => setSettings({ timezone: event.target.value })}
+              >
+                {TIMEZONES.map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Country" hint="Also determines the states on offer above, under Identity.">
+              <Select
+                data-cy="school-settings-country"
+                aria-label="Country"
+                value={draft.settings?.country || undefined}
+                onValueChange={(isoCode) => {
+                  setSettings({ country: isoCode });
+                  // The State box picks from this country's list; the old value
+                  // is very unlikely to still be one of them.
+                  set({ state: '' });
+                }}
+                options={COUNTRIES.map((country) => ({
+                  value: country.isoCode,
+                  label: country.name,
+                }))}
+                placeholder="Select a country"
+              />
+            </Field>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Policies</CardTitle>
+            <CardDescription>
+              These change how the product behaves for everyone at this school.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <Toggle
+              label="Require photo consent"
+              description="Student photographs are hidden from the public website, the news feed and printed documents unless a guardian has consented. Strongly recommended."
+              checked={draft.settings?.requirePhotoConsent ?? true}
+              onChange={(value) => setSettings({ requirePhotoConsent: value })}
+            />
+            <Toggle
+              label="Same-day absence alerts"
+              description="Notify a guardian the first time their child is marked absent without explanation."
+              checked={draft.settings?.absenceAlertEnabled ?? true}
+              onChange={(value) => setSettings({ absenceAlertEnabled: value })}
+            />
+            {draft.settings?.absenceAlertEnabled && (
+              <div className="pl-1 pt-2">
+                <Field label="Send alerts after" hint="Registers taken later still send once.">
+                  <Input
+                    data-cy="school-settings-absence-alert-cutoff"
+                    type="time"
+                    value={draft.settings?.absenceAlertCutoff ?? '10:00'}
+                    onChange={(event) => setSettings({ absenceAlertCutoff: event.target.value })}
+                    className="w-auto"
+                  />
+                </Field>
+              </div>
+            )}
+            <Toggle
+              label="Notify parents when results are published"
+              checked={draft.settings?.resultPublishNotification ?? true}
+              onChange={(value) => setSettings({ resultPublishNotification: value })}
+            />
+            <Toggle
+              label="Allow parent–teacher messaging"
+              description="Parents can start a conversation with staff connected to their own children."
+              checked={draft.settings?.allowParentTeacherMessaging ?? true}
+              onChange={(value) => setSettings({ allowParentTeacherMessaging: value })}
+            />
+            <Toggle
+              label="Public website"
+              description="Publishes a school profile at a public address, built from the Website settings."
+              checked={draft.settings?.publicWebsiteEnabled ?? false}
+              onChange={(value) => setSettings({ publicWebsiteEnabled: value })}
+            />
+
+            {draft.settings?.requirePhotoConsent === false && (
+              <Alert tone="warning" title="Photo consent is off">
+                Student photographs may then appear on public pages and printed documents. Make sure
+                this matches the permission your families have actually given.
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </PageContainer>
   );
 }
