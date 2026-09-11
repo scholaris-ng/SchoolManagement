@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
+import { Country, State } from 'country-state-city';
 import { useSchool, useUpdateSchool } from './api';
 import { isApiError } from '@/lib/api-error';
 import type { School } from '@/types/tenant';
@@ -12,13 +13,15 @@ import {
   CardTitle,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { Input, NativeSelect, Select } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SettingsTabs } from './settings-tabs';
-import { Field, Toggle } from './school-settings-page-parts';
+import { Field, PhoneField, Toggle } from './school-settings-page-parts';
 import { validateSchoolDraft } from './school-settings.schema';
+
+const COUNTRIES = Country.getAllCountries();
 
 const CURRENCIES = [
   { code: 'NGN', symbol: '₦', label: 'Nigerian naira' },
@@ -127,6 +130,11 @@ export function SchoolSettingsPage() {
     ...validationErrors,
   };
 
+  // States belong to a country, so the list on offer follows whichever
+  // country the school picked under Regional — pick that first, or this list
+  // has nothing to show.
+  const states = draft.settings?.country ? State.getStatesOfCountry(draft.settings.country) : [];
+
   return (
     <PageContainer width="narrow">
       <UnsavedChangesGuard when={dirty && !update.isPending} />
@@ -196,11 +204,11 @@ export function SchoolSettingsPage() {
             />
           </Field>
           <Field label="Phone" required error={fieldErrors.phone}>
-            <Input
-              data-cy="school-settings-phone"
-              type="tel"
+            <PhoneField
               value={draft.phone ?? ''}
-              onChange={(event) => set({ phone: event.target.value })}
+              onChange={(phone) => set({ phone })}
+              defaultCountry={draft.settings?.country}
+              error={fieldErrors.phone}
             />
           </Field>
           <Field
@@ -222,11 +230,24 @@ export function SchoolSettingsPage() {
               onChange={(event) => set({ city: event.target.value })}
             />
           </Field>
-          <Field label="State" required error={fieldErrors.state}>
-            <Input
+          <Field
+            label="State"
+            required
+            error={fieldErrors.state}
+            hint={!draft.settings?.country ? 'Pick a country under Regional first.' : undefined}
+          >
+            <Select
               data-cy="school-settings-state"
-              value={draft.state ?? ''}
-              onChange={(event) => set({ state: event.target.value })}
+              aria-label="State"
+              invalid={Boolean(fieldErrors.state)}
+              disabled={!draft.settings?.country}
+              value={states.find((entry) => entry.name === draft.state)?.isoCode}
+              onValueChange={(isoCode) => {
+                const match = states.find((entry) => entry.isoCode === isoCode);
+                if (match) set({ state: match.name });
+              }}
+              options={states.map((entry) => ({ value: entry.isoCode, label: entry.name }))}
+              placeholder="Select a state"
             />
           </Field>
         </CardContent>
@@ -334,11 +355,22 @@ export function SchoolSettingsPage() {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Country">
-            <Input
+          <Field label="Country" hint="Also determines the states on offer above, under Identity.">
+            <Select
               data-cy="school-settings-country"
-              value={draft.settings?.country ?? ''}
-              onChange={(event) => setSettings({ country: event.target.value })}
+              aria-label="Country"
+              value={draft.settings?.country || undefined}
+              onValueChange={(isoCode) => {
+                setSettings({ country: isoCode });
+                // The State box picks from this country's list; the old value
+                // is very unlikely to still be one of them.
+                set({ state: '' });
+              }}
+              options={COUNTRIES.map((country) => ({
+                value: country.isoCode,
+                label: country.name,
+              }))}
+              placeholder="Select a country"
             />
           </Field>
         </CardContent>
