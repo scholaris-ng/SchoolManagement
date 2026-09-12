@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, Globe, Plus, Save, Trash2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Globe, Plus, Save, Trash2 } from 'lucide-react';
 import { env } from '@/lib/env';
 import { isApiError } from '@/lib/api-error';
 import { useUpdateWebsite, useWebsite } from './api';
@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
-import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Alert, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SettingsTabs } from './settings-tabs';
 
@@ -35,6 +35,42 @@ function slugifyLive(value: string): string {
 /** The address actually sent to the server — no leading or trailing hyphen either. */
 function slugifyFinal(value: string): string {
   return slugifyLive(value).replace(/^-+|-+$/g, '');
+}
+
+/**
+ * A small icon button that copies `value` to the clipboard.
+ *
+ * The icon alone doesn't say "copy" to everyone, so a tooltip names the action
+ * on hover/focus, and the icon swaps to a check mark with its own "Copied!"
+ * tooltip for a couple of seconds so the click's effect is confirmed too.
+ */
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused by the browser; the link is still
+      // shown and selectable, so it can be copied by hand instead.
+    }
+  };
+
+  return (
+    <Tooltip content={copied ? 'Copied!' : label}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => void copy()}
+        aria-label={label}
+      >
+        {copied ? <Check className="text-success" /> : <Copy />}
+      </Button>
+    </Tooltip>
+  );
 }
 
 /**
@@ -191,8 +227,17 @@ export function WebsiteSettingsPage() {
                   {fieldErrors.slug}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Live at <span className="font-mono">{publicUrl}</span>
+                <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                  Live at{' '}
+                  <a
+                    href={`/s/${draft.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-foreground underline decoration-dotted underline-offset-2 hover:text-primary"
+                  >
+                    {publicUrl}
+                  </a>
+                  <CopyButton value={publicUrl} label="Copy website address" />
                 </p>
               )}
             </div>
