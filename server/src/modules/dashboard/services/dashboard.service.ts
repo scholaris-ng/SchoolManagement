@@ -6,8 +6,15 @@ import { ClassRepository } from '../../academics/repositories/class.repository';
 import { AuditRepository } from '../../audit/repositories/audit.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { TermRepository } from '../../academics/repositories/term.repository';
+import { SessionRepository } from '../../academics/repositories/session.repository';
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
-import type { AdminDashboardDTO, StatDeltaDTO, TeacherDashboardDTO } from '../dto/dashboard.dto';
+import { AdmissionRepository } from '../../admissions/repositories/admission.repository';
+import type {
+  AdminDashboardDTO,
+  BursarDashboardDTO,
+  StatDeltaDTO,
+  TeacherDashboardDTO,
+} from '../dto/dashboard.dto';
 
 /** How far back the student figure is compared against. */
 const DELTA_WINDOW_DAYS = 30;
@@ -25,11 +32,12 @@ const ACTIVITY_LIMIT = 6;
  * rows and counting them in Node — totals for three thousand students must
  * never mean three thousand rows crossing the wire (spec section 43).
  *
- * Parts of this payload are still zero. Finance, admissions and the calendar
- * have no tables yet, and inventing plausible numbers for them would make an
- * unbuilt module look like a working one. Each is marked below with what will
- * fill it. Attendance is no longer among them: it reads the register the
- * attendance module keeps.
+ * Parts of this payload are still zero. Finance and the calendar have no
+ * tables yet, and inventing plausible numbers for them would make an unbuilt
+ * module look like a working one. Each is marked below with what will fill
+ * it. Attendance and admissions are no longer among them: they read the
+ * register the attendance module keeps, and the applications the admissions
+ * module tracks, respectively.
  */
 export class DashboardService {
   static Instance = new DashboardService();
@@ -42,6 +50,8 @@ export class DashboardService {
     private readonly schools = SchoolRepository.Instance,
     private readonly attendance = AttendanceRepository.Instance,
     private readonly terms = TermRepository.Instance,
+    private readonly sessions = SessionRepository.Instance,
+    private readonly admissions = AdmissionRepository.Instance,
   ) {}
 
   async fetchAdmin(context: RequestContext): Promise<AdminDashboardDTO> {
@@ -57,6 +67,7 @@ export class DashboardService {
       activity,
       today,
       attendanceTrend,
+      sessions,
     ] = await Promise.all([
       this.schools.findById(schoolId),
       this.students.countActive(schoolId),
@@ -70,9 +81,22 @@ export class DashboardService {
         days: ATTENDANCE_TREND_DAYS,
         allowedIds: null,
       }),
+      this.sessions.fetchForSchool(schoolId),
     ]);
 
     if (!school) throw AppError.notFound('School');
+
+    // Scoped to the current session — last year's decided applications should
+    // not keep counting toward "open" once this year's admissions cycle has
+    // moved on. A school with no session marked current yet (a fresh setup)
+    // falls back to every application it has.
+    const currentSessionId = sessions.find((session) => session.isCurrent)?.id ?? null;
+    const admissionCounts = await this.admissions.countsByStatus(schoolId, currentSessionId);
+    const admissionsInProgress =
+      admissionCounts.SUBMITTED +
+      admissionCounts.SCREENING +
+      admissionCounts.SHORTLISTED +
+      admissionCounts.OFFERED;
 
     return {
       currency: school.settings?.currency ?? 'NGN',
@@ -94,9 +118,8 @@ export class DashboardService {
       feesOutstanding: 0,
       collectionRate: 0,
 
-      // Admissions module: applicants are not modelled yet.
-      admissionsInProgress: 0,
-      admissionsAccepted: 0,
+      admissionsInProgress,
+      admissionsAccepted: admissionCounts.ACCEPTED,
 
       // The same marks over the fortnight. Days with no register are left out
       // rather than plotted as zero, so a holiday is a gap in the line and not
@@ -169,6 +192,33 @@ export class DashboardService {
     if (!current || today < current.startDate || today > current.endDate) return [];
 
     return this.attendance.pendingRegistersFor(context.schoolId, staffId, today);
+  }
+
+  /**
+   * The bursar's landing screen: what has been billed, what has come in, and
+   * who still owes.
+   *
+   * The whole payload is ledger-shaped, and the ledger — invoices, payments,
+   * arrears — has no table yet, only fee item *definitions* do. Every figure
+   * is answered as an honest zero or empty list, the same choice `fetchAdmin`
+   * makes for its finance section, rather than fabricating a collection rate
+   * no invoice backs.
+   */
+  async fetchBursar(context: RequestContext): Promise<BursarDashboardDTO> {
+    const school = await this.schools.findById(context.schoolId);
+    if (!school) throw AppError.notFound('School');
+
+    return {
+      currency: school.settings?.currency ?? 'NGN',
+      billed: 0,
+      collected: 0,
+      outstanding: 0,
+      collectionRate: 0,
+      recentPayments: [],
+      unreconciled: { count: 0, amount: 0 },
+      topDebtors: [],
+      collectionTrend: [],
+    };
   }
 }
 

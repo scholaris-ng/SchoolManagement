@@ -3,25 +3,26 @@ import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { DashboardController } from '../controllers/dashboard.controller';
 
 /**
- * The administrator and teacher dashboards are served here.
+ * The administrator, teacher and bursar dashboards are served here.
  *
- * The parent, student and bursar dashboards are almost entirely made of
- * results, finance and attendance data, none of which is modelled
- * server-side yet. They stay unimplemented rather than returning three
- * screens of zeros, which would read as a broken product rather than an
- * unbuilt one.
+ * The parent and student dashboards are almost entirely made of results and
+ * attendance data, none of which is modelled server-side yet. They stay
+ * unimplemented rather than returning screens of zeros, which would read as
+ * a broken product rather than an unbuilt one.
  *
- * The teacher dashboard is in the same situation — timetable entries,
- * attendance registers, score sheets, lesson notes, assessments and
- * messaging are all unbuilt too — but it is routed anyway: unlike the other
- * three, it currently 404s for every teacher who signs in, since `/` renders
- * it unconditionally for that persona. An honest empty to-do list is a
- * better landing screen than a broken request.
+ * The teacher and bursar dashboards are in a similar situation — their
+ * underlying modules (timetable, score sheets, lesson notes, assessments,
+ * messaging; invoices, payments, arrears) are unbuilt too — but both are
+ * routed anyway: unlike parent and student, `/` renders them unconditionally
+ * for those personas, so leaving them unrouted 404s for every teacher and
+ * bursar who signs in. An honest empty screen is a better landing page than
+ * a broken request.
  */
 /** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
 
 router.get('/dashboard/admin', authorise('analytics.read'), DashboardController.fetchAdmin);
 router.get('/dashboard/teacher', authorise('curriculum.read'), DashboardController.fetchTeacher);
+router.get('/dashboard/bursar', authorise('finance.read'), DashboardController.fetchBursar);
 
 export default router;

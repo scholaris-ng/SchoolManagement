@@ -1,4 +1,4 @@
-import type { DeepPartial, EntityManager } from 'typeorm';
+import { In, type DeepPartial, type EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { FeeItem } from '../entities/feeItem.entity';
 import type { FeeItemDTO } from '../dto/finance.dto';
@@ -63,6 +63,12 @@ export class FeeItemRepository extends TenantRepository<FeeItem> {
         WHERE school_id = $1 AND deleted_at IS NULL AND code = ANY($2::text[])`,
       [schoolId, codes.map((code) => code.toUpperCase())],
     );
+  }
+
+  /** How many of these ids are real fee items belonging to this school. */
+  async countExisting(schoolId: string, ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    return this.repo.count({ where: { schoolId, id: In(ids) } });
   }
 
   async create(data: DeepPartial<FeeItem>, manager?: EntityManager): Promise<FeeItem> {

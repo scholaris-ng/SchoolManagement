@@ -21,4 +21,12 @@ export class DashboardController {
       next(error);
     }
   }
+
+  static async fetchBursar(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(ApiResponse.ok(await service().fetchBursar(contextOf(req))));
+    } catch (error) {
+      next(error);
+    }
+  }
 }

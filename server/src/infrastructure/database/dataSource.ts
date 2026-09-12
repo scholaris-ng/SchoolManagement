@@ -34,6 +34,7 @@ import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
 import { FeeItem } from '../../modules/finance/entities/feeItem.entity';
+import { Discount } from '../../modules/finance/entities/discount.entity';
 import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
 import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
@@ -75,6 +76,7 @@ export const entities = [
   AdmissionApplication,
   AdmissionStageEvent,
   FeeItem,
+  Discount,
   ImportJob,
   Notification,
   NotificationPreference,

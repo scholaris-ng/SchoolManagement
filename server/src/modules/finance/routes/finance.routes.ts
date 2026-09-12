@@ -1,24 +1,25 @@
 import { Router } from 'express';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
-import {
-  emptyArray,
-  emptyPage,
-  placeholderListSchema,
-} from '../../../shared/placeholder/unbuiltModule';
+import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/unbuiltModule';
 import { FeeItemsController } from '../controllers/feeItems.controller';
+import { DiscountsController } from '../controllers/discounts.controller';
 import {
   createFeeItemSchema,
   fetchFeeItemsSchema,
   updateFeeItemSchema,
 } from '../validators/feeItems.schema';
+import { createDiscountSchema, updateDiscountSchema } from '../validators/discounts.schema';
 
 /**
- * The finance screens. Fee items are real; the ledger behind them is not yet.
+ * The finance screens. Fee items and discounts are real; the ledger behind
+ * them is not yet.
  *
- * A fee item is a definition — what the school charges for — so it landed with
- * bulk import, which had to have somewhere to put the rows. Structures,
- * invoices and payments still have no table and are served empty.
+ * A fee item and a discount are both definitions — what the school charges
+ * for, and what it might waive — so neither is money that has moved. Fee
+ * items landed with bulk import, which had to have somewhere to put the rows;
+ * discounts followed the same reasoning once that precedent existed.
+ * Structures, invoices and payments still have no table and are served empty.
  *
  * Nothing else here writes. Raising an invoice, recording a payment and
  * reconciling one are the last things that should ever be stubbed: a fake
@@ -64,8 +65,21 @@ router.get(
 router.get(
   '/discounts',
   authorise('finance.read', 'discount.manage'),
-  validate(placeholderListSchema),
-  emptyArray,
+  DiscountsController.fetchAll,
+);
+
+router.post(
+  '/discounts',
+  authorise('discount.manage'),
+  validate(createDiscountSchema),
+  DiscountsController.create,
+);
+
+router.patch(
+  '/discounts/:id',
+  authorise('discount.manage'),
+  validate(updateDiscountSchema),
+  DiscountsController.update,
 );
 
 /* -- The ledger: what is owed and what arrived ----------------------------- */
