@@ -19,7 +19,9 @@ import type { Subject } from '@/types/academics';
 export function SubjectDialog({
   state,
   levels,
-  periods,
+  // `periods` stays part of the public props — it feeds the "Weekly periods"
+  // section below, currently disabled — but is not bound locally, since a
+  // prop accepted and then never read still fails `noUnusedParameters`.
   onClose,
 }: {
   state: { open: boolean; subject?: Subject };
@@ -33,21 +35,26 @@ export function SubjectDialog({
   const [category, setCategory] = useState(state.subject?.category ?? '');
   const [isCore, setIsCore] = useState(state.subject?.isCore ?? true);
   const [levelIds, setLevelIds] = useState<string[]>(state.subject?.levelIds ?? []);
-  const [schedule, setSchedule] = useState<Set<string>>(
+  // The setter is unused while "Weekly periods" is disabled below — `schedule`
+  // itself still seeds the save payload, so only the pair's second half goes.
+  const [schedule] = useState<Set<string>>(
     () => new Set((state.subject?.schedule ?? []).map((slot) => `${slot.day}:${slot.periodId}`)),
   );
 
-  const toggleSlot = (day: Weekday, periodId: string) => {
-    const key = `${day}:${periodId}`;
-    setSchedule((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  // Disabled alongside the "Weekly periods" section below until it returns —
+  // both were its only callers, and the build fails on a declaration nothing
+  // reads.
+  // const toggleSlot = (day: Weekday, periodId: string) => {
+  //   const key = `${day}:${periodId}`;
+  //   setSchedule((current) => {
+  //     const next = new Set(current);
+  //     if (next.has(key)) next.delete(key);
+  //     else next.add(key);
+  //     return next;
+  //   });
+  // };
 
-  const teachingPeriods = periods.filter((period) => !period.isBreak);
+  // const teachingPeriods = periods.filter((period) => !period.isBreak);
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
