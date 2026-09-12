@@ -7,6 +7,7 @@ import type {
   FinanceOverview,
   Invoice,
   Payment,
+  PaymentAccount,
   PaymentMethod,
   Receipt,
   StudentFinanceSummary,
@@ -30,6 +31,14 @@ export interface RecordPaymentInput {
   paidAt: string;
   reference?: string;
   allocations?: { invoiceId: string; amount: number }[];
+  note?: string;
+}
+
+export interface CreatePaymentAccountInput {
+  studentId: string;
+  amount: number;
+  /** The paying guardian's BVN — verified by Raven, never stored by us. */
+  bvn: string;
   note?: string;
 }
 
@@ -87,6 +96,17 @@ export const FinanceEndpoints = {
   fetchPayments: (query: ListQuery) => http.get<Paginated<Payment>>('/payments', { query }),
 
   recordPayment: (input: RecordPaymentInput) => http.post<Payment>('/payments', input),
+
+  /**
+   * A Raven account number for one student to pay one amount into. What lands
+   * on it is confirmed by Raven's webhook server-side and appears in
+   * `fetchPayments` on its own — nothing the browser does records the money.
+   */
+  createPaymentAccount: (input: CreatePaymentAccountInput) =>
+    http.post<PaymentAccount>('/payments/accounts', input),
+
+  fetchStudentPaymentAccounts: (studentId: string) =>
+    http.get<PaymentAccount[]>(`/students/${studentId}/payment-accounts`),
 
   reconcilePayment: (id: string, note?: string) =>
     http.post<Payment>(`/payments/${id}/reconcile`, { note }),

@@ -77,6 +77,14 @@ const schema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(20),
 
   PAYSTACK_SECRET_KEY: z.string().optional(),
+
+  // Raven Atlas (getravenbank.com) — the collection accounts families pay
+  // school fees into. The secret key authenticates our calls to Raven; the
+  // webhook secret is what Raven echoes back so we know a notification is
+  // theirs. Both come from Atlas → Settings → Keys & Webhook.
+  RAVEN_SECRET_KEY: z.string().optional(),
+  RAVEN_WEBHOOK_SECRET: z.string().optional(),
+  RAVEN_BASE_URL: z.string().url().default('https://integrations.getravenbank.com/v1'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -161,6 +169,14 @@ export const env = {
   },
 
   paystack: { secretKey: raw.PAYSTACK_SECRET_KEY },
+
+  raven: {
+    secretKey: raw.RAVEN_SECRET_KEY,
+    webhookSecret: raw.RAVEN_WEBHOOK_SECRET,
+    baseUrl: raw.RAVEN_BASE_URL,
+    /** Without a secret key there is nothing to call Raven with. */
+    configured: Boolean(raw.RAVEN_SECRET_KEY),
+  },
 } as const;
 
 export type Env = typeof env;

@@ -4,7 +4,7 @@ import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import { FinanceEndpoints } from './finance.endpoints';
-import type { RecordPaymentInput } from './finance.endpoints';
+import type { CreatePaymentAccountInput, RecordPaymentInput } from './finance.endpoints';
 
 /**
  * What arrived, and who still owes.
@@ -41,6 +41,38 @@ export function useRecordPayment() {
         queryKey: queryKeys.students.ledger(schoolId, payment.studentId),
       });
       toast.success('Payment recorded', { description: payment.receiptNo ?? payment.reference });
+    },
+  });
+}
+
+/** The Raven account numbers issued for one student, newest first. */
+export function useStudentPaymentAccounts(studentId: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.finance.paymentAccounts(schoolId, studentId ?? ''),
+    queryFn: () => FinanceEndpoints.fetchStudentPaymentAccounts(studentId ?? ''),
+    enabled: Boolean(schoolId && studentId),
+  });
+}
+
+/**
+ * Asks Raven for an account number a family can pay into. Nothing here
+ * records money: the credit arrives through Raven's webhook and shows up in
+ * `usePayments` when it does.
+ */
+export function useCreatePaymentAccount() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CreatePaymentAccountInput) => FinanceEndpoints.createPaymentAccount(input),
+    onSuccess: (account) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.paymentAccounts(schoolId, account.studentId),
+      });
+      toast.success('Payment account ready', {
+        description: `${account.bankName} · ${account.accountNumber}`,
+      });
     },
   });
 }

@@ -32,6 +32,7 @@ import importsRoutes from './modules/imports/routes/imports.routes';
 import curriculumRoutes from './modules/curriculum/routes/curriculum.routes';
 import calendarRoutes from './modules/calendar/routes/calendar.routes';
 import financeRoutes from './modules/finance/routes/finance.routes';
+import publicPaymentsRoutes from './modules/finance/routes/publicPayments.routes';
 import assessmentRoutes from './modules/assessment/routes/assessment.routes';
 import behaviourRoutes from './modules/behaviour/routes/behaviour.routes';
 import disciplineRoutes from './modules/discipline/routes/discipline.routes';
@@ -79,10 +80,12 @@ export function createApp(): Express {
   app.use(env.apiPrefix, authRoutes);
   app.use(env.apiPrefix, schoolRoutes);
   // The unauthenticated writes: the school website's application form, keyed
-  // by the slug in its path, and a family's own "respond to this offer" link,
-  // keyed by nothing but its token — neither has a session to read a tenant
-  // from. Both carry their own rate limit.
+  // by the slug in its path; a family's own "respond to this offer" link,
+  // keyed by nothing but its token; and Raven's webhook, keyed by a shared
+  // secret and the account number it credited — none has a session to read a
+  // tenant from.
   app.use(env.apiPrefix, publicAdmissionsRoutes);
+  app.use(env.apiPrefix, publicPaymentsRoutes);
   app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
 
   const api = [

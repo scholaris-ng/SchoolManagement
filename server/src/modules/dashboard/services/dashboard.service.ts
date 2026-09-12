@@ -9,6 +9,7 @@ import { TermRepository } from '../../academics/repositories/term.repository';
 import { SessionRepository } from '../../academics/repositories/session.repository';
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
 import { AdmissionRepository } from '../../admissions/repositories/admission.repository';
+import { PaymentRepository } from '../../finance/repositories/payment.repository';
 import type {
   AdminDashboardDTO,
   BursarDashboardDTO,
@@ -52,6 +53,7 @@ export class DashboardService {
     private readonly terms = TermRepository.Instance,
     private readonly sessions = SessionRepository.Instance,
     private readonly admissions = AdmissionRepository.Instance,
+    private readonly payments = PaymentRepository.Instance,
   ) {}
 
   async fetchAdmin(context: RequestContext): Promise<AdminDashboardDTO> {
@@ -68,6 +70,7 @@ export class DashboardService {
       today,
       attendanceTrend,
       sessions,
+      feesCollected,
     ] = await Promise.all([
       this.schools.findById(schoolId),
       this.students.countActive(schoolId),
@@ -82,6 +85,7 @@ export class DashboardService {
         allowedIds: null,
       }),
       this.sessions.fetchForSchool(schoolId),
+      this.payments.sumCollected(schoolId),
     ]);
 
     if (!school) throw AppError.notFound('School');
@@ -112,9 +116,11 @@ export class DashboardService {
       attendanceMarkedClasses: today.markedClasses,
       totalClasses,
 
-      // Finance module: no fee, invoice or payment tables exist.
+      // Collected is real — every Raven credit lands in `payments`. Billed
+      // and outstanding wait on invoices: without a bill there is nothing to
+      // owe, and a collection rate with no denominator would be a made-up one.
       feesBilled: 0,
-      feesCollected: 0,
+      feesCollected,
       feesOutstanding: 0,
       collectionRate: 0,
 

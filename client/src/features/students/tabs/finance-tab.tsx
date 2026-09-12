@@ -5,6 +5,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useStudentLedger } from '../api';
+import { PaymentAccountsCard } from '@/features/finance/payment-accounts-card';
 import { StatCard } from '@/components/data/stat-card';
 import { Card } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/data/data-table';
@@ -83,14 +84,33 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
     [currency],
   );
 
-  if (ledger.isPending) return <LoadingState label="Loading fee history…" />;
-  if (ledger.isError) return <ErrorState error={ledger.error} onRetry={() => void ledger.refetch()} />;
+  // Collecting money works before the ledger does: a Raven account number
+  // can be issued and paid into whether or not the statement below can be
+  // drawn yet, so it sits above and outside the ledger's own loading states.
+  if (ledger.isPending) {
+    return (
+      <div className="space-y-6">
+        <PaymentAccountsCard studentId={studentId} currency={currency} />
+        <LoadingState label="Loading fee history…" />
+      </div>
+    );
+  }
+  if (ledger.isError) {
+    return (
+      <div className="space-y-6">
+        <PaymentAccountsCard studentId={studentId} currency={currency} />
+        <ErrorState error={ledger.error} onRetry={() => void ledger.refetch()} />
+      </div>
+    );
+  }
 
   const summary = ledger.data?.summary;
   const entries = ledger.data?.entries ?? [];
 
   return (
     <div className="space-y-6">
+      <PaymentAccountsCard studentId={studentId} currency={currency} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total billed" value={formatCurrency(summary?.totalBilled ?? 0, currency)} />
         <StatCard

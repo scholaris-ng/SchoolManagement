@@ -4,29 +4,35 @@ import { validate } from '../../../shared/middleware/validate.middleware';
 import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/unbuiltModule';
 import { FeeItemsController } from '../controllers/feeItems.controller';
 import { DiscountsController } from '../controllers/discounts.controller';
+import { PaymentsController } from '../controllers/payments.controller';
 import {
   createFeeItemSchema,
   fetchFeeItemsSchema,
   updateFeeItemSchema,
 } from '../validators/feeItems.schema';
 import { createDiscountSchema, updateDiscountSchema } from '../validators/discounts.schema';
+import {
+  createPaymentAccountSchema,
+  fetchPaymentsSchema,
+  studentIdParamSchema,
+} from '../validators/payments.schema';
 
 /**
- * The finance screens. Fee items and discounts are real; the ledger behind
- * them is not yet.
+ * The finance screens. Fee items, discounts and payments are real; invoices
+ * and structures are not yet.
  *
  * A fee item and a discount are both definitions — what the school charges
- * for, and what it might waive — so neither is money that has moved. Fee
- * items landed with bulk import, which had to have somewhere to put the rows;
- * discounts followed the same reasoning once that precedent existed.
- * Structures, invoices and payments still have no table and are served empty.
+ * for, and what it might waive — so neither is money that has moved. Payments
+ * are money that has: each row is a credit Raven confirmed, or (later) cash a
+ * member of staff took at the desk. Invoices — what a family *owes* — still
+ * have no table, so a payment is recorded against a student rather than
+ * allocated against a bill; the allocation comes when invoices do.
  *
- * Nothing else here writes. Raising an invoice, recording a payment and
- * reconciling one are the last things that should ever be stubbed: a fake
- * receipt is a claim that a family paid.
+ * Raising an invoice is the one write still not here, and it is not stubbed:
+ * a fake invoice is a claim that a family owes.
  *
- * Debtors is a derived list rather than a table — who owes what, from invoices
- * against payments — so it stays empty for as long as both of those do.
+ * Debtors is a derived list — who owes what, from invoices against payments —
+ * so it stays empty for as long as invoices do.
  */
 /** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
@@ -86,7 +92,31 @@ router.patch(
 
 router.get('/invoices', authorise('finance.read'), validate(placeholderListSchema), emptyPage);
 
-router.get('/payments', authorise('finance.read'), validate(placeholderListSchema), emptyPage);
+router.get(
+  '/payments',
+  authorise('finance.read', 'payment.manage'),
+  validate(fetchPaymentsSchema),
+  PaymentsController.fetchAll,
+);
+
+/**
+ * A bank account number, from Raven, for one student to pay one amount into.
+ * The credit that later lands on it arrives through the public webhook — see
+ * `publicPayments.routes.ts` — never through anything a browser posts.
+ */
+router.post(
+  '/payments/accounts',
+  authorise('payment.manage'),
+  validate(createPaymentAccountSchema),
+  PaymentsController.createAccount,
+);
+
+router.get(
+  '/students/:id/payment-accounts',
+  authorise('finance.read', 'payment.manage'),
+  validate(studentIdParamSchema),
+  PaymentsController.accountsForStudent,
+);
 
 router.get('/debtors', authorise('finance.read'), validate(placeholderListSchema), emptyPage);
 

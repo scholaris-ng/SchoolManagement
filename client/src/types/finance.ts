@@ -109,6 +109,29 @@ export interface Invoice {
   version: number;
 }
 
+/**
+ * A bank account number a family transfers school fees into, issued by a
+ * provider (Raven) for one student and one amount. Whatever lands on it is
+ * recorded as a `Payment` against that student automatically.
+ */
+export interface PaymentAccount {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  provider: 'RAVEN';
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  amount: number;
+  amountPaid: number;
+  isPermanent: boolean;
+  status: 'ACTIVE' | 'PAID' | 'CLOSED';
+  note?: string | null;
+  createdAt: string;
+}
+
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'ONLINE' | 'CHEQUE';
 export type PaymentStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED';
 
@@ -130,7 +153,7 @@ export interface Payment {
   guardianName?: string | null;
   amount: number;
   method: PaymentMethod;
-  provider?: 'PAYSTACK' | 'FLUTTERWAVE' | 'MANUAL' | null;
+  provider?: 'RAVEN' | 'PAYSTACK' | 'FLUTTERWAVE' | 'MANUAL' | null;
   status: PaymentStatus;
   paidAt: string;
   recordedByName?: string | null;

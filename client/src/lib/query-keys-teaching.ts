@@ -32,6 +32,8 @@ export const teachingKeys = {
     invoice: (schoolId: Scope, id: string) => scoped(schoolId, 'invoices', id),
     payments: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'payments', query ?? {}),
     payment: (schoolId: Scope, id: string) => scoped(schoolId, 'payments', id),
+    paymentAccounts: (schoolId: Scope, studentId: string) =>
+      scoped(schoolId, 'payment-accounts', studentId),
     receipt: (schoolId: Scope, paymentId: string) => scoped(schoolId, 'receipts', paymentId),
     debtors: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'debtors', query ?? {}),
   },

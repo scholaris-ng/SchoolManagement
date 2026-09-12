@@ -7,6 +7,7 @@
  */
 export type {
   CreateInvoiceInput,
+  CreatePaymentAccountInput,
   FinanceOverviewQuery,
   RecordPaymentInput,
 } from './finance.endpoints';
