@@ -159,10 +159,18 @@ export class AdmissionsService {
   /* -- Submitted from the public website ------------------------------------ */
 
   /**
-   * What the school publishes for its application form: the sessions open for
-   * applications and the levels a child may be applied to. Unauthenticated, so
-   * it carries names and ids and nothing else — no counts, no capacity, nothing
-   * that describes a child (spec section 41).
+   * What the school publishes for its application form: its sessions and
+   * levels, and whether it is currently taking applications at all.
+   * Unauthenticated, so it carries names and ids and nothing else — no
+   * counts, no capacity, nothing that describes a child (spec section 41).
+   *
+   * `open` and the two lists are independent facts, deliberately. A school
+   * pauses admissions for a term without deleting its sessions and classes —
+   * they are still the school's structure, and the moment it reopens, the
+   * form should show the real list immediately rather than an office having
+   * to rebuild it. So the lists are always the school's actual data; `open` is
+   * read separately by the form to decide whether a visitor may submit, or
+   * only see what applying will eventually ask for.
    */
   async publicOptions(slug: string): Promise<{
     open: boolean;
@@ -171,7 +179,6 @@ export class AdmissionsService {
   }> {
     const website = await this.websites.findPublishedBySlug(slug);
     if (!website) throw AppError.notFound('School');
-    if (!website.admissionsOpen) return { open: false, sessions: [], levels: [] };
 
     const [sessions, levels] = await Promise.all([
       AppDataSource.getRepository(AcademicSession).find({
@@ -185,7 +192,7 @@ export class AdmissionsService {
     ]);
 
     return {
-      open: true,
+      open: website.admissionsOpen,
       // A closed session is history; nobody may apply into it.
       sessions: sessions
         .filter((session) => session.status !== 'CLOSED')

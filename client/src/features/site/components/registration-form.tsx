@@ -40,8 +40,12 @@ import { ApplicationReceipt, ReviewStep } from './registration-review';
  * child's file and a fee liability, so it is created only when the school
  * enrols the child, after screening and acceptance.
  *
- * A school that has not published its sessions and classes falls back to the
- * mail handoff this form has always had, with the same wizard in front of it.
+ * The picklists in the schooling step show the school's real sessions and
+ * classes whenever it has any — that is a fact about the school's structure,
+ * independent of whether it happens to be taking applications this term. A
+ * school with no sessions or classes configured at all, or one that is
+ * currently closed to applications, falls back to the same mail handoff this
+ * form has always had, with the same wizard in front of it.
  */
 export function RegistrationSection() {
   const { content } = useSite();
@@ -105,12 +109,19 @@ function ApplicationForm() {
   const isLast = current === steps.length - 1;
 
   const options: PublicAdmissionOptions | null = admissions.data ?? null;
-  // Online submission needs the school to have published what it is taking
-  // applications for. Without that there is nothing valid to submit against,
-  // and the form hands the completed application to the office by email.
-  const canSubmitOnline = Boolean(
-    options?.open && options.sessions.length > 0 && options.levels.length > 0,
+  // Whether the picklists in `SchoolingStep` have real sessions and classes to
+  // offer is a fact about the school's own structure — it holds regardless of
+  // whether admissions happen to be open, so a school that pauses applications
+  // for a term does not lose its dropdowns the moment it flips that switch.
+  const hasStructuredOptions = Boolean(
+    options && options.sessions.length > 0 && options.levels.length > 0,
   );
+  // Submitting online is the separate, narrower question: the school must
+  // both have that structure AND currently be taking applications. The API
+  // refuses the write when it is closed, so there is nothing to gain by
+  // attempting it — the form falls back to the email handoff instead.
+  const canSubmitOnline = hasStructuredOptions && Boolean(options?.open);
+  const admissionsClosed = Boolean(options) && !options?.open;
 
   /** Checks only the fields this step put on screen — see `fieldsForStep`. */
   const goNext = async () => {
@@ -174,6 +185,14 @@ function ApplicationForm() {
           </li>
         ))}
       </ol>
+
+      {admissionsClosed && (
+        <p className="mb-5 rounded-lg border border-[var(--site-line)] bg-[var(--site-canvas)] p-3.5 text-xs leading-relaxed text-[var(--site-muted)]">
+          This school is not currently taking applications online. You are welcome to prepare this
+          one anyway — submitting it will open your email so you can send it straight to the
+          office.
+        </p>
+      )}
 
       <div>
         <h3 className="text-lg text-[var(--site-ink)]">{step.legend}</h3>
@@ -266,7 +285,9 @@ function ApplicationForm() {
 }
 
 /**
- * The fallback for a school that has not published what it is admitting into.
+ * The fallback for whenever `canSubmitOnline` is false — a school with no
+ * sessions or classes configured, or one that is not currently open to
+ * applications.
  *
  * The same completed application, laid out as text for whoever reads the
  * office inbox. It is worth keeping rather than refusing the visitor: a family
