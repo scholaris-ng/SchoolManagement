@@ -401,6 +401,72 @@ export async function sendPasswordResetEmail(params: {
 }
 
 /**
+ * Recipient: the primary contact on a public application. Trigger: a
+ * successful `POST /public/schools/:slug/applications`. Tone: transactional —
+ * no emoji.
+ *
+ * The reference numbers are the point of this email, same as the receipt
+ * shown on screen the moment they submit. That screen is easy to lose — a
+ * closed tab, a phone that was borrowed to fill the form in — and the school
+ * will ask for these numbers on every call about the application afterwards.
+ * One email covers every child on the submission, because that is how a
+ * parent filing for three of them experiences it: one trip to the form, one
+ * moment of "it's done".
+ */
+export async function sendApplicationReceivedEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  applications: { applicationNo: string; applicantName: string; className: string }[];
+  contactEmail: string;
+}): Promise<void> {
+  const { to, firstName, schoolName, applications, contactEmail } = params;
+  const many = applications.length > 1;
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+
+  const body = [
+    heading(many ? 'Applications received' : 'Application received'),
+    paragraph(
+      `Hello ${name}, <strong>${school}</strong> has received ${many ? 'these applications' : 'this application'}. Keep ${many ? 'these references' : 'this reference'} — you will be asked for ${many ? 'them' : 'it'} whenever you call about the application.`,
+    ),
+    infoBox(
+      applications.map((application) => [
+        escapeHtml(application.applicantName),
+        `${escapeHtml(application.applicationNo)} · ${escapeHtml(application.className)}`,
+      ]),
+    ),
+    paragraph(
+      'What happens next: the admissions office reviews the application and will contact you about screening. Nobody is admitted, and no parent account is created, until a place has been offered and accepted.',
+    ),
+    footnote(`Questions in the meantime? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    subject: `${many ? 'Applications' : 'Application'} received — ${schoolName} — Scholaris`,
+    html: emailLayout(body, `Your application reference${many ? 's are' : ' is'} inside.`),
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `${schoolName} has received ${many ? 'these applications' : 'this application'}:`,
+      '',
+      ...applications.map(
+        (application) =>
+          `${application.applicantName} — ${application.applicationNo} (${application.className})`,
+      ),
+      '',
+      `Keep ${many ? 'these references' : 'this reference'} — you will be asked for ${many ? 'them' : 'it'} whenever you call about the application.`,
+      '',
+      'What happens next: the admissions office reviews the application and will contact you about screening.',
+      'Nobody is admitted, and no parent account is created, until a place has been offered and accepted.',
+      '',
+      `Questions in the meantime? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}
+
+/**
  * Recipient: a newly hired member of staff. Trigger: `POST /staff`, once the
  * account behind their new record exists. Tone: transactional — no emoji.
  *

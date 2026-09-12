@@ -90,6 +90,8 @@ export interface AdmissionApplication {
   sessionName: string;
   levelId: string;
   levelName: string;
+  desiredClassId: string | null;
+  desiredClassName: string | null;
   applicantType: ApplicantType;
   source: ApplicationSource;
   applicant: AdmissionApplicant;
@@ -132,12 +134,12 @@ export interface AdmissionFunnel {
 export interface PublicAdmissionOptions {
   open: boolean;
   sessions: { id: string; name: string; isCurrent: boolean }[];
-  levels: { id: string; name: string }[];
+  classes: { id: string; name: string; levelName: string }[];
 }
 
 /** What a family is told once their application has been received. */
 export interface PublicApplicationReceipt {
   submittedAt: string;
-  applications: { applicationNo: string; applicantName: string; levelName: string }[];
+  applications: { applicationNo: string; applicantName: string; className: string }[];
   contactEmail: string;
 }

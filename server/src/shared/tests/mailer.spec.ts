@@ -1,5 +1,6 @@
 import {
   escapeHtml,
+  sendApplicationReceivedEmail,
   sendPasswordResetEmail,
   sendSchoolReadyEmail,
   sendStaffAccountEmail,
@@ -161,6 +162,44 @@ describe('sendPasswordResetEmail', () => {
 
     await sendPasswordResetEmail({ ...reset, expiresInHours: 6 });
     expect(lastSend().text).toContain('expires in 6 hours');
+  });
+});
+
+describe('sendApplicationReceivedEmail', () => {
+  it('carries every reference on the submission, not just the first', async () => {
+    await sendApplicationReceivedEmail({
+      to: 'ngozi@example.test',
+      firstName: 'Ngozi',
+      schoolName: 'Brightfield Academy',
+      applications: [
+        { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', className: 'Primary 1' },
+        { applicationNo: 'APP/2026-2027/0002', applicantName: 'Chidi Okafor', className: 'JSS 1' },
+      ],
+      contactEmail: 'office@brightfield.test',
+    });
+
+    const { html, subject } = lastSend();
+    expect(subject).toBe('Applications received — Brightfield Academy — Scholaris');
+    expect(html).toContain('APP/2026-2027/0001');
+    expect(html).toContain('APP/2026-2027/0002');
+    expect(html).toContain('Primary 1');
+    expect(html).toContain('JSS 1');
+  });
+
+  it('reads as one application, not several, when there is only one', async () => {
+    await sendApplicationReceivedEmail({
+      to: 'ngozi@example.test',
+      firstName: 'Ngozi',
+      schoolName: 'Brightfield Academy',
+      applications: [
+        { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', className: 'Primary 1' },
+      ],
+      contactEmail: 'office@brightfield.test',
+    });
+
+    const { html, subject } = lastSend();
+    expect(subject).toBe('Application received — Brightfield Academy — Scholaris');
+    expect(html).not.toContain('Applications received');
   });
 });
 

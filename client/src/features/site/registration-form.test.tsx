@@ -15,12 +15,12 @@ import type { PublicAdmissionOptions } from '@/types/admissions';
  */
 
 const SESSION_ID = '11111111-2222-4333-8444-555555555555';
-const LEVEL_ID = '22222222-3333-4444-8555-666666666666';
+const CLASS_ID = '22222222-3333-4444-8555-666666666666';
 
 const options: PublicAdmissionOptions = {
   open: true,
   sessions: [{ id: SESSION_ID, name: '2026/2027', isCurrent: true }],
-  levels: [{ id: LEVEL_ID, name: 'JSS 1' }],
+  classes: [{ id: CLASS_ID, name: 'JSS 1', levelName: 'Junior Secondary' }],
 };
 
 const submitApplication = vi.fn();
@@ -63,7 +63,7 @@ describe('public application form', () => {
     submitApplication.mockResolvedValue({
       submittedAt: '2026-09-12T10:00:00.000Z',
       applications: [
-        { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', levelName: 'JSS 1' },
+        { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', className: 'JSS 1' },
       ],
       contactEmail: 'office@brightfield.test',
     });
@@ -125,7 +125,7 @@ describe('public application form', () => {
     await user.click(screen.getByRole('button', { name: /Next/i }));
 
     await user.selectOptions(screen.getByLabelText(/Academic session/i), SESSION_ID);
-    await user.selectOptions(screen.getByLabelText(/Class applying into/i), LEVEL_ID);
+    await user.selectOptions(screen.getByLabelText(/Class applying into/i), CLASS_ID);
     await user.click(screen.getByRole('button', { name: /Next/i }));
 
     await user.click(screen.getByRole('checkbox'));
@@ -136,7 +136,7 @@ describe('public application form', () => {
     expect(payload.applicantType).toBe('GUARDIAN');
     expect(payload.sessionId).toBe(SESSION_ID);
     expect(payload.applicants).toHaveLength(1);
-    expect(payload.applicants[0]).toMatchObject({ firstName: 'Amara', levelId: LEVEL_ID });
+    expect(payload.applicants[0]).toMatchObject({ firstName: 'Amara', classId: CLASS_ID });
     // The people on the form travel as contacts. Nothing here asks the API to
     // create a guardian, and nothing on the server does until enrolment.
     expect(payload.contacts[0]).toMatchObject({ email: 'ngozi@example.com', isPrimaryContact: true });

@@ -5,8 +5,8 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
+import { sendApplicationReceivedEmail } from '../../../shared/utils/mailer';
 import { AcademicSession } from '../../academics/entities/academicSession.entity';
-import { SchoolLevel } from '../../academics/entities/schoolLevel.entity';
 import { SchoolClass } from '../../academics/entities/schoolClass.entity';
 import { Student } from '../../students/entities/student.entity';
 import { StudentEnrollment } from '../../students/entities/studentEnrollment.entity';
@@ -44,16 +44,22 @@ function nullIfBlank(value: string | null | undefined): string | null {
 }
 
 /**
- * The order an application may move through (spec section 10), and the same
- * map the client offers as buttons. Enforced here because the client's copy is
- * only ever UX: a request that skips screening and offers a place directly is
- * refused whatever the caller's screen showed them.
+ * The order an application may move through (spec section 10 as amended), and
+ * the same map the client offers as buttons.
+ *
+ * Screening and shortlisting are steps a school may choose to skip — a
+ * headmaster admitting on the spot, a sibling of an existing pupil, a place
+ * agreed over the phone before the form was even filed — so every pre-decision
+ * stage can already reach every decision (`OFFERED`, `ACCEPTED`, `REJECTED`),
+ * not only the next one in line. `transition` still enforces this map itself
+ * rather than trusting the caller's screen: what it refuses is moving
+ * backward, or past a decision that has already been made.
  */
 const ALLOWED_NEXT: Record<ApplicationStatus, ApplicationStatus[]> = {
   DRAFT: ['SUBMITTED', 'WITHDRAWN'],
-  SUBMITTED: ['SCREENING', 'REJECTED', 'WITHDRAWN'],
-  SCREENING: ['SHORTLISTED', 'REJECTED', 'WITHDRAWN'],
-  SHORTLISTED: ['OFFERED', 'REJECTED', 'WITHDRAWN'],
+  SUBMITTED: ['SCREENING', 'OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+  SCREENING: ['SHORTLISTED', 'OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+  SHORTLISTED: ['OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
   OFFERED: ['ACCEPTED', 'REJECTED', 'WITHDRAWN'],
   ACCEPTED: [],
   REJECTED: [],
@@ -102,10 +108,10 @@ export class AdmissionsService {
     context: RequestContext,
     input: CreateAdmissionInput,
   ): Promise<AdmissionApplicationDTO> {
-    const { session, level } = await this.requireSessionAndLevel(
+    const { session, schoolClass } = await this.requireSessionAndClass(
       context.schoolId,
       input.sessionId,
-      input.levelId,
+      input.classId,
     );
 
     const duplicate = await this.applications.findDuplicate(context.schoolId, session.id, {
@@ -124,7 +130,8 @@ export class AdmissionsService {
         schoolId: context.schoolId,
         sessionId: session.id,
         sessionName: session.name,
-        levelId: level.id,
+        levelId: schoolClass.levelId,
+        desiredClassId: schoolClass.id,
         applicantType: input.applicantType,
         source: 'OFFICE',
         applicant: input.applicant,
@@ -148,7 +155,7 @@ export class AdmissionsService {
       entityLabel: created.applicationNo,
       after: {
         applicant: `${created.firstName} ${created.lastName}`,
-        level: level.name,
+        class: schoolClass.name,
         session: session.name,
       },
     });
@@ -160,9 +167,15 @@ export class AdmissionsService {
 
   /**
    * What the school publishes for its application form: its sessions and
-   * levels, and whether it is currently taking applications at all.
+   * classes, and whether it is currently taking applications at all.
    * Unauthenticated, so it carries names and ids and nothing else — no
    * counts, no capacity, nothing that describes a child (spec section 41).
+   *
+   * Classes, not levels: a level is the rung a school's structure rolls up
+   * under, which for a school that groups broadly ("Junior", "Senior") is
+   * nowhere near specific enough for a parent to say which grade their child
+   * is applying into. `school_classes` is where "Primary 1" and "SS 1"
+   * actually live, whatever a given school calls its levels.
    *
    * `open` and the two lists are independent facts, deliberately. A school
    * pauses admissions for a term without deleting its sessions and classes —
@@ -175,20 +188,24 @@ export class AdmissionsService {
   async publicOptions(slug: string): Promise<{
     open: boolean;
     sessions: { id: string; name: string; isCurrent: boolean }[];
-    levels: { id: string; name: string }[];
+    classes: { id: string; name: string; levelName: string }[];
   }> {
     const website = await this.websites.findPublishedBySlug(slug);
     if (!website) throw AppError.notFound('School');
 
-    const [sessions, levels] = await Promise.all([
+    const [sessions, classes] = await Promise.all([
       AppDataSource.getRepository(AcademicSession).find({
         where: { schoolId: website.schoolId },
         order: { startDate: 'DESC' },
       }),
-      AppDataSource.getRepository(SchoolLevel).find({
-        where: { schoolId: website.schoolId },
-        order: { sequence: 'ASC' },
-      }),
+      AppDataSource.getRepository(SchoolClass)
+        .createQueryBuilder('c')
+        .leftJoinAndSelect('c.level', 'level')
+        .where('c.schoolId = :schoolId', { schoolId: website.schoolId })
+        .andWhere('c.isActive = true')
+        .orderBy('level.sequence', 'ASC')
+        .addOrderBy('c.name', 'ASC')
+        .getMany(),
     ]);
 
     return {
@@ -197,7 +214,11 @@ export class AdmissionsService {
       sessions: sessions
         .filter((session) => session.status !== 'CLOSED')
         .map((session) => ({ id: session.id, name: session.name, isCurrent: session.isCurrent })),
-      levels: levels.map((level) => ({ id: level.id, name: level.name })),
+      classes: classes.map((schoolClass) => ({
+        id: schoolClass.id,
+        name: schoolClass.name,
+        levelName: schoolClass.level?.name ?? '',
+      })),
     };
   }
 
@@ -229,9 +250,9 @@ export class AdmissionsService {
     if (!school) throw AppError.notFound('School');
 
     const session = await this.requireSession(schoolId, input.sessionId);
-    const levels = await this.requireLevels(
+    const classes = await this.requireClasses(
       schoolId,
-      input.applicants.map((applicant) => applicant.levelId),
+      input.applicants.map((applicant) => applicant.classId),
     );
 
     const contacts = this.normaliseContacts(input.contacts);
@@ -266,11 +287,13 @@ export class AdmissionsService {
       const rows: AdmissionApplication[] = [];
 
       for (const applicant of input.applicants) {
+        const schoolClass = classes.get(applicant.classId)!;
         const application = await this.insertApplication(manager, {
           schoolId,
           sessionId: session.id,
           sessionName: session.name,
-          levelId: applicant.levelId,
+          levelId: schoolClass.levelId,
+          desiredClassId: schoolClass.id,
           applicantType: input.applicantType,
           source: 'WEBSITE',
           applicant,
@@ -321,7 +344,7 @@ export class AdmissionsService {
         created.length === 1 ? 'New application from the website' : 'New applications from the website',
       body:
         created.length === 1
-          ? `${created[0].firstName} ${created[0].lastName} applied for ${levels.get(created[0].levelId)?.name ?? 'a place'} (${created[0].applicationNo}).`
+          ? `${created[0].firstName} ${created[0].lastName} applied for ${classes.get(created[0].desiredClassId ?? '')?.name ?? 'a place'} (${created[0].applicationNo}).`
           : `${primary.firstName} ${primary.lastName} applied for ${created.length} children (${created.map((row) => row.applicationNo).join(', ')}).`,
       actionUrl: `/admissions/${created[0].id}`,
       severity: 'INFO',
@@ -329,14 +352,28 @@ export class AdmissionsService {
       entityId: created[0].id,
     });
 
+    const contactEmail = website.contactEmail || school.email;
+    const applications = created.map((row) => ({
+      applicationNo: row.applicationNo,
+      applicantName: [row.firstName, row.lastName].filter(Boolean).join(' '),
+      className: classes.get(row.desiredClassId ?? '')?.name ?? '',
+    }));
+
+    // The on-screen receipt is easy to lose — a closed tab, a form filled in
+    // on a borrowed phone — and a bounced confirmation must never undo a
+    // submission that has already been recorded.
+    void sendApplicationReceivedEmail({
+      to: primary.email,
+      firstName: primary.firstName,
+      schoolName: school.name,
+      applications,
+      contactEmail,
+    });
+
     return {
       submittedAt: submittedAt.toISOString(),
-      applications: created.map((row) => ({
-        applicationNo: row.applicationNo,
-        applicantName: [row.firstName, row.lastName].filter(Boolean).join(' '),
-        levelName: levels.get(row.levelId)?.name ?? '',
-      })),
-      contactEmail: website.contactEmail || school.email,
+      applications,
+      contactEmail,
     };
   }
 
@@ -369,12 +406,21 @@ export class AdmissionsService {
       throw AppError.forbidden('Deciding on a place is not yours to do.');
     }
 
+    // A class is required wherever a place is being decided and none has been
+    // recorded yet. Ordinarily that is only `OFFERED` — but an application
+    // admitted straight from submission, with screening waived entirely,
+    // reaches `ACCEPTED` having never gone through that step, and needs the
+    // same answer for the same reason: nothing else would have captured it.
     let offeredClass: SchoolClass | null = null;
-    if (input.status === 'OFFERED') {
+    const needsClass =
+      input.status === 'OFFERED' || (input.status === 'ACCEPTED' && !application.offeredClassId);
+    if (needsClass) {
       if (!input.offeredClassId) {
-        throw AppError.validation('Choose the class being offered.', [
-          { field: 'offeredClassId', message: 'Choose the class being offered.' },
-        ]);
+        const message =
+          input.status === 'OFFERED'
+            ? 'Choose the class being offered.'
+            : 'Choose the class they are being admitted into.';
+        throw AppError.validation(message, [{ field: 'offeredClassId', message }]);
       }
       offeredClass = await AppDataSource.getRepository(SchoolClass).findOne({
         where: { id: input.offeredClassId, schoolId: context.schoolId },
@@ -622,6 +668,7 @@ export class AdmissionsService {
       sessionId: string;
       sessionName: string;
       levelId: string;
+      desiredClassId: string;
       applicantType: 'GUARDIAN' | 'SELF';
       source: 'OFFICE' | 'WEBSITE';
       applicant: ApplicantInput;
@@ -645,6 +692,7 @@ export class AdmissionsService {
         sequence,
         sessionId: params.sessionId,
         levelId: params.levelId,
+        desiredClassId: params.desiredClassId,
         applicantType: params.applicantType,
         source: params.source,
         firstName: params.applicant.firstName,
@@ -793,30 +841,30 @@ export class AdmissionsService {
     return session;
   }
 
-  private async requireSessionAndLevel(
+  private async requireSessionAndClass(
     schoolId: string,
     sessionId: string,
-    levelId: string,
-  ): Promise<{ session: AcademicSession; level: SchoolLevel }> {
-    const [session, level] = await Promise.all([
+    classId: string,
+  ): Promise<{ session: AcademicSession; schoolClass: SchoolClass }> {
+    const [session, schoolClass] = await Promise.all([
       this.requireSession(schoolId, sessionId),
-      AppDataSource.getRepository(SchoolLevel).findOne({ where: { id: levelId, schoolId } }),
+      AppDataSource.getRepository(SchoolClass).findOne({ where: { id: classId, schoolId } }),
     ]);
-    if (!level) throw AppError.notFound('Level');
-    return { session, level };
+    if (!schoolClass) throw AppError.notFound('Class');
+    return { session, schoolClass };
   }
 
-  /** Every level named in one submission, checked as belonging to this school. */
-  private async requireLevels(
+  /** Every class named in one submission, checked as belonging to this school. */
+  private async requireClasses(
     schoolId: string,
-    levelIds: string[],
-  ): Promise<Map<string, SchoolLevel>> {
-    const wanted = [...new Set(levelIds)];
-    const levels = await AppDataSource.getRepository(SchoolLevel).find({ where: { schoolId } });
-    const byId = new Map(levels.map((level) => [level.id, level]));
+    classIds: string[],
+  ): Promise<Map<string, SchoolClass>> {
+    const wanted = [...new Set(classIds)];
+    const classes = await AppDataSource.getRepository(SchoolClass).find({ where: { schoolId } });
+    const byId = new Map(classes.map((schoolClass) => [schoolClass.id, schoolClass]));
 
     for (const id of wanted) {
-      if (!byId.has(id)) throw AppError.notFound('Level');
+      if (!byId.has(id)) throw AppError.notFound('Class');
     }
     return byId;
   }

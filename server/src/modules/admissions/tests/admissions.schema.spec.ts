@@ -5,7 +5,7 @@ import {
 } from '../validators/admissions.schema';
 
 const SESSION_ID = '11111111-2222-4333-8444-555555555555';
-const LEVEL_ID = '22222222-3333-4444-8555-666666666666';
+const CLASS_ID = '22222222-3333-4444-8555-666666666666';
 const APPLICATION_ID = '33333333-4444-4555-8666-777777777777';
 
 const applicant = {
@@ -30,7 +30,7 @@ describe('createAdmissionSchema', () => {
   const valid = {
     applicantType: 'GUARDIAN' as const,
     sessionId: SESSION_ID,
-    levelId: LEVEL_ID,
+    classId: CLASS_ID,
     applicant,
     contacts: [contact],
   };
@@ -67,7 +67,7 @@ describe('publicApplicationSchema', () => {
   const valid = {
     applicantType: 'GUARDIAN' as const,
     sessionId: SESSION_ID,
-    applicants: [{ ...applicant, levelId: LEVEL_ID }],
+    applicants: [{ ...applicant, classId: CLASS_ID }],
     contacts: [contact],
     consentGiven: true,
   };
@@ -78,8 +78,8 @@ describe('publicApplicationSchema', () => {
         {
           ...valid,
           applicants: [
-            { ...applicant, levelId: LEVEL_ID },
-            { ...applicant, firstName: 'Chidi', levelId: LEVEL_ID },
+            { ...applicant, classId: CLASS_ID },
+            { ...applicant, firstName: 'Chidi', classId: CLASS_ID },
           ],
         },
         params,
@@ -95,17 +95,17 @@ describe('publicApplicationSchema', () => {
   });
 
   it('caps how many applicants one submission may carry', () => {
-    const many = Array.from({ length: 7 }, () => ({ ...applicant, levelId: LEVEL_ID }));
+    const many = Array.from({ length: 7 }, () => ({ ...applicant, classId: CLASS_ID }));
     expect(
       publicApplicationSchema.safeParse(wrap({ ...valid, applicants: many }, params)).success,
     ).toBe(false);
   });
 
-  it('refuses a level that is not a real reference', () => {
-    // The form sends the school's own level ids. Free text here would mean an
+  it('refuses a class that is not a real reference', () => {
+    // The form sends the school's own class ids. Free text here would mean an
     // application nobody can screen, filed against a class that may not exist.
     const result = publicApplicationSchema.safeParse(
-      wrap({ ...valid, applicants: [{ ...applicant, levelId: 'JSS 1' }] }, params),
+      wrap({ ...valid, applicants: [{ ...applicant, classId: 'JSS 1' }] }, params),
     );
     expect(result.success).toBe(false);
   });

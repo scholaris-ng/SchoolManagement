@@ -44,12 +44,19 @@ import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
 import { Field } from './admission-detail-page-parts';
 
-/** Which statuses may follow the current one, in the order staff work through. */
+/**
+ * Which statuses may follow the current one, in the order staff work through
+ * — mirrors `ALLOWED_NEXT` on the server (spec section 10 as amended).
+ *
+ * Screening and shortlisting are steps a school may choose to skip rather
+ * than a fixed sequence, so every pre-decision stage offers every decision
+ * (`OFFERED`, `ACCEPTED`, `REJECTED`) as a button, not only the next one.
+ */
 const NEXT_STATUSES: Record<ApplicationStatus, ApplicationStatus[]> = {
   DRAFT: ['SUBMITTED', 'WITHDRAWN'],
-  SUBMITTED: ['SCREENING', 'REJECTED', 'WITHDRAWN'],
-  SCREENING: ['SHORTLISTED', 'REJECTED', 'WITHDRAWN'],
-  SHORTLISTED: ['OFFERED', 'REJECTED', 'WITHDRAWN'],
+  SUBMITTED: ['SCREENING', 'OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+  SCREENING: ['SHORTLISTED', 'OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+  SHORTLISTED: ['OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
   OFFERED: ['ACCEPTED', 'REJECTED', 'WITHDRAWN'],
   ACCEPTED: [],
   REJECTED: [],
@@ -66,6 +73,17 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
   REJECTED: 'Reject',
   WITHDRAWN: 'Mark withdrawn',
 };
+
+/**
+ * `STATUS_LABEL` reads correctly once an offer is already on record — but
+ * jumping straight to `ACCEPTED` from anywhere earlier is a school waiving
+ * screening and admitting on the spot, not "recording" an acceptance that
+ * never happened, so that jump gets its own wording.
+ */
+function labelFor(from: ApplicationStatus, to: ApplicationStatus): string {
+  if (to === 'ACCEPTED' && from !== 'OFFERED') return 'Admit without screening';
+  return STATUS_LABEL[to];
+}
 
 export function AdmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -104,11 +122,20 @@ export function AdmissionDetailPage() {
     .filter(Boolean)
     .join(' ');
 
+  // A class is needed wherever a place is being decided and none is on record
+  // yet — ordinarily only when offering one, but also when a school waives
+  // screening and admits straight from submission, since that skips the step
+  // that would otherwise have captured it.
+  const needsClassChoice = (status: ApplicationStatus | null) =>
+    status === 'OFFERED' || (status === 'ACCEPTED' && !record.offeredClassId);
+
   const openTransition = (status: ApplicationStatus) => {
     setPendingStatus(status);
     setNote('');
     setScreeningScore(record.screeningScore != null ? String(record.screeningScore) : '');
-    setOfferedClassId(record.offeredClassId ?? '');
+    // Default to whatever was already offered, or failing that the class the
+    // applicant themselves asked for — staff can still pick a different one.
+    setOfferedClassId(record.offeredClassId ?? record.desiredClassId ?? '');
   };
 
   const submitTransition = async () => {
@@ -122,7 +149,7 @@ export function AdmissionDetailPage() {
             ? Number(screeningScore)
             : undefined
           : undefined,
-      offeredClassId: pendingStatus === 'OFFERED' ? offeredClassId || undefined : undefined,
+      offeredClassId: needsClassChoice(pendingStatus) ? offeredClassId || undefined : undefined,
     });
     setPendingStatus(null);
   };
@@ -134,7 +161,7 @@ export function AdmissionDetailPage() {
     <PageContainer>
       <PageHeader
         title={applicantName}
-        description={`Applying for ${record.levelName} · ${record.sessionName}`}
+        description={`Applying for ${record.desiredClassName ?? record.levelName} · ${record.sessionName}`}
         breadcrumbs={[
           { label: 'Admissions', to: '/admissions' },
           { label: record.applicationNo },
@@ -168,7 +195,7 @@ export function AdmissionDetailPage() {
                   onClick={() => openTransition(status)}
                 >
                   {status === 'REJECTED' ? <X /> : <Check />}
-                  {STATUS_LABEL[status]}
+                  {labelFor(record.status, status)}
                 </Button>
               ))}
             {/* Enrolling creates the pupil and, with them, the guardian records
@@ -403,7 +430,7 @@ export function AdmissionDetailPage() {
       <Dialog open={pendingStatus !== null} onOpenChange={(open) => !open && setPendingStatus(null)}>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>{pendingStatus ? STATUS_LABEL[pendingStatus] : ''}</DialogTitle>
+            <DialogTitle>{pendingStatus ? labelFor(record.status, pendingStatus) : ''}</DialogTitle>
             <DialogDescription>
               This is recorded against the application with your name and the time, and the family
               is notified where the school has enabled it.
@@ -427,10 +454,12 @@ export function AdmissionDetailPage() {
               </div>
             )}
 
-            {pendingStatus === 'OFFERED' && (
+            {needsClassChoice(pendingStatus) && (
               <div className="space-y-1.5">
                 <Label htmlFor="offered-class" required>
-                  Class being offered
+                  {pendingStatus === 'OFFERED'
+                    ? 'Class being offered'
+                    : 'Class they are being admitted into'}
                 </Label>
                 <NativeSelect
                   data-cy="offered-class"
@@ -469,7 +498,7 @@ export function AdmissionDetailPage() {
               data-cy="admissions-admission-detail-confirm"
               onClick={() => void submitTransition()}
               loading={transition.isPending}
-              disabled={pendingStatus === 'OFFERED' && !offeredClassId}
+              disabled={needsClassChoice(pendingStatus) && !offeredClassId}
             >
               Confirm
             </Button>

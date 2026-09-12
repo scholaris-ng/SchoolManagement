@@ -17,7 +17,7 @@ import {
  */
 
 export const siteApplicantSchema = applicantSchema.extend({
-  levelId: z.string().min(1, 'Choose the class being applied for'),
+  classId: z.string().min(1, 'Choose the class being applied for'),
 });
 
 export const siteApplicationSchema = z
@@ -64,7 +64,7 @@ export const emptySiteApplicant: SiteApplicantValues = {
   lastName: '',
   gender: 'MALE',
   dateOfBirth: '',
-  levelId: '',
+  classId: '',
   nationality: '',
   stateOfOrigin: '',
   address: '',
@@ -187,30 +187,27 @@ export function fieldsForStep(
       return ['applicantType'];
 
     case 'applicants':
-      return perApplicant(
-        applicantType === 'SELF'
-          ? [
-              'firstName',
-              'middleName',
-              'lastName',
-              'gender',
-              'dateOfBirth',
-              'email',
-              'phone',
-              'address',
-              'city',
-              'state',
-              'nationality',
-              'stateOfOrigin',
-            ]
-          : ['firstName', 'middleName', 'lastName', 'gender', 'dateOfBirth'],
-      );
+      return perApplicant([
+        'firstName',
+        'middleName',
+        'lastName',
+        'gender',
+        'dateOfBirth',
+        'address',
+        'city',
+        'state',
+        'nationality',
+        'stateOfOrigin',
+        // Only somebody applying for themselves is written to directly — see
+        // `ApplicantsStep`.
+        ...(applicantType === 'SELF' ? ['email', 'phone'] : []),
+      ]);
 
     case 'schooling':
       return [
         'sessionId',
         ...perApplicant([
-          'levelId',
+          'classId',
           'previousSchool',
           'previousClass',
           'bloodGroup',

@@ -4,8 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
-import { NIGERIA_STATE_OPTIONS, citiesOfNigeriaState } from '@/lib/demographics';
-import { useLevelOptions, useSessionOptions } from '@/features/academics/api';
+import {
+  BLOOD_GROUP_OPTIONS,
+  NATIONALITY_OPTIONS,
+  NIGERIA_STATE_OPTIONS,
+  citiesOfNigeriaState,
+  statesOfNationality,
+} from '@/lib/demographics';
+import { useClassOptions, useSessionOptions } from '@/features/academics/api';
 import { useCreateAdmission } from './api';
 import {
   GENDER_OPTIONS,
@@ -68,14 +74,14 @@ export function AdmissionFormPage() {
   const navigate = useNavigate();
   const createAdmission = useCreateAdmission();
   const sessionOptions = useSessionOptions();
-  const levelOptions = useLevelOptions();
+  const classOptions = useClassOptions();
 
   const form = useForm<AdmissionFormValues>({
     resolver: zodResolver(admissionFormSchema),
     defaultValues: {
       applicantType: 'GUARDIAN',
       sessionId: '',
-      levelId: '',
+      classId: '',
       applicant: {
         firstName: '',
         middleName: '',
@@ -83,7 +89,7 @@ export function AdmissionFormPage() {
         gender: 'MALE',
         dateOfBirth: '',
         photoUrl: null,
-        nationality: 'Nigerian',
+        nationality: 'Nigeria',
         stateOfOrigin: '',
         address: '',
         city: '',
@@ -108,6 +114,8 @@ export function AdmissionFormPage() {
   // by index stays live as rows are added, removed or edited.
   const applicantState = useWatch({ control: form.control, name: 'applicant.state' });
   const applicantCityOptions = citiesOfNigeriaState(applicantState);
+  const applicantNationality = useWatch({ control: form.control, name: 'applicant.nationality' });
+  const applicantStateOfOriginOptions = statesOfNationality(applicantNationality);
   const watchedContacts = useWatch({ control: form.control, name: 'contacts' });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -167,11 +175,11 @@ export function AdmissionFormPage() {
               />
               <SelectField
                 control={form.control}
-                name="levelId"
-                label="Level"
+                name="classId"
+                label="Class"
                 required
-                options={levelOptions}
-                placeholder="Select a level"
+                options={classOptions}
+                placeholder="Select a class"
                 native
               />
             </FormSection>
@@ -211,12 +219,38 @@ export function AdmissionFormPage() {
                 label="Previous class"
                 description="The class they are leaving, where they have been in school before."
               />
-              <TextField control={form.control} name="applicant.nationality" label="Nationality" />
-              <TextField
+              <SelectField
                 control={form.control}
-                name="applicant.stateOfOrigin"
-                label="State of origin"
+                name="applicant.nationality"
+                label="Nationality"
+                options={NATIONALITY_OPTIONS}
+                placeholder="Select a nationality"
+                native
+                // The state list below belongs to this country, so the old
+                // state cannot stand once it changes.
+                onValueChange={() =>
+                  form.setValue('applicant.stateOfOrigin', '', { shouldDirty: true })
+                }
               />
+              {applicantStateOfOriginOptions.length > 0 ? (
+                <SelectField
+                  control={form.control}
+                  name="applicant.stateOfOrigin"
+                  label="State of origin"
+                  options={applicantStateOfOriginOptions}
+                  placeholder="Select a state"
+                  native
+                />
+              ) : (
+                <TextField
+                  control={form.control}
+                  name="applicant.stateOfOrigin"
+                  label="State of origin"
+                  hint={
+                    !applicantNationality ? 'Pick a nationality to choose from a list.' : undefined
+                  }
+                />
+              )}
               <TextareaField
                 control={form.control}
                 name="applicant.address"
@@ -252,7 +286,14 @@ export function AdmissionFormPage() {
                   hint={!applicantState ? 'Pick a state to choose from a list.' : undefined}
                 />
               )}
-              <TextField control={form.control} name="applicant.bloodGroup" label="Blood group" />
+              <SelectField
+                control={form.control}
+                name="applicant.bloodGroup"
+                label="Blood group"
+                options={BLOOD_GROUP_OPTIONS}
+                placeholder="Select a blood group"
+                native
+              />
               <TextareaField
                 control={form.control}
                 name="applicant.medicalNotes"

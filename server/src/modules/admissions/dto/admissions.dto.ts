@@ -51,6 +51,8 @@ export interface AdmissionApplicationDTO {
   sessionName: string;
   levelId: string;
   levelName: string;
+  desiredClassId: string | null;
+  desiredClassName: string | null;
   applicantType: ApplicantType;
   source: ApplicationSource;
   applicant: AdmissionApplicantDTO;
@@ -88,7 +90,7 @@ export interface PublicApplicationReceiptDTO {
   applications: {
     applicationNo: string;
     applicantName: string;
-    levelName: string;
+    className: string;
   }[];
   /** Repeated from the school's record so the page can say where to write. */
   contactEmail: string;

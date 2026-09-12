@@ -2,7 +2,13 @@ import type { Control, UseFieldArrayReturn, UseFormSetValue } from 'react-hook-f
 import { useWatch } from 'react-hook-form';
 import { Plus, Trash2, UserRound, Users } from 'lucide-react';
 import { toDateInputValue } from '@/lib/format';
-import { NIGERIA_STATE_OPTIONS, citiesOfNigeriaState } from '@/lib/demographics';
+import {
+  BLOOD_GROUP_OPTIONS,
+  NATIONALITY_OPTIONS,
+  NIGERIA_STATE_OPTIONS,
+  citiesOfNigeriaState,
+  statesOfNationality,
+} from '@/lib/demographics';
 import { GENDER_OPTIONS, RELATIONSHIP_OPTIONS } from '@/features/admissions/schema';
 import type { PublicAdmissionOptions } from '@/types/admissions';
 import {
@@ -224,6 +230,8 @@ export function ApplicantsStep({
       {applicants.fields.map((field, index) => {
         const state = watched?.[index]?.state;
         const cityOptions = citiesOfNigeriaState(state);
+        const nationality = watched?.[index]?.nationality;
+        const stateOfOriginOptions = statesOfNationality(nationality);
 
         return (
           <fieldset key={field.id} className="space-y-4">
@@ -299,52 +307,78 @@ export function ApplicantsStep({
                     label="Your phone or WhatsApp"
                     required
                   />
-                  <SiteTextField
-                    control={control}
-                    name={`applicants.${index}.nationality`}
-                    label="Nationality"
-                  />
-                  <SiteTextField
-                    control={control}
-                    name={`applicants.${index}.stateOfOrigin`}
-                    label="State of origin"
-                    hint="Where your family is from, not where you live."
-                  />
-                  <SiteTextareaField
-                    control={control}
-                    name={`applicants.${index}.address`}
-                    label="Home address"
-                    rows={2}
-                    className="sm:col-span-2"
-                  />
-                  <SiteSelectField
-                    control={control}
-                    name={`applicants.${index}.state`}
-                    label="State"
-                    options={NIGERIA_STATE_OPTIONS}
-                    placeholder="Select a state"
-                    onValueChange={() =>
-                      setValue(`applicants.${index}.city`, '', { shouldDirty: true })
-                    }
-                  />
-                  {cityOptions.length > 0 ? (
-                    <SiteSelectField
-                      control={control}
-                      name={`applicants.${index}.city`}
-                      label="City"
-                      options={cityOptions}
-                      placeholder="Select a city"
-                    />
-                  ) : (
-                    <SiteTextField
-                      control={control}
-                      name={`applicants.${index}.city`}
-                      label="City"
-                      hint={!state ? 'Pick a state to choose from a list.' : undefined}
-                      autoComplete="address-level2"
-                    />
-                  )}
                 </>
+              )}
+
+              {/* Belongs to the child (or the applicant, if they are applying for
+                  themselves) either way — unlike email and phone above, this is
+                  never the parent's own information, so it is asked for a parent
+                  filing on a child's behalf too. */}
+              <SiteSelectField
+                control={control}
+                name={`applicants.${index}.nationality`}
+                label="Nationality"
+                options={NATIONALITY_OPTIONS}
+                placeholder="Select a nationality"
+                // The state list below belongs to this country, so the old
+                // state cannot stand once it changes.
+                onValueChange={() =>
+                  setValue(`applicants.${index}.stateOfOrigin`, '', { shouldDirty: true })
+                }
+              />
+              {stateOfOriginOptions.length > 0 ? (
+                <SiteSelectField
+                  control={control}
+                  name={`applicants.${index}.stateOfOrigin`}
+                  label="State of origin"
+                  options={stateOfOriginOptions}
+                  placeholder="Select a state"
+                />
+              ) : (
+                <SiteTextField
+                  control={control}
+                  name={`applicants.${index}.stateOfOrigin`}
+                  label="State of origin"
+                  hint={
+                    !nationality
+                      ? 'Pick a nationality to choose from a list.'
+                      : isSelf
+                        ? 'Where your family is from, not where you live.'
+                        : 'Where the family is from, not where they live.'
+                  }
+                />
+              )}
+              <SiteTextareaField
+                control={control}
+                name={`applicants.${index}.address`}
+                label="Home address"
+                rows={2}
+                className="sm:col-span-2"
+              />
+              <SiteSelectField
+                control={control}
+                name={`applicants.${index}.state`}
+                label="State"
+                options={NIGERIA_STATE_OPTIONS}
+                placeholder="Select a state"
+                onValueChange={() => setValue(`applicants.${index}.city`, '', { shouldDirty: true })}
+              />
+              {cityOptions.length > 0 ? (
+                <SiteSelectField
+                  control={control}
+                  name={`applicants.${index}.city`}
+                  label="City"
+                  options={cityOptions}
+                  placeholder="Select a city"
+                />
+              ) : (
+                <SiteTextField
+                  control={control}
+                  name={`applicants.${index}.city`}
+                  label="City"
+                  hint={!state ? 'Pick a state to choose from a list.' : undefined}
+                  autoComplete="address-level2"
+                />
               )}
             </div>
           </fieldset>
@@ -390,9 +424,9 @@ export function SchoolingStep({
     value: session.id,
     label: session.isCurrent ? `${session.name} (current)` : session.name,
   }));
-  const levelOptions = (options?.levels ?? []).map((level) => ({
-    value: level.id,
-    label: level.name,
+  const classOptions = (options?.classes ?? []).map((schoolClass) => ({
+    value: schoolClass.id,
+    label: schoolClass.name,
   }));
 
   /**
@@ -401,7 +435,7 @@ export function SchoolingStep({
    * fields become free text rather than disappearing, because "which class"
    * is the question the office most needs answered.
    */
-  const published = sessionOptions.length > 0 && levelOptions.length > 0;
+  const published = sessionOptions.length > 0 && classOptions.length > 0;
 
   return (
     <div className="space-y-5">
@@ -437,17 +471,17 @@ export function SchoolingStep({
             {published ? (
               <SiteSelectField
                 control={control}
-                name={`applicants.${index}.levelId`}
+                name={`applicants.${index}.classId`}
                 label={isSelf ? 'Class you are applying into' : 'Class applying into'}
                 required
-                options={levelOptions}
+                options={classOptions}
                 placeholder="Select a class"
                 className="sm:col-span-2"
               />
             ) : (
               <SiteTextField
                 control={control}
-                name={`applicants.${index}.levelId`}
+                name={`applicants.${index}.classId`}
                 label={isSelf ? 'Class you are applying into' : 'Class applying into'}
                 required
                 placeholder="e.g. JSS 1"
@@ -464,15 +498,17 @@ export function SchoolingStep({
               name={`applicants.${index}.previousClass`}
               label="Former class"
             />
-            <SiteTextField
+            <SiteSelectField
               control={control}
               name={`applicants.${index}.bloodGroup`}
               label="Blood group"
+              options={BLOOD_GROUP_OPTIONS}
+              placeholder="Select a blood group"
             />
             <SiteTextareaField
               control={control}
               name={`applicants.${index}.medicalNotes`}
-              label="Anything the school should know"
+              label="Medical notes (optional)"
               rows={2}
               className="sm:col-span-2"
               hint="Allergies, medication, or any support needed. Leave it blank if there is none."

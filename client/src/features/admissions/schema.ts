@@ -111,7 +111,7 @@ export const admissionFormSchema = z
   .object({
     applicantType: z.enum(['GUARDIAN', 'SELF']),
     sessionId: z.string().min(1, 'Choose the session being applied for'),
-    levelId: z.string().min(1, 'Choose the level being applied for'),
+    classId: z.string().min(1, 'Choose the class being applied for'),
     applicant: applicantSchema,
     /**
      * At least one adult, whoever applied. An application with nobody the

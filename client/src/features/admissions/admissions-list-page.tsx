@@ -78,7 +78,7 @@ export function AdmissionsListPage() {
         header: 'Applying for',
         cell: (application) => (
           <div className="min-w-0 text-sm">
-            <p className="truncate">{application.levelName}</p>
+            <p className="truncate">{application.desiredClassName ?? application.levelName}</p>
             <p className="truncate text-xs text-muted-foreground">{application.sessionName}</p>
           </div>
         ),

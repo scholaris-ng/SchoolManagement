@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useFieldArray, useForm, useWatch, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertCircle, ArrowLeft, ArrowRight, MessageCircle, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { errorMessage } from '@/lib/api-error';
+import { localStore, storageKeys } from '@/lib/storage';
 import { usePublicAdmissionOptions, useSubmitApplication } from '@/features/public/api';
 import type { PublicAdmissionOptions, PublicApplicationReceipt } from '@/types/admissions';
 import { useSite } from '../site-context';
@@ -72,6 +73,24 @@ export function RegistrationSection() {
   );
 }
 
+/** The blank slate — what the form starts from, and what "start over" returns to. */
+function freshApplicationValues(): SiteApplicationValues {
+  return {
+    // Unset on purpose: the first step is a real question, and a pre-picked
+    // answer is one a visitor can walk past without reading.
+    applicantType: undefined as unknown as 'GUARDIAN' | 'SELF',
+    sessionId: '',
+    applicants: [{ ...emptySiteApplicant }],
+    contacts: [{ ...emptySiteContact, isPrimaryContact: true }],
+    consentGiven: undefined as unknown as true,
+  };
+}
+
+interface StoredApplicationDraft {
+  stepIndex: number;
+  values: SiteApplicationValues;
+}
+
 function ApplicationForm() {
   const { slug } = useParams<{ slug: string }>();
   const { content } = useSite();
@@ -80,25 +99,51 @@ function ApplicationForm() {
   const admissions = usePublicAdmissionOptions(slug);
   const submit = useSubmitApplication(slug);
 
-  const [stepIndex, setStepIndex] = useState(0);
+  // Read once, on mount — a family that gets interrupted (a dropped call, a
+  // closed tab, a phone that locks itself) should not have to retype a form
+  // this long. There is nothing here worth losing to that.
+  const draftKey = slug ? storageKeys.admissionApplicationDraft(slug) : null;
+  const [draft] = useState(() =>
+    draftKey ? localStore.get<StoredApplicationDraft | null>(draftKey, null) : null,
+  );
+  const [restoredDraft, setRestoredDraft] = useState(Boolean(draft));
+
+  const [stepIndex, setStepIndex] = useState(draft?.stepIndex ?? 0);
   const [receipt, setReceipt] = useState<PublicApplicationReceipt | null>(null);
+  // Who the confirmation email went to — kept alongside the receipt so the
+  // page can say so by name rather than leaving a family to guess whether
+  // one was sent at all.
+  const [confirmationEmail, setConfirmationEmail] = useState('');
 
   const form = useForm<SiteApplicationValues>({
     resolver: zodResolver(siteApplicationSchema),
-    defaultValues: {
-      // Unset on purpose: the first step is a real question, and a pre-picked
-      // answer is one a visitor can walk past without reading.
-      applicantType: undefined,
-      sessionId: '',
-      applicants: [{ ...emptySiteApplicant }],
-      contacts: [{ ...emptySiteContact, isPrimaryContact: true }],
-      consentGiven: undefined as unknown as true,
-    },
+    defaultValues: draft?.values ?? freshApplicationValues(),
   });
 
   const applicants = useFieldArray({ control: form.control, name: 'applicants' });
   const contacts = useFieldArray({ control: form.control, name: 'contacts' });
   const applicantType = useWatch({ control: form.control, name: 'applicantType' }) ?? null;
+  const consentGiven = useWatch({ control: form.control, name: 'consentGiven' });
+  const watchedValues = useWatch({ control: form.control });
+
+  // Saved after every change, not only between steps — a crash can happen
+  // mid-field too. Local to this browser only: nothing here is sent anywhere
+  // until the visitor presses submit.
+  useEffect(() => {
+    if (!draftKey) return;
+    localStore.set(draftKey, { stepIndex, values: watchedValues });
+  }, [draftKey, stepIndex, watchedValues]);
+
+  const discardDraft = () => {
+    if (draftKey) localStore.remove(draftKey);
+  };
+
+  const startOver = () => {
+    discardDraft();
+    form.reset(freshApplicationValues());
+    setStepIndex(0);
+    setRestoredDraft(false);
+  };
 
   const steps = useMemo(() => stepsFor(applicantType), [applicantType]);
   // Clamped, and every read below uses the clamped index: the step list is
@@ -114,7 +159,7 @@ function ApplicationForm() {
   // whether admissions happen to be open, so a school that pauses applications
   // for a term does not lose its dropdowns the moment it flips that switch.
   const hasStructuredOptions = Boolean(
-    options && options.sessions.length > 0 && options.levels.length > 0,
+    options && options.sessions.length > 0 && options.classes.length > 0,
   );
   // Submitting online is the separate, narrower question: the school must
   // both have that structure AND currently be taking applications. The API
@@ -136,6 +181,10 @@ function ApplicationForm() {
   const onSubmit = form.handleSubmit(async (values) => {
     if (!canSubmitOnline) {
       handOffToEmail(values, contact.email, options);
+      // The wizard's job ends at the mail app opening — nothing left here is
+      // worth holding onto, and a family filling this in again for a sibling
+      // should not see the last child's details.
+      discardDraft();
       return;
     }
 
@@ -146,6 +195,10 @@ function ApplicationForm() {
       contacts: values.contacts,
       consentGiven: true,
     });
+    discardDraft();
+    // Same primary contact the server writes to — see `submitPublicApplication`.
+    const primary = values.contacts.find((c) => c.isPrimaryContact) ?? values.contacts[0];
+    setConfirmationEmail(primary.email);
     setReceipt(result);
   });
 
@@ -154,9 +207,9 @@ function ApplicationForm() {
       <ApplicationReceipt
         receipt={receipt}
         whatsapp={contact.whatsapp[0]}
+        confirmationEmail={confirmationEmail}
         onStartAnother={() => {
-          form.reset();
-          setStepIndex(0);
+          startOver();
           setReceipt(null);
         }}
       />
@@ -185,6 +238,19 @@ function ApplicationForm() {
           </li>
         ))}
       </ol>
+
+      {restoredDraft && (
+        <p className="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-[var(--site-line)] bg-[var(--site-canvas)] p-3.5 text-xs leading-relaxed text-[var(--site-muted)]">
+          <span>We picked up where you left off on this device.</span>
+          <button
+            type="button"
+            onClick={startOver}
+            className="font-medium text-[var(--site-accent)] underline underline-offset-2"
+          >
+            Clear and start over
+          </button>
+        </p>
+      )}
 
       {admissionsClosed && (
         <p className="mb-5 rounded-lg border border-[var(--site-line)] bg-[var(--site-canvas)] p-3.5 text-xs leading-relaxed text-[var(--site-muted)]">
@@ -253,7 +319,11 @@ function ApplicationForm() {
         )}
 
         {isLast ? (
-          <button type="submit" className="site-btn site-btn--primary" disabled={submit.isPending}>
+          <button
+            type="submit"
+            className="site-btn site-btn--primary"
+            disabled={submit.isPending || !consentGiven}
+          >
             <Send className="size-4" aria-hidden="true" />
             {submit.isPending ? 'Sending…' : 'Submit application'}
           </button>
@@ -299,8 +369,8 @@ function handOffToEmail(
   to: string,
   options: PublicAdmissionOptions | null,
 ): void {
-  const levelName = (levelId: string) =>
-    options?.levels.find((level) => level.id === levelId)?.name ?? levelId;
+  const classNameFor = (classId: string) =>
+    options?.classes.find((schoolClass) => schoolClass.id === classId)?.name ?? classId;
   const sessionName =
     options?.sessions.find((session) => session.id === values.sessionId)?.name ?? values.sessionId;
 
@@ -313,9 +383,11 @@ function handOffToEmail(
       `  Name: ${[applicant.lastName, applicant.firstName, applicant.middleName].filter(Boolean).join(' ')}`,
       `  Gender: ${applicant.gender}`,
       `  Date of birth: ${applicant.dateOfBirth}`,
-      `  Applying into: ${levelName(applicant.levelId)}`,
+      `  Applying into: ${classNameFor(applicant.classId)}`,
       `  Former school: ${applicant.previousSchool || '—'}`,
       `  Former class: ${applicant.previousClass || '—'}`,
+      `  Nationality: ${applicant.nationality || '—'}`,
+      `  State of origin: ${applicant.stateOfOrigin || '—'}`,
       `  Blood group: ${applicant.bloodGroup || '—'}`,
       `  Notes: ${applicant.medicalNotes || '—'}`,
       applicant.email ? `  Email: ${applicant.email}` : '',

@@ -26,8 +26,8 @@ export function ReviewStep({
 }) {
   const sessionName =
     options?.sessions.find((session) => session.id === values.sessionId)?.name ?? '—';
-  const levelName = (levelId: string) =>
-    options?.levels.find((level) => level.id === levelId)?.name ?? '—';
+  const classNameFor = (classId: string) =>
+    options?.classes.find((schoolClass) => schoolClass.id === classId)?.name ?? '—';
   const isSelf = values.applicantType === 'SELF';
 
   return (
@@ -43,7 +43,7 @@ export function ReviewStep({
                 .join(' ') || (isSelf ? 'You' : `Child ${index + 1}`)}
             </p>
             <dl className="mt-2 space-y-1.5">
-              <Row label="Applying into" value={levelName(applicant.levelId)} />
+              <Row label="Applying into" value={classNameFor(applicant.classId)} />
               <Row
                 label="Date of birth"
                 value={applicant.dateOfBirth ? formatDate(applicant.dateOfBirth) : '—'}
@@ -54,7 +54,13 @@ export function ReviewStep({
               )}
               {isSelf && applicant.email && <Row label="Email" value={applicant.email} />}
               {isSelf && applicant.phone && <Row label="Phone" value={applicant.phone} />}
-              {isSelf && (applicant.city || applicant.state) && (
+              {applicant.nationality && (
+                <Row label="Nationality" value={applicant.nationality} />
+              )}
+              {applicant.stateOfOrigin && (
+                <Row label="State of origin" value={applicant.stateOfOrigin} />
+              )}
+              {(applicant.city || applicant.state) && (
                 <Row
                   label="Location"
                   value={[applicant.city, applicant.state].filter(Boolean).join(', ')}
@@ -115,10 +121,13 @@ function Row({ label, value }: { label: string; value: string }) {
 export function ApplicationReceipt({
   receipt,
   whatsapp,
+  confirmationEmail,
   onStartAnother,
 }: {
   receipt: PublicApplicationReceipt;
   whatsapp?: string;
+  /** The address the confirmation email went to, if there was one to send. */
+  confirmationEmail?: string;
   onStartAnother: () => void;
 }) {
   return (
@@ -148,11 +157,19 @@ export function ApplicationReceipt({
             </p>
             <p className="mt-0.5 text-sm text-[var(--site-ink)]">
               {application.applicantName}
-              {application.levelName ? ` · ${application.levelName}` : ''}
+              {application.className ? ` · ${application.className}` : ''}
             </p>
           </li>
         ))}
       </ul>
+
+      {confirmationEmail && (
+        <p className="mt-5 flex items-center justify-center gap-1.5 text-sm text-[var(--site-body)]">
+          <Mail className="size-4 shrink-0 text-[var(--site-muted)]" aria-hidden="true" />
+          We&apos;ve also emailed a copy of {receipt.applications.length > 1 ? 'these' : 'this'} to{' '}
+          <span className="font-medium text-[var(--site-ink)]">{confirmationEmail}</span>.
+        </p>
+      )}
 
       <p className="mt-5 text-xs leading-relaxed text-[var(--site-muted)]">
         What happens next: the admissions office reviews the application and contacts you about

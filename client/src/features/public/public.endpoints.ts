@@ -40,7 +40,7 @@ export const PublicEndpoints = {
 
   fetchSchoolPage: (slug: string) => http.get<PublicSchoolPage>(`/public/schools/${slug}`),
 
-  /** The sessions and levels this school is currently taking applications for. */
+  /** The sessions and classes this school is currently taking applications for. */
   fetchAdmissionOptions: (slug: string) =>
     http.get<PublicAdmissionOptions>(`/public/schools/${slug}/admissions`),
 

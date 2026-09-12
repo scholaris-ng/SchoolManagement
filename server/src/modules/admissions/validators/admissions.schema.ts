@@ -104,6 +104,7 @@ export const fetchAdmissionsSchema = z.object({
     sortDir: z.enum(['asc', 'desc']).default('desc'),
     status: z.enum(APPLICATION_STATUSES).optional(),
     levelId: z.string().uuid().optional(),
+    classId: z.string().uuid().optional(),
     sessionId: z.string().uuid().optional(),
   }),
 });
@@ -116,7 +117,7 @@ export const createAdmissionSchema = z.object({
   body: z.object({
     applicantType: z.enum(['GUARDIAN', 'SELF']).default('GUARDIAN'),
     sessionId: z.string().uuid('Choose the session being applied for'),
-    levelId: z.string().uuid('Choose the level being applied for'),
+    classId: z.string().uuid('Choose the class being applied for'),
     applicant: applicantSchema,
     contacts,
   }),
@@ -168,7 +169,7 @@ export const publicApplicationSchema = z.object({
     applicantType: z.enum(['GUARDIAN', 'SELF']),
     sessionId: z.string().uuid('Choose the session you are applying for'),
     applicants: z
-      .array(applicantSchema.extend({ levelId: z.string().uuid('Choose the class being applied for') }))
+      .array(applicantSchema.extend({ classId: z.string().uuid('Choose the class being applied for') }))
       .min(1, 'Add the details of at least one applicant')
       .max(6, 'Six children is the most one submission can carry. Send the rest separately.'),
     contacts,

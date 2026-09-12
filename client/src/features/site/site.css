@@ -137,6 +137,12 @@
   outline-offset: 2px;
 }
 
+.site-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .site-btn--primary {
   background: var(--site-accent);
   color: #fff;

@@ -95,12 +95,32 @@ export class AdmissionApplication extends SoftDeletableEntity {
   @JoinColumn({ name: 'session_id' })
   session?: AcademicSession;
 
+  /**
+   * The rung on the school's ladder this application rolls up under —
+   * derived from `desiredClassId` at write time, never chosen directly. Kept
+   * as its own column because the funnel and the admissions list group and
+   * filter by it, and a school may restructure its classes without losing
+   * that history.
+   */
   @Column({ name: 'level_id', type: 'uuid' })
   levelId: string;
 
   @ManyToOne(() => SchoolLevel, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'level_id' })
   level?: SchoolLevel;
+
+  /**
+   * The actual class applied for — "Primary 1", "SS 1" — chosen on the form
+   * itself (spec section 10 as amended). Nullable because it did not exist
+   * before this column was added: an application filed earlier only ever
+   * named a level, and back-filling a specific class for it would be a guess.
+   */
+  @Column({ name: 'desired_class_id', type: 'uuid', nullable: true })
+  desiredClassId: string | null;
+
+  @ManyToOne(() => SchoolClass, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'desired_class_id' })
+  desiredClass?: SchoolClass | null;
 
   @Column({ type: 'varchar', name: 'applicant_type', length: 16, default: 'GUARDIAN' })
   applicantType: ApplicantType;

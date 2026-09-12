@@ -17,6 +17,7 @@ const PROJECTION = `
   a.id, a.school_id AS "schoolId", a.application_no AS "applicationNo",
   a.session_id AS "sessionId", s.name AS "sessionName",
   a.level_id AS "levelId", l.name AS "levelName",
+  a.desired_class_id AS "desiredClassId", dc.name AS "desiredClassName",
   a.applicant_type AS "applicantType", a.source,
   json_build_object(
     'firstName', a.first_name,
@@ -55,12 +56,14 @@ const JOINS = `
   JOIN academic_sessions s ON s.id = a.session_id
   JOIN school_levels l ON l.id = a.level_id
   LEFT JOIN school_classes c ON c.id = a.offered_class_id
+  LEFT JOIN school_classes dc ON dc.id = a.desired_class_id
 `;
 
 const SORTABLE: Record<string, string> = {
   applicantName: 'a.last_name',
   applicationNo: 'a.application_no',
   levelName: 'l.name',
+  desiredClassName: 'dc.name',
   status: 'a.status',
   screeningScore: 'a.screening_score',
   submittedAt: 'a.submitted_at',
@@ -75,6 +78,7 @@ export interface AdmissionFilter {
   sortDir: 'asc' | 'desc';
   status?: ApplicationStatus;
   levelId?: string;
+  classId?: string;
   sessionId?: string;
 }
 
@@ -107,6 +111,10 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
     if (filter.levelId) {
       params.push(filter.levelId);
       where.push(`a.level_id = $${params.length}`);
+    }
+    if (filter.classId) {
+      params.push(filter.classId);
+      where.push(`a.desired_class_id = $${params.length}`);
     }
     if (filter.sessionId) {
       params.push(filter.sessionId);

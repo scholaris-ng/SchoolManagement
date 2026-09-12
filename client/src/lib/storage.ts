@@ -83,6 +83,7 @@ export const storageKeys = {
   outbox: 'outbox',
   attendanceDraft: (classId: string, date: string) => `draft:attendance:${classId}:${date}`,
   scoreDraft: (scoreSheetId: string) => `draft:scores:${scoreSheetId}`,
+  admissionApplicationDraft: (slug: string) => `draft:admission-application:${slug}`,
   cbtAttempt: (attemptId: string) => `cbt:attempt:${attemptId}`,
   activeChild: 'active-child-id',
 } as const;
