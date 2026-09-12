@@ -128,7 +128,7 @@ const SCHOOL = {
   settings: {
     timezone: 'Africa/Lagos', currency: 'NGN', currencySymbol: '₦', country: 'NG', locale: 'en-NG',
     requirePhotoConsent: true, absenceAlertEnabled: true, absenceAlertCutoff: '09:30',
-    resultPublishNotification: true, allowParentTeacherMessaging: true, publicWebsiteEnabled: true,
+    resultPublishNotification: true, allowParentTeacherMessaging: true,
   },
   status: 'ACTIVE',
   version: 3,

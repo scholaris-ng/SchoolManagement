@@ -73,7 +73,6 @@ export async function seedFoundation(dataSource: DataSource): Promise<void> {
           absenceAlertCutoff: '09:30',
           resultPublishNotification: true,
           allowParentTeacherMessaging: true,
-          publicWebsiteEnabled: true,
         },
       }),
     );
@@ -109,7 +108,6 @@ export async function seedFoundation(dataSource: DataSource): Promise<void> {
           absenceAlertCutoff: '09:00',
           resultPublishNotification: true,
           allowParentTeacherMessaging: false,
-          publicWebsiteEnabled: false,
         },
       }),
     );

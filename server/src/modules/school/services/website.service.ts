@@ -64,6 +64,11 @@ export class WebsiteService {
   async update(context: RequestContext, patch: UpdateWebsiteInput): Promise<WebsiteContent> {
     const current = await this.getForSchool(context.schoolId);
 
+    if (patch.slug && patch.slug !== current.slug) {
+      const clash = await this.website.findBySlugExcludingSchool(patch.slug, context.schoolId);
+      if (clash) throw AppError.conflict('That address is already in use. Choose another.');
+    }
+
     const updated = await this.website.update(context.schoolId, patch);
     if (!updated) throw AppError.notFound('Website content');
 

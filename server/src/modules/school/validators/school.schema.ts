@@ -29,7 +29,6 @@ const settingsSchema = z
       .optional(),
     resultPublishNotification: z.boolean().optional(),
     allowParentTeacherMessaging: z.boolean().optional(),
-    publicWebsiteEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -106,10 +105,49 @@ export const updateSchoolSchema = z.object({
     .strict(),
 });
 
+/**
+ * Names that would collide with a real route on the platform's own domain, or
+ * read as an official address rather than one school's own — the public site
+ * is reachable at `<address>.<platform domain>` (spec section 31), so this
+ * field doubles as a subdomain label.
+ */
+const RESERVED_ADDRESSES = new Set([
+  'www',
+  'app',
+  'api',
+  'admin',
+  'auth',
+  'public',
+  's',
+  'mail',
+  'ftp',
+  'help',
+  'support',
+  'status',
+  'static',
+  'assets',
+  'sign-in',
+  'sign-up',
+  'onboarding',
+]);
+
+const addressField = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, 'Use at least 3 characters.')
+  .max(63, 'Use 63 characters or fewer.')
+  .regex(
+    /^[a-z0-9]+(-[a-z0-9]+)*$/,
+    'Use lowercase letters, numbers and single hyphens only — no leading, trailing or repeated hyphens.',
+  )
+  .refine((value) => !RESERVED_ADDRESSES.has(value), 'That address is reserved. Choose another.');
+
 export const updateWebsiteSchema = z.object({
   body: z
     .object({
       enabled: z.boolean().optional(),
+      slug: addressField.optional(),
       tagline: z.string().trim().max(200).optional(),
       about: z.string().trim().max(20_000).optional(),
       mission: z.string().trim().max(5_000).nullable().optional(),

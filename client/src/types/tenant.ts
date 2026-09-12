@@ -20,7 +20,6 @@ export interface SchoolSettings {
   absenceAlertCutoff: string; // HH:mm local time
   resultPublishNotification: boolean;
   allowParentTeacherMessaging: boolean;
-  publicWebsiteEnabled: boolean;
 }
 
 export interface School {

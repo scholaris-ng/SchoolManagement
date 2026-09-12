@@ -39,6 +39,13 @@ interface SiteContextValue {
   path: (to: string) => string;
   /** True while the tenant's own content is still in flight. */
   loading: boolean;
+  /**
+   * Set once loading finishes without a page to show — no such address, or
+   * the school has not published one. `content` is still the shipped
+   * default in this case; `SiteLayout` renders its own state instead of the
+   * template rather than let a visitor mistake the default for a real page.
+   */
+  error: unknown;
 }
 
 const SiteContext = createContext<SiteContextValue | null>(null);
@@ -72,8 +79,9 @@ export function SiteContentProvider({ children }: { children: React.ReactNode })
       content: overlay(defaultContent, remote.data),
       path,
       loading: remote.isPending,
+      error: remote.error,
     }),
-    [remote.data, remote.isPending, path],
+    [remote.data, remote.isPending, remote.error, path],
   );
 
   return <SiteContext.Provider value={value}>{children}</SiteContext.Provider>;

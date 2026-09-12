@@ -33,6 +33,11 @@ export function createQueryClient(): QueryClient {
         // Background refetch failures stay quiet; only surface the first load.
         if (query.state.data !== undefined) return;
         if (isApiError(error) && (error.isUnauthenticated || error.isOffline)) return;
+        // Opt-out for screens that render their own in-page error state instead
+        // of a toast — the public school site, whose visitors are not signed
+        // in and would otherwise see a raw "School was not found" banner
+        // floating over the page rather than a proper unavailable state.
+        if (query.meta?.silent) return;
         toast.error(describeError(error));
       },
     }),

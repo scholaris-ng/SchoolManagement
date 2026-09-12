@@ -20,7 +20,6 @@ export interface SchoolSettings {
   absenceAlertCutoff: string;
   resultPublishNotification: boolean;
   allowParentTeacherMessaging: boolean;
-  publicWebsiteEnabled: boolean;
 }
 
 /** The tenant. Every other business table hangs off this row's id. */

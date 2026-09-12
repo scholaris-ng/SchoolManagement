@@ -331,7 +331,6 @@ export class RegistrationService {
           absenceAlertCutoff: '09:30',
           resultPublishNotification: true,
           allowParentTeacherMessaging: true,
-          publicWebsiteEnabled: false,
         },
       }),
     );

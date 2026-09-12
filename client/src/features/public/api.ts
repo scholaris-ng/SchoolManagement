@@ -22,5 +22,9 @@ export function usePublicSchool(slug: string | undefined) {
     enabled: Boolean(slug),
     retry: false,
     staleTime: 5 * 60_000,
+    // The site layout renders its own "not available" state for this one — a
+    // visitor landing on an unpublished or unknown address should see that,
+    // not a system-style toast (query-client.ts).
+    meta: { silent: true },
   });
 }

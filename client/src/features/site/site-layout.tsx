@@ -4,6 +4,7 @@ import { SiteContentProvider, useSite } from './site-context';
 import { SiteHeader } from './components/site-header';
 import { SiteFooter } from './components/site-footer';
 import { RegistrationSection } from './components/registration-form';
+import { SiteUnavailable } from './components/site-unavailable';
 import './site.css';
 
 /**
@@ -22,8 +23,9 @@ export function SiteLayout() {
 }
 
 function SiteFrame() {
-  const { content } = useSite();
+  const { content, loading, error } = useSite();
   const location = useLocation();
+  const unavailable = !loading && Boolean(error);
 
   // Publish the school's brand colours as custom properties. Everything in
   // `site.css` reads these, which is what lets one tenant's palette differ from
@@ -37,8 +39,8 @@ function SiteFrame() {
   } as React.CSSProperties;
 
   useEffect(() => {
-    document.title = `${content.brand.name} — ${content.brand.motto}`;
-  }, [content.brand.name, content.brand.motto]);
+    document.title = unavailable ? 'Site unavailable' : `${content.brand.name} — ${content.brand.motto}`;
+  }, [unavailable, content.brand.name, content.brand.motto]);
 
   // Fresh navigations start at the top; a link carrying a hash scrolls to its
   // target once the destination page has rendered.
@@ -52,6 +54,8 @@ function SiteFrame() {
     }
     window.scrollTo({ top: 0 });
   }, [location.pathname, location.hash]);
+
+  if (unavailable) return <SiteUnavailable error={error} />;
 
   return (
     <div className="school-site min-h-dvh" style={brandVars}>

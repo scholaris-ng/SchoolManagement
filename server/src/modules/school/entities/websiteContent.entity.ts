@@ -34,7 +34,10 @@ export class WebsiteContent extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   enabled: boolean;
 
-  @Column({ type: 'varchar', length: 120 })
+  // The school's own to change (unlike `School.slug`) — this is the address
+  // its public site is reachable at, spec section 31 — so it needs its own
+  // uniqueness independent of the school's fixed tenant slug.
+  @Column({ type: 'varchar', length: 120, unique: true })
   @Index()
   slug: string;
 

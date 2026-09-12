@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, Globe, Plus, Save, Trash2 } from 'lucide-react';
 import { env } from '@/lib/env';
-import { useSchool, useUpdateWebsite, useWebsite } from './api';
+import { isApiError } from '@/lib/api-error';
+import { useUpdateWebsite, useWebsite } from './api';
 import type { WebsiteContent } from '@/types/engagement';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -23,6 +24,20 @@ import { SettingsTabs } from './settings-tabs';
 const SOCIAL_PLATFORMS = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube', 'WhatsApp'];
 
 /**
+ * Keeps the address typeable as the school types: invalid characters collapse
+ * to a single hyphen, but a trailing hyphen survives so the next keystroke
+ * lands where it looks like it should.
+ */
+function slugifyLive(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-');
+}
+
+/** The address actually sent to the server — no leading or trailing hyphen either. */
+function slugifyFinal(value: string): string {
+  return slugifyLive(value).replace(/^-+|-+$/g, '');
+}
+
+/**
  * The school's public face.
  *
  * Everything here is deliberately separate from authenticated school data: the
@@ -32,7 +47,6 @@ const SOCIAL_PLATFORMS = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube', '
  */
 export function WebsiteSettingsPage() {
   const website = useWebsite();
-  const school = useSchool();
   const update = useUpdateWebsite();
 
   const [draft, setDraft] = useState<WebsiteContent | null>(null);
@@ -71,12 +85,33 @@ export function WebsiteSettingsPage() {
   };
 
   const save = async () => {
-    await update.mutateAsync(draft);
+    // An explicit allowlist, not "the whole record minus the fields we know
+    // about": `draft` is the raw entity from the API, which also carries `id`
+    // and `createdAt` that never made it into the `WebsiteContent` TS type.
+    // Echoing any server-managed field back is exactly what
+    // `updateWebsiteSchema`'s `.strict()` exists to catch (school.schema.ts).
+    await update.mutateAsync({
+      enabled: draft.enabled,
+      slug: slugifyFinal(draft.slug),
+      tagline: draft.tagline,
+      about: draft.about,
+      mission: draft.mission,
+      vision: draft.vision,
+      heroImageUrl: draft.heroImageUrl,
+      admissionsIntro: draft.admissionsIntro,
+      admissionsOpen: draft.admissionsOpen,
+      contactEmail: draft.contactEmail,
+      contactPhone: draft.contactPhone,
+      address: draft.address,
+      socialLinks: draft.socialLinks,
+      testimonials: draft.testimonials,
+      gallery: draft.gallery,
+    });
     setDirty(false);
   };
 
+  const fieldErrors = isApiError(update.error) ? update.error.fieldErrors() : {};
   const publicUrl = `${env.appUrl.replace(/\/$/, '')}/s/${draft.slug}`;
-  const websiteEnabledOnSchool = school.data?.settings.publicWebsiteEnabled ?? false;
 
   return (
     <PageContainer>
@@ -111,10 +146,10 @@ export function WebsiteSettingsPage() {
       <div className="max-w-3xl space-y-6">
         <FormError error={update.error} />
 
-        {draft.enabled && !websiteEnabledOnSchool && (
-          <Alert tone="warning" title="The public website is switched off for this school">
-            This content is saved, but nothing is served publicly until{' '}
-            <strong>Public website</strong> is enabled in School settings.
+        {!draft.enabled && (
+          <Alert tone="warning" title="This website is not public">
+            Turn on <strong>Publish the website</strong> below to make{' '}
+            <span className="font-mono">{publicUrl}</span> live.
           </Alert>
         )}
 
@@ -147,13 +182,19 @@ export function WebsiteSettingsPage() {
                 data-cy="site-slug"
                 id="site-slug"
                 value={draft.slug}
-                onChange={(event) =>
-                  set({ slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })
-                }
+                aria-invalid={Boolean(fieldErrors.slug)}
+                onChange={(event) => set({ slug: slugifyLive(event.target.value) })}
+                onBlur={(event) => set({ slug: slugifyFinal(event.target.value) })}
               />
-              <p className="text-xs text-muted-foreground">
-                Live at <span className="font-mono">{publicUrl}</span>
-              </p>
+              {fieldErrors.slug ? (
+                <p role="alert" className="text-xs font-medium text-danger">
+                  {fieldErrors.slug}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Live at <span className="font-mono">{publicUrl}</span>
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

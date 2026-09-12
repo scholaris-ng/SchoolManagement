@@ -432,12 +432,6 @@ export function SchoolSettingsPage() {
               checked={draft.settings?.allowParentTeacherMessaging ?? true}
               onChange={(value) => setSettings({ allowParentTeacherMessaging: value })}
             />
-            <Toggle
-              label="Public website"
-              description="Publishes a school profile at a public address, built from the Website settings."
-              checked={draft.settings?.publicWebsiteEnabled ?? false}
-              onChange={(value) => setSettings({ publicWebsiteEnabled: value })}
-            />
 
             {draft.settings?.requirePhotoConsent === false && (
               <Alert tone="warning" title="Photo consent is off">
