@@ -217,6 +217,19 @@ export class AdmissionApplication extends SoftDeletableEntity {
   @Column({ name: 'offer_expires_on', type: 'date', nullable: true })
   offerExpiresOn: string | null;
 
+  /**
+   * SHA-256 of the token in the "respond to this offer" link the family is
+   * emailed — never the token itself, the same rule `EmailVerification`
+   * follows for its codes. Set fresh each time an offer is made, so an older
+   * email's link stops resolving to anything the moment a new offer replaces
+   * it. Left in place after the family responds, rather than cleared: the
+   * link should still open to "you already accepted this" instead of a bare
+   * 404, and `status` is what actually gates whether it can act again.
+   */
+  @Index()
+  @Column({ name: 'offer_token_hash', type: 'varchar', length: 64, nullable: true })
+  offerTokenHash: string | null;
+
   @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
   submittedAt: Date | null;
 

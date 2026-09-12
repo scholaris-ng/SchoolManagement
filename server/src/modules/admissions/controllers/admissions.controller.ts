@@ -7,6 +7,7 @@ import type {
   CreateAdmissionInput,
   FetchAdmissionsQuery,
   PublicApplicationInput,
+  RespondToOfferInput,
   TransitionAdmissionInput,
 } from '../validators/admissions.schema';
 
@@ -101,6 +102,35 @@ export class AdmissionsController {
       res
         .status(201)
         .json(ApiResponse.created(receipt, 'Application received'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** What the "respond to this offer" link shows before anyone clicks anything. */
+  static async publicOffer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { token } = req.validated!.params as { token: string };
+      res.status(200).json(ApiResponse.ok(await service().fetchPublicOffer(token)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** The family accepting or declining a place, from the emailed link. */
+  static async respondToOffer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { token } = req.validated!.params as { token: string };
+      const result = await service().respondToOfferPublic(
+        token,
+        req.validated!.body as RespondToOfferInput,
+        {
+          ipAddress: req.ip ?? null,
+          userAgent: req.get('user-agent') ?? null,
+          requestId: req.requestId ?? 'public',
+        },
+      );
+      res.status(200).json(ApiResponse.ok(result, 'Response recorded'));
     } catch (error) {
       next(error);
     }

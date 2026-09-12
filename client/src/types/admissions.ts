@@ -143,3 +143,15 @@ export interface PublicApplicationReceipt {
   applications: { applicationNo: string; applicantName: string; className: string }[];
   contactEmail: string;
 }
+
+/** What the "respond to this offer" link shows — reachable by token alone, no account. */
+export interface PublicOffer {
+  applicationNo: string;
+  applicantName: string;
+  schoolName: string;
+  className: string | null;
+  sessionName: string;
+  offerExpiresOn: string | null;
+  status: ApplicationStatus;
+  respondable: boolean;
+}

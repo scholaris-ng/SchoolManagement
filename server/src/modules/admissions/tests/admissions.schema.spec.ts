@@ -1,6 +1,8 @@
 import {
   createAdmissionSchema,
+  offerTokenParamSchema,
   publicApplicationSchema,
+  respondToOfferSchema,
   transitionAdmissionSchema,
 } from '../validators/admissions.schema';
 
@@ -148,6 +150,40 @@ describe('transitionAdmissionSchema', () => {
       transitionAdmissionSchema.safeParse(
         wrap({ status: 'ENROLLED' }, { id: APPLICATION_ID }),
       ).success,
+    ).toBe(false);
+  });
+});
+
+describe('offerTokenParamSchema', () => {
+  it('accepts the token shape a real link carries', () => {
+    const result = offerTokenParamSchema.safeParse(
+      wrap(undefined, { token: 'a'.repeat(43) }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('refuses a token too short to be genuine', () => {
+    expect(
+      offerTokenParamSchema.safeParse(wrap(undefined, { token: 'short' })).success,
+    ).toBe(false);
+  });
+});
+
+describe('respondToOfferSchema', () => {
+  const params = { token: 'a'.repeat(43) };
+
+  it('accepts an accept or a decline', () => {
+    expect(
+      respondToOfferSchema.safeParse(wrap({ action: 'ACCEPT' }, params)).success,
+    ).toBe(true);
+    expect(
+      respondToOfferSchema.safeParse(wrap({ action: 'DECLINE' }, params)).success,
+    ).toBe(true);
+  });
+
+  it('refuses anything that is not one of the two', () => {
+    expect(
+      respondToOfferSchema.safeParse(wrap({ action: 'REJECT' }, params)).success,
     ).toBe(false);
   });
 });

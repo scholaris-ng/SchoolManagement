@@ -95,3 +95,20 @@ export interface PublicApplicationReceiptDTO {
   /** Repeated from the school's record so the page can say where to write. */
   contactEmail: string;
 }
+
+/**
+ * What the "respond to this offer" link shows and returns — reachable by
+ * token alone, with no session, so it carries nothing beyond what the link
+ * itself already implies the holder is allowed to see.
+ */
+export interface PublicOfferDTO {
+  applicationNo: string;
+  applicantName: string;
+  schoolName: string;
+  className: string | null;
+  sessionName: string;
+  offerExpiresOn: string | null;
+  status: ApplicationStatus;
+  /** False once expired, or once the status has moved on from `OFFERED`. */
+  respondable: boolean;
+}

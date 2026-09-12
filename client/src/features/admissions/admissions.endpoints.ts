@@ -9,6 +9,7 @@ export interface TransitionInput {
   note?: string;
   screeningScore?: number;
   offeredClassId?: string;
+  offerExpiresOn?: string;
 }
 
 export interface ConversionResult {

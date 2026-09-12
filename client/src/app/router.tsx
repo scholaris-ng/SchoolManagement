@@ -47,6 +47,9 @@ const ForgotPasswordPage = lazy(() =>
 const VerifyPage = lazy(() =>
   import('@/features/public/verify-page').then((m) => ({ default: m.VerifyPage })),
 );
+const OfferPage = lazy(() =>
+  import('@/features/public/offer-page').then((m) => ({ default: m.OfferPage })),
+);
 const OnboardingPage = lazy(() =>
   import('@/features/onboarding/onboarding-page').then((m) => ({ default: m.OnboardingPage })),
 );
@@ -60,6 +63,7 @@ export const router = createBrowserRouter([
   { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/verify/:code', element: <VerifyPage /> },
+  { path: '/offers/:token', element: <OfferPage /> },
   siteRoute,
   { path: '/onboarding', element: <OnboardingPage /> },
 

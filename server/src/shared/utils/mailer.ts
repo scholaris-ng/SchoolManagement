@@ -467,6 +467,168 @@ export async function sendApplicationReceivedEmail(params: {
 }
 
 /**
+ * `message` is the fact of what happened; `explanation` is what it means —
+ * split apart because "shortlisted" or "screening" mean nothing to a parent
+ * who has never seen this workflow before, and the fact alone answered
+ * nothing about what, if anything, they now need to do.
+ */
+const STATUS_COPY: Record<
+  'SUBMITTED' | 'SCREENING' | 'SHORTLISTED' | 'OFFERED' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN',
+  {
+    subject: string;
+    heading: string;
+    message: (applicant: string, school: string, className: string | null) => string;
+    explanation: string;
+  }
+> = {
+  SUBMITTED: {
+    subject: 'Application submitted',
+    heading: 'Application submitted',
+    message: (applicant, school) => `${school} has recorded ${applicant}’s application as submitted.`,
+    explanation: 'The admissions office will review it and be in touch about the next step. No action is needed from you right now.',
+  },
+  SCREENING: {
+    subject: 'Your application is being reviewed',
+    heading: 'Application under review',
+    message: (applicant, school) => `${school} has begun reviewing ${applicant}’s application.`,
+    explanation:
+      'This may include an interview, an entrance test, or whatever else the school normally uses to decide. No action is needed from you right now — the office will contact you if it needs anything.',
+  },
+  SHORTLISTED: {
+    subject: 'Good news about the application',
+    heading: 'Shortlisted',
+    message: (applicant, school) =>
+      `${school} has shortlisted ${applicant}’s application for further consideration.`,
+    explanation:
+      'This is a positive sign, though a final decision has not been made yet. No action is needed from you right now.',
+  },
+  OFFERED: {
+    subject: 'A place has been offered',
+    heading: 'A place has been offered',
+    message: (applicant, school, className) =>
+      className
+        ? `${school} is offering ${applicant} a place in ${className}.`
+        : `${school} is offering ${applicant} a place.`,
+    explanation:
+      'This place is reserved, but it is not final until you confirm it — families often apply to more than one school, so the office needs to hear that this one has been accepted before it can be treated as settled.',
+  },
+  ACCEPTED: {
+    subject: 'Acceptance recorded',
+    heading: 'Acceptance recorded',
+    message: (applicant, school) =>
+      `${school} has recorded that the place offered to ${applicant} has been accepted.`,
+    explanation: 'The next step is enrolment, which the school’s office will arrange with you directly.',
+  },
+  REJECTED: {
+    subject: 'Update on the application',
+    heading: 'Update on the application',
+    message: (applicant, school) => `After review, ${school} is unable to offer ${applicant} a place at this time.`,
+    explanation: 'No action is needed from you. If you would like feedback, the office is the right place to ask.',
+  },
+  WITHDRAWN: {
+    subject: 'Application withdrawn',
+    heading: 'Application withdrawn',
+    message: (applicant, school) => `${school} has recorded ${applicant}’s application as withdrawn.`,
+    explanation: 'No action is needed from you. If this was not requested, please contact the office straight away.',
+  },
+};
+
+/**
+ * Recipient: the primary contact on an application. Trigger: any status
+ * change made from the admissions screen — beginning screening, shortlisting,
+ * an offer, an acceptance the office has recorded, a rejection, or a
+ * withdrawal. Tone: transactional, and deliberately even-handed — the same
+ * plain layout carries good news and bad, because a rejection dressed up to
+ * look upbeat reads worse than a plain one.
+ *
+ * One template for every stage rather than one per stage: to the family
+ * reading it, this is news about one application, whatever the news is.
+ */
+export async function sendApplicationStatusEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  applicantName: string;
+  applicationNo: string;
+  status: keyof typeof STATUS_COPY;
+  className?: string | null;
+  offerExpiresOn?: string | null;
+  /** The "respond to this offer" link — present only when the offer was just made. */
+  offerUrl?: string;
+  note?: string | null;
+  contactEmail: string;
+}): Promise<void> {
+  const { to, firstName, schoolName, applicantName, applicationNo, status, note, contactEmail } = params;
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+  const applicant = escapeHtml(applicantName);
+  const className = params.className ? escapeHtml(params.className) : null;
+  const copy = STATUS_COPY[status];
+  const message = copy.message(applicant, school, className);
+
+  const rows: [string, string][] = [
+    ['Applicant', applicant],
+    ['Reference', escapeHtml(applicationNo)],
+  ];
+  if (className) rows.push(['Class', className]);
+  if (status === 'OFFERED' && params.offerExpiresOn) {
+    rows.push(['Respond by', escapeHtml(params.offerExpiresOn)]);
+  }
+
+  // What to actually do about it — the one thing a status update on its own
+  // never says. Only a fresh offer has anything left to act on; every other
+  // outcome is either "wait" or "already settled". Preferring the link over
+  // "call the office" where one exists: a family can act on it at midnight,
+  // and the school does not have to staff a phone to receive an answer.
+  const action = status === 'OFFERED' ? offerAction(params.offerExpiresOn, Boolean(params.offerUrl)) : '';
+
+  const body = [
+    heading(copy.heading),
+    paragraph(`Hello ${name}, ${message}`),
+    paragraph(copy.explanation),
+    infoBox(rows),
+    action ? paragraph(action) : '',
+    status === 'OFFERED' && params.offerUrl ? button('Accept or decline online', params.offerUrl) : '',
+    status === 'OFFERED' && params.offerUrl ? buttonFallback(params.offerUrl) : '',
+    note ? paragraph(`<strong>A note from the school:</strong> ${escapeHtml(note)}`) : '',
+    footnote(`Questions? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    subject: `${copy.subject} — ${schoolName} — Scholaris`,
+    html: emailLayout(body, copy.heading),
+    text: [
+      `Hello ${firstName},`,
+      '',
+      copy.message(applicantName, schoolName, params.className ?? null),
+      copy.explanation,
+      '',
+      `Applicant: ${applicantName}`,
+      `Reference: ${applicationNo}`,
+      ...(params.className ? [`Class: ${params.className}`] : []),
+      ...(status === 'OFFERED' && params.offerExpiresOn ? [`Respond by: ${params.offerExpiresOn}`] : []),
+      ...(action ? ['', action.replace(/<\/?strong>/g, '')] : []),
+      ...(status === 'OFFERED' && params.offerUrl ? [`Respond online: ${params.offerUrl}`] : []),
+      ...(note ? ['', `A note from the school: ${note}`] : []),
+      '',
+      `Questions? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}
+
+/** The one instruction an offer email exists to deliver, in its several variants. */
+function offerAction(offerExpiresOn: string | null | undefined, hasLink: boolean): string {
+  const byDate = offerExpiresOn ? ` by <strong>${escapeHtml(offerExpiresOn)}</strong>` : '';
+  const consequence = offerExpiresOn
+    ? ' If nobody hears from you by then, the place may be offered to someone else.'
+    : '';
+  return hasLink
+    ? `Please accept or decline${byDate} using the button below — no account or password needed.${consequence}`
+    : `Please contact the school office${byDate} to confirm this place.${consequence}`;
+}
+
+/**
  * Recipient: a newly hired member of staff. Trigger: `POST /staff`, once the
  * account behind their new record exists. Tone: transactional — no emoji.
  *

@@ -78,9 +78,10 @@ export function createApp(): Express {
   // be registered last.
   app.use(env.apiPrefix, authRoutes);
   app.use(env.apiPrefix, schoolRoutes);
-  // The school website's application form: the only unauthenticated write in
-  // the API, and the one route where the tenant comes from a slug in the path
-  // rather than from a session. It carries its own rate limit.
+  // The unauthenticated writes: the school website's application form, keyed
+  // by the slug in its path, and a family's own "respond to this offer" link,
+  // keyed by nothing but its token — neither has a session to read a tenant
+  // from. Both carry their own rate limit.
   app.use(env.apiPrefix, publicAdmissionsRoutes);
   app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
 

@@ -2,21 +2,27 @@ import { Router } from 'express';
 import { publicFormRateLimiter } from '../../../shared/middleware/rateLimiter.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { schoolSlugParamSchema } from '../../school/validators/school.schema';
-import { publicApplicationSchema } from '../validators/admissions.schema';
+import {
+  offerTokenParamSchema,
+  publicApplicationSchema,
+  respondToOfferSchema,
+} from '../validators/admissions.schema';
 import { AdmissionsController } from '../controllers/admissions.controller';
 
 /**
- * The two routes a school's own website calls, and the only unauthenticated
- * write in the API.
+ * The routes a school's own website calls, and the family's own "respond to
+ * this offer" link — the only unauthenticated writes in the API.
  *
  * Mounted ahead of `authMiddleware` in app.ts, alongside the other public
- * routes. The slug in the path is what identifies the tenant: there is no
- * session and no tenant header to read, so the service resolves the school
- * from the published website record and refuses anything unpublished.
+ * routes. The application routes are identified by the school's slug; the
+ * offer routes carry no tenant at all, because the token in the path already
+ * names one specific application uniquely — the same way a password-reset
+ * link is trusted on its own, without a second identifier alongside it.
  *
- * The write carries its own, much tighter rate limit. A form anybody on the
- * internet can post to is the obvious way to fill a school's admissions list
- * with rubbish, and the general API budget is far too generous for it.
+ * The writes carry their own, much tighter rate limit. A form or a link
+ * anybody on the internet can post to is the obvious way to fill a school's
+ * admissions list with rubbish or grind through a token by brute force, and
+ * the general API budget is far too generous for either.
  */
 const router = Router();
 
@@ -31,6 +37,20 @@ router.post(
   publicFormRateLimiter,
   validate(publicApplicationSchema),
   AdmissionsController.publicSubmit,
+);
+
+router.get(
+  '/public/offers/:token',
+  publicFormRateLimiter,
+  validate(offerTokenParamSchema),
+  AdmissionsController.publicOffer,
+);
+
+router.post(
+  '/public/offers/:token/respond',
+  publicFormRateLimiter,
+  validate(respondToOfferSchema),
+  AdmissionsController.respondToOffer,
 );
 
 export default router;

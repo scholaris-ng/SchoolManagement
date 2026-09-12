@@ -12,7 +12,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { formatDate, formatDateTime, formatFileSize } from '@/lib/format';
+import { formatDate, formatDateTime, formatFileSize, toDateInputValue } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClassOptions } from '@/features/academics/api';
@@ -118,6 +118,7 @@ export function AdmissionDetailPage() {
   const [note, setNote] = useState('');
   const [screeningScore, setScreeningScore] = useState('');
   const [offeredClassId, setOfferedClassId] = useState('');
+  const [offerExpiresOn, setOfferExpiresOn] = useState('');
   const [convertOpen, setConvertOpen] = useState(false);
 
   if (application.isPending) {
@@ -158,6 +159,7 @@ export function AdmissionDetailPage() {
     // Default to whatever was already offered, or failing that the class the
     // applicant themselves asked for — staff can still pick a different one.
     setOfferedClassId(record.offeredClassId ?? record.desiredClassId ?? '');
+    setOfferExpiresOn(record.offerExpiresOn ?? '');
   };
 
   const submitTransition = async () => {
@@ -172,6 +174,9 @@ export function AdmissionDetailPage() {
             : undefined
           : undefined,
       offeredClassId: needsClassChoice(pendingStatus) ? offeredClassId || undefined : undefined,
+      // A deadline only means something for a fresh offer — once accepted
+      // there is nothing left to wait on.
+      offerExpiresOn: pendingStatus === 'OFFERED' ? offerExpiresOn || undefined : undefined,
     });
     setPendingStatus(null);
   };
@@ -477,8 +482,8 @@ export function AdmissionDetailPage() {
           <DialogHeader>
             <DialogTitle>{pendingStatus ? labelFor(record.status, pendingStatus) : ''}</DialogTitle>
             <DialogDescription>
-              This is recorded against the application with your name and the time, and the family
-              is notified where the school has enabled it.
+              This is recorded against the application with your name and the time, and the
+              family's primary contact is emailed about it automatically.
             </DialogDescription>
           </DialogHeader>
 
@@ -519,6 +524,24 @@ export function AdmissionDetailPage() {
                     </option>
                   ))}
                 </NativeSelect>
+              </div>
+            )}
+
+            {pendingStatus === 'OFFERED' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="offer-expires">Respond by</Label>
+                <Input
+                  data-cy="offer-expires"
+                  id="offer-expires"
+                  type="date"
+                  min={toDateInputValue(new Date())}
+                  value={offerExpiresOn}
+                  onChange={(event) => setOfferExpiresOn(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Included in the email to the family as the deadline to confirm. Leave blank for
+                  no deadline.
+                </p>
               </div>
             )}
 

@@ -1,6 +1,7 @@
 import {
   escapeHtml,
   sendApplicationReceivedEmail,
+  sendApplicationStatusEmail,
   sendPasswordResetEmail,
   sendSchoolReadyEmail,
   sendStaffAccountEmail,
@@ -200,6 +201,74 @@ describe('sendApplicationReceivedEmail', () => {
     const { html, subject } = lastSend();
     expect(subject).toBe('Application received — Brightfield Academy — Scholaris');
     expect(html).not.toContain('Applications received');
+  });
+});
+
+describe('sendApplicationStatusEmail', () => {
+  const base = {
+    to: 'ngozi@example.test',
+    firstName: 'Ngozi',
+    schoolName: 'Brightfield Academy',
+    applicantName: 'Amara Okafor',
+    applicationNo: 'APP/2026-2027/0001',
+    contactEmail: 'office@brightfield.test',
+  };
+
+  it('names the class and the reply-by date on an offer', async () => {
+    await sendApplicationStatusEmail({
+      ...base,
+      status: 'OFFERED',
+      className: 'Primary 1',
+      offerExpiresOn: '2026-10-01',
+    });
+
+    const { html, subject } = lastSend();
+    expect(subject).toBe('A place has been offered — Brightfield Academy — Scholaris');
+    expect(html).toContain('Primary 1');
+    expect(html).toContain('2026-10-01');
+  });
+
+  it('reads the same as an offer everywhere except the news itself', async () => {
+    await sendApplicationStatusEmail({ ...base, status: 'REJECTED' });
+
+    const { html, subject } = lastSend();
+    expect(subject).toBe('Update on the application — Brightfield Academy — Scholaris');
+    // A plain, respectful line — not dressed up, and not apologetic filler.
+    expect(html).toContain('unable to offer');
+    expect(html).not.toMatch(/sorry|unfortunately/i);
+  });
+
+  it('carries a decision note through when the school left one', async () => {
+    await sendApplicationStatusEmail({
+      ...base,
+      status: 'SHORTLISTED',
+      note: 'Strong entrance paper — moving straight to interview.',
+    });
+
+    expect(lastSend().html).toContain('Strong entrance paper');
+  });
+
+  it('offers the accept/decline link as a button and as text, when there is one', async () => {
+    await sendApplicationStatusEmail({
+      ...base,
+      status: 'OFFERED',
+      offerUrl: 'https://app.test/offers/abc123',
+    });
+
+    const { html, text } = lastSend();
+    expect(html).toContain('href="https://app.test/offers/abc123"');
+    expect(html).toContain('Or paste this into your browser: https://app.test/offers/abc123');
+    expect(text).toContain('https://app.test/offers/abc123');
+    // The old "call the office" instruction is only for when there is no link.
+    expect(html).not.toContain('Please contact the school office to confirm');
+  });
+
+  it('falls back to contacting the office when there is no link', async () => {
+    await sendApplicationStatusEmail({ ...base, status: 'OFFERED' });
+
+    const { html } = lastSend();
+    expect(html).toContain('Please contact the school office to confirm this place.');
+    expect(html).not.toContain('href="https://');
   });
 });
 

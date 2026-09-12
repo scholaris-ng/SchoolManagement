@@ -1,11 +1,13 @@
+import { createHash, randomBytes } from 'node:crypto';
 import type { EntityManager } from 'typeorm';
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
+import { env } from '../../../config/env';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
-import { sendApplicationReceivedEmail } from '../../../shared/utils/mailer';
+import { sendApplicationReceivedEmail, sendApplicationStatusEmail } from '../../../shared/utils/mailer';
 import { AcademicSession } from '../../academics/entities/academicSession.entity';
 import { SchoolClass } from '../../academics/entities/schoolClass.entity';
 import { Student } from '../../students/entities/student.entity';
@@ -26,6 +28,7 @@ import { AdmissionStageEvent } from '../entities/admissionStageEvent.entity';
 import type {
   AdmissionApplicationDTO,
   PublicApplicationReceiptDTO,
+  PublicOfferDTO,
 } from '../dto/admissions.dto';
 import type {
   ApplicantInput,
@@ -34,6 +37,7 @@ import type {
   CreateAdmissionInput,
   FetchAdmissionsQuery,
   PublicApplicationInput,
+  RespondToOfferInput,
   TransitionAdmissionInput,
 } from '../validators/admissions.schema';
 
@@ -377,6 +381,134 @@ export class AdmissionsService {
     };
   }
 
+  /* -- Responding to an offer, with no account ------------------------------- */
+
+  /**
+   * What the "respond to this offer" link shows before anyone clicks
+   * anything — safe to call as many times as the family reloads the page.
+   */
+  async fetchPublicOffer(token: string): Promise<PublicOfferDTO> {
+    const application = await this.applications.findByOfferTokenHash(hashOfferToken(token));
+    if (!application) throw AppError.notFound('Offer');
+
+    const [school, session, offeredClass] = await Promise.all([
+      this.schools.findById(application.schoolId),
+      AppDataSource.getRepository(AcademicSession).findOne({ where: { id: application.sessionId } }),
+      application.offeredClassId
+        ? AppDataSource.getRepository(SchoolClass).findOne({ where: { id: application.offeredClassId } })
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      applicationNo: application.applicationNo,
+      applicantName: [application.firstName, application.lastName].filter(Boolean).join(' '),
+      schoolName: school?.name ?? '',
+      className: offeredClass?.name ?? null,
+      sessionName: session?.name ?? '',
+      offerExpiresOn: application.offerExpiresOn,
+      status: application.status,
+      respondable: application.status === 'OFFERED' && !this.offerHasExpired(application),
+    };
+  }
+
+  /**
+   * The family accepting or declining, from the emailed link rather than a
+   * phone call to the office. Everything the office's own "Record
+   * acceptance" and "Reject" buttons do — the stage event, the audit trail,
+   * telling the school — happens here too, under a name that says how it
+   * actually happened, because a decision made this way is no less real for
+   * having no staff member behind it.
+   */
+  async respondToOfferPublic(
+    token: string,
+    input: RespondToOfferInput,
+    origin: { ipAddress: string | null; userAgent: string | null; requestId: string },
+  ): Promise<PublicOfferDTO> {
+    const application = await this.applications.findByOfferTokenHash(hashOfferToken(token));
+    if (!application) throw AppError.notFound('Offer');
+
+    if (application.status !== 'OFFERED') {
+      throw AppError.conflict('This offer has already been responded to.');
+    }
+    if (this.offerHasExpired(application)) {
+      throw AppError.conflict(
+        'This offer has expired. Please contact the school office directly.',
+      );
+    }
+
+    const primary =
+      application.contacts.find((contact) => contact.isPrimaryContact) ?? application.contacts[0];
+    const status: ApplicationStatus = input.action === 'ACCEPT' ? 'ACCEPTED' : 'WITHDRAWN';
+    const actorName = primary
+      ? `${primary.firstName} ${primary.lastName} (via offer link)`
+      : 'Family (via offer link)';
+    const now = new Date();
+
+    const columns: Record<string, unknown> = { status, decidedAt: now };
+    if (status === 'ACCEPTED') columns.acceptedAt = now;
+
+    await AppDataSource.transaction(async (manager) => {
+      await manager.update(AdmissionApplication, { id: application.id }, columns);
+      await this.appendStageEvent(manager, application, {
+        status,
+        actorUserId: null,
+        actorName,
+        note:
+          input.action === 'ACCEPT'
+            ? 'Accepted online, via the link emailed with the offer.'
+            : 'Declined online, via the link emailed with the offer.',
+        occurredAt: now,
+      });
+    });
+
+    await this.audit.recordSystem(application.schoolId, {
+      actorName,
+      action: input.action === 'ACCEPT' ? 'admission.accepted' : 'admission.withdrawn',
+      entityType: 'AdmissionApplication',
+      entityId: application.id,
+      entityLabel: application.applicationNo,
+      after: { status },
+      ipAddress: origin.ipAddress,
+      userAgent: origin.userAgent,
+      requestId: origin.requestId,
+    });
+
+    void this.notifications.notifySchoolAdmins(application.schoolId, {
+      category: 'ADMISSION',
+      title: input.action === 'ACCEPT' ? 'Offer accepted online' : 'Offer declined online',
+      body: `${application.firstName} ${application.lastName} ${
+        input.action === 'ACCEPT' ? 'accepted their offer' : 'declined their offer'
+      } (${application.applicationNo}).`,
+      actionUrl: `/admissions/${application.id}`,
+      severity: input.action === 'ACCEPT' ? 'SUCCESS' : 'INFO',
+      entityType: 'AdmissionApplication',
+      entityId: application.id,
+    });
+
+    if (primary) {
+      const school = await this.schools.findById(application.schoolId);
+      void sendApplicationStatusEmail({
+        to: primary.email,
+        firstName: primary.firstName,
+        schoolName: school?.name ?? '',
+        applicantName: `${application.firstName} ${application.lastName}`,
+        applicationNo: application.applicationNo,
+        status,
+        contactEmail: school?.email ?? primary.email,
+      });
+    }
+
+    return this.fetchPublicOffer(token);
+  }
+
+  /** A date-only comparison: "expires on" a day, not at a particular hour. */
+  private offerHasExpired(application: AdmissionApplication): boolean {
+    return Boolean(
+      application.offerExpiresOn &&
+        application.offerExpiresOn < new Date().toISOString().slice(0, 10),
+    );
+  }
+
   /* -- Moving through the stages -------------------------------------------- */
 
   async transition(
@@ -431,6 +563,15 @@ export class AdmissionsService {
     const now = new Date();
     const columns: Record<string, unknown> = { status: input.status };
 
+    // A fresh link every time a place is offered — re-offering after a
+    // rejection reconsidered, say — so an older email's link can never be
+    // used once a new one has gone out.
+    let offerToken: string | null = null;
+    if (input.status === 'OFFERED') {
+      offerToken = generateOfferToken();
+      columns.offerTokenHash = hashOfferToken(offerToken);
+    }
+
     if (input.screeningScore !== undefined) columns.screeningScore = input.screeningScore;
     if (offeredClass) columns.offeredClassId = offeredClass.id;
     if (input.offerExpiresOn) columns.offerExpiresOn = input.offerExpiresOn;
@@ -462,7 +603,32 @@ export class AdmissionsService {
       severity: DECISION_STATUSES.includes(input.status) ? 'WARNING' : 'INFO',
     });
 
-    return this.requireDTO(context.schoolId, application.id);
+    const dto = await this.requireDTO(context.schoolId, application.id);
+
+    // Every stage change is news the family is waiting on, not only the ones
+    // that end the process — a screening or a shortlist is as much an answer
+    // to "have you heard anything?" as an offer or a rejection is.
+    const primary = application.contacts.find((c) => c.isPrimaryContact) ?? application.contacts[0];
+    // `DRAFT` never actually reaches here — nothing in `ALLOWED_NEXT` targets
+    // it — but the check keeps that guarantee explicit rather than assumed.
+    if (primary && input.status !== 'DRAFT') {
+      const school = await this.schools.findById(context.schoolId);
+      void sendApplicationStatusEmail({
+        to: primary.email,
+        firstName: primary.firstName,
+        schoolName: school?.name ?? '',
+        applicantName: `${application.firstName} ${application.lastName}`,
+        applicationNo: application.applicationNo,
+        status: input.status,
+        className: dto.offeredClassName,
+        offerExpiresOn: dto.offerExpiresOn,
+        offerUrl: offerToken ? `${env.appUrl}/offers/${offerToken}` : undefined,
+        note: nullIfBlank(input.note),
+        contactEmail: school?.email ?? primary.email,
+      });
+    }
+
+    return dto;
   }
 
   /* -- Becoming a pupil ------------------------------------------------------ */
@@ -900,4 +1066,19 @@ function combineAddress(
 ): string | null {
   const line = [address, city, state].filter(Boolean).join(', ');
   return line || null;
+}
+
+/**
+ * The link a family follows to accept or decline an offer with no account of
+ * their own — 256 bits from a cryptographic source, not `Math.random`, and
+ * URL-safe so it survives being pasted into a browser bar or a WhatsApp
+ * message unmangled.
+ */
+function generateOfferToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+/** Only this ever reaches the database — see `offerTokenHash` on the entity. */
+function hashOfferToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }

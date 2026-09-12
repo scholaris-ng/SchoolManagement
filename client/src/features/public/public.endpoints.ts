@@ -3,7 +3,7 @@ import type { VerificationResult } from '@/types/results';
 import type { CalendarEvent } from '@/types/curriculum';
 import type { NewsPost, WebsiteContent } from '@/types/engagement';
 import type { SchoolBranding } from '@/types/tenant';
-import type { PublicAdmissionOptions, PublicApplicationReceipt } from '@/types/admissions';
+import type { PublicAdmissionOptions, PublicApplicationReceipt, PublicOffer } from '@/types/admissions';
 
 /**
  * Endpoint layer for the unauthenticated routes.
@@ -51,4 +51,11 @@ export const PublicEndpoints = {
    */
   submitApplication: (slug: string, payload: PublicApplicationPayload) =>
     http.post<PublicApplicationReceipt>(`/public/schools/${slug}/applications`, payload),
+
+  /** What the "respond to this offer" link shows, by its token alone. */
+  fetchOffer: (token: string) => http.get<PublicOffer>(`/public/offers/${token}`),
+
+  /** The family accepting or declining a place, with no account of their own. */
+  respondToOffer: (token: string, action: 'ACCEPT' | 'DECLINE') =>
+    http.post<PublicOffer>(`/public/offers/${token}/respond`, { action }),
 };

@@ -183,10 +183,31 @@ export const publicApplicationSchema = z.object({
   }),
 });
 
+/**
+ * The token in the "respond to this offer" link a family is emailed — a
+ * URL-safe random string, not a uuid, so it is validated by shape rather than
+ * format the way `slug` or an id would be.
+ */
+const offerTokenParam = z.object({
+  token: z.string().trim().min(16).max(200),
+});
+
+export const offerTokenParamSchema = z.object({ params: offerTokenParam });
+
+export const respondToOfferSchema = z.object({
+  params: offerTokenParam,
+  body: z.object({
+    action: z.enum(['ACCEPT', 'DECLINE'], {
+      errorMap: () => ({ message: 'Say whether the place is being accepted or declined' }),
+    }),
+  }),
+});
+
 export type FetchAdmissionsQuery = z.infer<typeof fetchAdmissionsSchema>['query'];
 export type CreateAdmissionInput = z.infer<typeof createAdmissionSchema>['body'];
 export type TransitionAdmissionInput = z.infer<typeof transitionAdmissionSchema>['body'];
 export type ConvertAdmissionInput = z.infer<typeof convertAdmissionSchema>['body'];
 export type PublicApplicationInput = z.infer<typeof publicApplicationSchema>['body'];
+export type RespondToOfferInput = z.infer<typeof respondToOfferSchema>['body'];
 export type ApplicationContactInput = z.infer<typeof applicationContactSchema>;
 export type ApplicantInput = z.infer<typeof applicantSchema>;

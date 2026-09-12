@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { PublicEndpoints } from './public.endpoints';
 import type { PublicApplicationPayload, PublicSchoolPage } from './public.endpoints';
@@ -62,5 +62,29 @@ export function useSubmitApplication(slug: string | undefined) {
     mutationFn: (payload: PublicApplicationPayload) =>
       PublicEndpoints.submitApplication(slug ?? '', payload),
     meta: { silent: true },
+  });
+}
+
+/** The "respond to this offer" link's own page reads this by its token alone. */
+export function useOffer(token: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.public.offer(token ?? ''),
+    queryFn: () => PublicEndpoints.fetchOffer(token ?? ''),
+    enabled: Boolean(token),
+    retry: false,
+    meta: { silent: true },
+  });
+}
+
+/** Accepting or declining a place, with no account of the family's own. */
+export function useRespondToOffer(token: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: 'ACCEPT' | 'DECLINE') =>
+      PublicEndpoints.respondToOffer(token ?? '', action),
+    meta: { silent: true },
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.public.offer(token ?? ''), result);
+    },
   });
 }

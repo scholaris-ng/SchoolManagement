@@ -45,7 +45,12 @@ const PROJECTION = `
   a.interview_date AS "interviewDate", a.interview_note AS "interviewNote",
   a.decision_note AS "decisionNote",
   a.offered_class_id AS "offeredClassId", c.name AS "offeredClassName",
-  a.offer_expires_on AS "offerExpiresOn",
+  -- Cast explicitly: a bare "date" column comes back from the pg driver as a
+  -- JS Date object, not the string this projection's own type promises.
+  -- Nothing noticed before this fed straight into escapeHtml() — everywhere
+  -- else it only ever passed through res.json(), which stringifies a Date
+  -- silently and hid the mismatch.
+  to_char(a.offer_expires_on, 'YYYY-MM-DD') AS "offerExpiresOn",
   a.submitted_at AS "submittedAt", a.decided_at AS "decidedAt", a.accepted_at AS "acceptedAt",
   a.converted_student_id AS "convertedStudentId",
   a.version
@@ -174,6 +179,16 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
 
     application.timeline = await this.timelineFor(schoolId, id);
     return application;
+  }
+
+  /**
+   * The one lookup the public "respond to this offer" link uses. Unscoped by
+   * school on purpose — a token this specific is the tenant boundary, the
+   * same way a password-reset link is trusted on its own rather than paired
+   * with a second identifier.
+   */
+  async findByOfferTokenHash(hash: string): Promise<AdmissionApplication | null> {
+    return this.repo.findOne({ where: { offerTokenHash: hash } });
   }
 
   async timelineFor(schoolId: string, applicationId: string): Promise<AdmissionStageEventDTO[]> {
