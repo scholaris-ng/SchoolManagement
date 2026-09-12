@@ -38,7 +38,7 @@ export function PeriodDialog({
         <DialogHeader>
           <DialogTitle>{state.period ? 'Edit period' : 'New period'}</DialogTitle>
           <DialogDescription>
-            Sequence sets where this sits in the school day, top to bottom on the timetable.
+            Set when this period runs and where it falls in the school day.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
@@ -92,6 +92,10 @@ export function PeriodDialog({
               value={sequence}
               onChange={(event) => setSequence(event.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Where this period sits in the school day, top to bottom on the timetable — 1 comes
+              before 2, and so on.
+            </p>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input

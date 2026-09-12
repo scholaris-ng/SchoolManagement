@@ -9,11 +9,9 @@ const PROJECTION = `
   sub.is_core AS "isCore", sub.is_active AS "isActive", sub.schedule,
   COALESCE(lv.ids,   '{}') AS "levelIds",
   COALESCE(lv.names, '{}') AS "levelNames",
-  (
-    SELECT COUNT(DISTINCT ta.staff_id)::int
-    FROM teaching_assignments ta
-    WHERE ta.subject_id = sub.id
-  ) AS "teacherCount"
+  COALESCE(t.ids,   '{}') AS "teacherIds",
+  COALESCE(t.names, '{}') AS "teacherNames",
+  COALESCE(array_length(t.ids, 1), 0) AS "teacherCount"
 `;
 
 const LEVEL_JOIN = `
@@ -25,6 +23,28 @@ const LEVEL_JOIN = `
     JOIN school_levels l ON l.id = sl.level_id AND l.deleted_at IS NULL
     WHERE sl.subject_id = sub.id
   ) lv ON TRUE
+`;
+
+/**
+ * One row per teacher, not per teaching assignment: a subject taught by the
+ * same person to three classes must still name them once. The dedup happens
+ * in the inner query — an `array_agg(DISTINCT …)` outside it cannot also be
+ * ordered, since Postgres requires a `DISTINCT` aggregate's `ORDER BY` to be
+ * one of its own arguments, and two separately-ordered distinct aggregates
+ * (one for ids, one for names) would not agree on an order with each other.
+ */
+const TEACHER_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT
+      array_agg(x.id   ORDER BY x.last_name) AS ids,
+      array_agg(x.name ORDER BY x.last_name) AS names
+    FROM (
+      SELECT DISTINCT s.id, s.last_name, (s.first_name || ' ' || s.last_name) AS name
+      FROM teaching_assignments ta
+      JOIN staff s ON s.id = ta.staff_id AND s.deleted_at IS NULL
+      WHERE ta.subject_id = sub.id AND ta.school_id = sub.school_id
+    ) x
+  ) t ON TRUE
 `;
 
 export interface SubjectFilter {
@@ -65,6 +85,7 @@ export class SubjectRepository extends TenantRepository<Subject> {
       `SELECT ${PROJECTION}
        FROM subjects sub
        ${LEVEL_JOIN}
+       ${TEACHER_JOIN}
        WHERE sub.school_id = $1 AND sub.deleted_at IS NULL ${where}
        ORDER BY sub.name ASC`,
       params,
@@ -76,6 +97,7 @@ export class SubjectRepository extends TenantRepository<Subject> {
       `SELECT ${PROJECTION}
        FROM subjects sub
        ${LEVEL_JOIN}
+       ${TEACHER_JOIN}
        WHERE sub.school_id = $1 AND sub.id = $2 AND sub.deleted_at IS NULL`,
       [schoolId, id],
     );

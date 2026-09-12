@@ -35,13 +35,26 @@ describe('fetchStaffSchema', () => {
     }
   });
 
-  it('accepts the three filters the staff list offers', () => {
+  it('accepts the filters the staff list offers', () => {
     const result = fetchStaffSchema.safeParse(
       wrap({
-        query: { status: 'ON_LEAVE', employmentType: 'PART_TIME', department: 'Sciences' },
+        query: {
+          status: 'ON_LEAVE',
+          employmentType: 'PART_TIME',
+          department: 'Sciences',
+          classId: '11111111-2222-4333-8444-555555555555',
+          subjectId: '99999999-8888-4777-8666-555555555555',
+        },
       }),
     );
     expect(result.success).toBe(true);
+  });
+
+  it('refuses a class or subject filter that is not a uuid', () => {
+    expect(fetchStaffSchema.safeParse(wrap({ query: { classId: 'jss-1' } })).success).toBe(false);
+    expect(fetchStaffSchema.safeParse(wrap({ query: { subjectId: 'maths' } })).success).toBe(
+      false,
+    );
   });
 
   it('refuses an employment status the entity does not define', () => {

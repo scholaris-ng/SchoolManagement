@@ -494,8 +494,6 @@ export function TimetablePage() {
         slot={slot}
         conflict={conflict}
         classes={(classes.data ?? []).map((c) => ({ value: c.id, label: c.name }))}
-        subjects={(subjects.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
-        teachers={teachers}
         rooms={(rooms.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
         defaultClassId={classId}
         defaultTeacherId={teacherId}

@@ -126,7 +126,7 @@ export function SubjectDialog({
             Core subject — every student at these levels takes it
           </label>
 
-          <fieldset className="space-y-1.5">
+          {/* <fieldset className="space-y-1.5">
             <legend className="text-sm font-medium">Weekly periods</legend>
             <p className="text-xs text-muted-foreground">
               Optional — mark which periods this subject is normally taught in.
@@ -174,7 +174,7 @@ export function SubjectDialog({
                 </table>
               </div>
             )}
-          </fieldset>
+          </fieldset> */}
         </DialogBody>
         <DialogFooter>
           <Button data-cy="settings-academics-settings-cancel-6" variant="outline" onClick={onClose}>

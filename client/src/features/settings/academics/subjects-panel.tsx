@@ -39,6 +39,11 @@ export function SubjectsPanel({
                     {subject.schedule.length > 0 &&
                       ` · ${subject.schedule.length} period${subject.schedule.length === 1 ? '' : 's'}/week`}
                   </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {subject.teacherNames.length > 0
+                      ? subject.teacherNames.join(', ')
+                      : 'No teacher assigned yet'}
+                  </p>
                 </div>
                 {subject.isCore && <Badge tone="primary">Core</Badge>}
                 {!subject.isActive && <Badge tone="warning">Inactive</Badge>}

@@ -20,6 +20,25 @@ vi.mock('./api', () => ({
   useDeleteTimetableEntry: (...args: unknown[]) => useDeleteTimetableEntry(...args),
   useClearTimetable: (...args: unknown[]) => useClearTimetable(...args),
 }));
+const SUBJECTS = [
+  { value: 'sub_1', label: 'Mathematics' },
+  { value: 'sub_2', label: 'English Language' },
+];
+const TEACHERS = [
+  { value: 'stf_1', label: 'Funmilayo Adeyemi' },
+  { value: 'stf_2', label: 'Ibrahim Sule' },
+];
+
+/** Standing in for what the class's level, and each teacher's assignment, would narrow to. */
+const SUBJECTS_BY_CLASS: Record<string, typeof SUBJECTS> = {
+  cls_1: [SUBJECTS[0]],
+  cls_2: [SUBJECTS[1]],
+};
+const TEACHERS_BY_CLASS: Record<string, typeof TEACHERS> = {
+  cls_1: [TEACHERS[0]],
+  cls_2: [TEACHERS[1]],
+};
+
 vi.mock('@/features/academics/api', () => ({
   useClasses: () => ({
     data: [
@@ -30,18 +49,15 @@ vi.mock('@/features/academics/api', () => ({
   }),
   useRooms: () => ({ data: [], isPending: false }),
   useSubjects: () => ({
-    data: [
-      { id: 'sub_1', name: 'Mathematics' },
-      { id: 'sub_2', name: 'English Language' },
-    ],
+    data: SUBJECTS.map((subject) => ({ id: subject.value, name: subject.label })),
     isPending: false,
   }),
+  useSubjectOptions: (query: { classId?: string } = {}) =>
+    query.classId ? (SUBJECTS_BY_CLASS[query.classId] ?? []) : SUBJECTS,
 }));
 vi.mock('@/features/staff/api', () => ({
-  useTeacherOptions: () => [
-    { value: 'stf_1', label: 'Funmilayo Adeyemi' },
-    { value: 'stf_2', label: 'Ibrahim Sule' },
-  ],
+  useTeacherOptions: (filter: { classId?: string } = {}) =>
+    filter.classId ? (TEACHERS_BY_CLASS[filter.classId] ?? []) : TEACHERS,
 }));
 vi.mock('@/app/providers/auth-provider', () => ({
   useAuth: () => authStub(['timetable.read', 'timetable.manage']),
@@ -240,6 +256,34 @@ describe('TimetablePage', () => {
       'That move would clash',
       expect.objectContaining({ description: expect.stringContaining('already teaches') }),
     );
+  });
+
+  /**
+   * The lesson dialog's Subject and Teacher pickers narrow to the class chosen
+   * inside the dialog, so a class only offers the subjects its level teaches
+   * and the staff actually assigned to it — not everything the school runs.
+   */
+  it('narrows the subject and teacher pickers to the class chosen in the lesson dialog', async () => {
+    const user = userEvent.setup();
+    renderPage(<TimetablePage />);
+    await screen.findByRole('button', { name: /Mathematics/ });
+
+    await user.click(screen.getByRole('button', { name: 'Add a lesson on Tuesday in Period 1' }));
+    const dialog = await screen.findByRole('dialog');
+
+    // Before a class is chosen, nothing has been narrowed yet.
+    expect(within(dialog).getByRole('option', { name: 'English Language' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('option', { name: 'Ibrahim Sule' })).toBeInTheDocument();
+
+    // The dialog's "Class" field is required, so its label reads "Class *".
+    await user.selectOptions(within(dialog).getByLabelText(/^Class/), 'cls_1');
+
+    expect(within(dialog).getByRole('option', { name: 'Mathematics' })).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('option', { name: 'English Language' }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('option', { name: 'Funmilayo Adeyemi' })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('option', { name: 'Ibrahim Sule' })).not.toBeInTheDocument();
   });
 
   it('only offers the drag-to-delete target once a lesson is actually being dragged', async () => {

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { WEEKDAYS as DAYS } from '@/lib/weekdays';
 import type { Weekday } from '@/types/curriculum';
+import { useSubjectOptions } from '@/features/academics/api';
+import { useTeacherOptions } from '@/features/staff/api';
 import { Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
@@ -27,8 +29,6 @@ export function EntryDialog({
   slot,
   conflict,
   classes,
-  subjects,
-  teachers,
   rooms,
   defaultClassId,
   defaultTeacherId,
@@ -41,8 +41,6 @@ export function EntryDialog({
   slot: SlotTarget | null;
   conflict: string | null;
   classes: { value: string; label: string }[];
-  subjects: { value: string; label: string }[];
-  teachers: { value: string; label: string }[];
   rooms: { value: string; label: string }[];
   defaultClassId: string;
   defaultTeacherId: string;
@@ -64,6 +62,25 @@ export function EntryDialog({
   const [subjectId, setSubjectId] = useState(slot?.entry?.subjectId ?? '');
   const [teacherIdValue, setTeacherId] = useState(slot?.entry?.teacherId ?? defaultTeacherId);
   const [roomId, setRoomId] = useState(slot?.entry?.roomId ?? '');
+
+  // Narrowed to the chosen class: a class only offers the subjects its level
+  // teaches and the staff actually assigned to teach it, rather than
+  // everything the school runs.
+  const subjects = useSubjectOptions(classIdValue ? { classId: classIdValue } : {});
+  const teachers = useTeacherOptions(classIdValue ? { classId: classIdValue } : {});
+
+  // A subject or teacher chosen for one class is not necessarily valid for
+  // another, so switching the class clears both — but only on a change made
+  // in this dialog, not on the initial mount that restores an existing lesson.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    setSubjectId('');
+    setTeacherId('');
+  }, [classIdValue]);
 
   const valid = Boolean(classIdValue && subjectId && teacherIdValue);
   const dayLabel = DAYS.find((day) => day.value === slot?.day)?.label ?? '';

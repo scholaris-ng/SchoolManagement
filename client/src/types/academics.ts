@@ -69,6 +69,8 @@ export interface Subject {
   isCore: boolean;
   levelIds: string[];
   levelNames: string[];
+  teacherIds: string[];
+  teacherNames: string[];
   teacherCount: number;
   isActive: boolean;
   /** When this subject is normally taught, independent of any one class's timetable. */

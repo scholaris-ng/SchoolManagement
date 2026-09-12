@@ -18,12 +18,11 @@ import {
   MultiSelectField,
   PhoneField,
   SelectField,
-  SwitchField,
   TextField,
 } from '@/components/forms/form-field';
 import { FileUpload } from '@/components/forms/file-upload';
 import { NewStaffCredentialsDialog, type NewStaffCredentials } from './new-staff-credentials-dialog';
-import { Alert, LoadingState } from '@/components/ui/feedback';
+import { LoadingState } from '@/components/ui/feedback';
 
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Male' },
@@ -109,23 +108,30 @@ export function StaffFormPage() {
       roleNames: member.roleNames as StaffFormValues['roleNames'],
       subjectIds: member.subjectIds,
       classIds: member.classIds,
+      // Not user-set any more — see the note on `onSubmit` below — but the
+      // form still needs a value here while the record's own copy loads.
       isFormTeacher: member.isFormTeacher,
     });
   }, [existing.data, form]);
 
   const onSubmit = form.handleSubmit(async (values) => {
+    // Form-teacher duties (report-card comments, releasing children) are now
+    // purely a consequence of holding the Form teacher role — there is no
+    // separate control for it on this form any more — so what is actually
+    // sent overrides whatever the loaded record's own flag happened to be.
+    const payload = { ...values, isFormTeacher: values.roleNames.includes('FORM_TEACHER') };
     try {
       if (isEdit) {
         const member = await updateStaff.mutateAsync({
-          values,
+          values: payload,
           version: existing.data?.version ?? 0,
         });
         navigate(`/staff/${member.id}`);
       } else {
-        const member = await createStaff.mutateAsync(values);
+        const member = await createStaff.mutateAsync(payload);
         // Otherwise the unsaved-changes guard reads the form as still dirty
         // and blocks the very navigation the "continue" button below asks for.
-        form.reset(values, { keepValues: true });
+        form.reset(payload, { keepValues: true });
         // The password only ever comes back on this one response, so it is
         // shown before moving on rather than after — there is no later screen
         // that could still offer it.
@@ -146,8 +152,6 @@ export function StaffFormPage() {
   });
 
   const photoUrl = form.watch('photoUrl');
-  const isFormTeacher = form.watch('isFormTeacher');
-  const classIds = form.watch('classIds');
 
   return (
     <PageContainer width="narrow">
@@ -295,18 +299,6 @@ export function StaffFormPage() {
                 options={classOptions}
                 emptyLabel="No classes defined yet — add them under Academic setup."
               />
-              <SwitchField
-                control={form.control}
-                name="isFormTeacher"
-                label="Form teacher"
-                description="Form teachers write report-card comments and can release children to authorised adults."
-              />
-              {isFormTeacher && classIds.length === 0 && (
-                <Alert tone="warning" title="No class selected">
-                  A form teacher needs at least one class, otherwise there is no register for them
-                  to take.
-                </Alert>
-              )}
             </FormSection>
           </CardContent>
 

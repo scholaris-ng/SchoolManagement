@@ -71,6 +71,11 @@ export const fetchStaffSchema = z.object({
     // Free text rather than an enum: departments are whatever a school calls
     // them, and no catalogue of them exists to check against.
     department: z.string().trim().max(120).optional(),
+    // Given together, these narrow to the one teaching assignment that pairs
+    // them — not to anyone who teaches the class and, separately, teaches the
+    // subject somewhere else (see `fetchPaginated`).
+    classId: z.string().uuid().optional(),
+    subjectId: z.string().uuid().optional(),
   }),
 });
 

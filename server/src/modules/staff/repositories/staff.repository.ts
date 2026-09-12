@@ -105,6 +105,8 @@ export interface StaffFilter {
   status?: string;
   employmentType?: string;
   department?: string;
+  classId?: string;
+  subjectId?: string;
 }
 
 export class StaffRepository extends TenantRepository<Staff> {
@@ -210,6 +212,32 @@ export class StaffRepository extends TenantRepository<Staff> {
     if (filter.status) add((i) => `s.status = $${i}`, filter.status);
     if (filter.employmentType) add((i) => `s.employment_type = $${i}`, filter.employmentType);
     if (filter.department) add((i) => `s.department = $${i}`, filter.department);
+
+    /**
+     * Given together, these narrow to staff assigned that exact pairing, not
+     * to anyone who teaches the class and, unrelatedly, teaches the subject
+     * elsewhere — the same distinction `teachingAssignments` protects on the
+     * read side (a teacher who has Biology in JSS 1 and Mathematics in SSS 1
+     * must not appear under "Mathematics" + "JSS 1").
+     */
+    if (filter.classId && filter.subjectId) {
+      params.push(filter.classId, filter.subjectId);
+      const [classIndex, subjectIndex] = [params.length - 1, params.length];
+      where.push(
+        `EXISTS (SELECT 1 FROM teaching_assignments ta
+                  WHERE ta.staff_id = s.id AND ta.class_id = $${classIndex} AND ta.subject_id = $${subjectIndex})`,
+      );
+    } else if (filter.classId) {
+      add(
+        (i) => `EXISTS (SELECT 1 FROM teaching_assignments ta WHERE ta.staff_id = s.id AND ta.class_id = $${i})`,
+        filter.classId,
+      );
+    } else if (filter.subjectId) {
+      add(
+        (i) => `EXISTS (SELECT 1 FROM teaching_assignments ta WHERE ta.staff_id = s.id AND ta.subject_id = $${i})`,
+        filter.subjectId,
+      );
+    }
 
     if (filter.search) {
       params.push(`%${filter.search}%`);

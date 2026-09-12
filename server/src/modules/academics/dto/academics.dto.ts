@@ -74,6 +74,8 @@ export interface SubjectDTO {
   isCore: boolean;
   levelIds: string[];
   levelNames: string[];
+  teacherIds: string[];
+  teacherNames: string[];
   teacherCount: number;
   isActive: boolean;
   schedule: SubjectScheduleSlotDTO[];

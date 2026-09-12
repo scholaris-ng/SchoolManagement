@@ -117,14 +117,25 @@ export function useStaffPerformance(termId?: string) {
  * A teacher has no business browsing the roster, so the list is not fetched
  * for them at all: the caller gets nothing to offer instead of a dropdown
  * built from a request that would only have been refused.
+ *
+ * `classId`, when given, narrows the list to staff with a teaching assignment
+ * for that class — the timetable's lesson dialog uses this so a class only
+ * offers the teachers who actually teach it, rather than the whole staffroom.
+ * Filtered client-side rather than as a server query: the roster is already
+ * fetched whole for the page-level filter, and narrowing it again per class
+ * would mean a request every time the dialog's class changes.
  */
-export function useTeacherOptions(): SelectOption[] {
+export function useTeacherOptions(filter: { classId?: string } = {}): SelectOption[] {
   const canReadStaff = usePermission('staff.read');
   const staff = useStaffList(
     { page: 1, pageSize: 200, sortBy: 'lastName', status: 'ACTIVE' },
     { enabled: canReadStaff },
   );
-  return (staff.data?.items ?? []).map((member) => ({
+  const members = staff.data?.items ?? [];
+  const scoped = filter.classId
+    ? members.filter((member) => member.classIds.includes(filter.classId!))
+    : members;
+  return scoped.map((member) => ({
     value: member.id,
     label: member.fullName,
     description: member.designation,

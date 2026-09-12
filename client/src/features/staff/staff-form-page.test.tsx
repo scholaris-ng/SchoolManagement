@@ -83,8 +83,6 @@ describe('StaffFormPage — editing', () => {
   it('ticks the roles the staff member already holds', async () => {
     renderEdit(member({ roleNames: ['TEACHER', 'FORM_TEACHER'] }));
 
-    // Scoped to the roles list: "Form teacher" is also the label of the
-    // teaching-assignment switch further down the same form.
     const roles = within(await screen.findByRole('group', { name: 'Roles' }));
     expect(roles.getByLabelText('Teacher')).toBeChecked();
     expect(roles.getByLabelText('Form teacher')).toBeChecked();
@@ -104,6 +102,51 @@ describe('StaffFormPage — editing', () => {
       version: 3,
       values: { roleNames: ['TEACHER'], designation: 'Head of mathematics' },
     });
+  });
+
+  /**
+   * There used to be a separate "Form teacher" switch here, which meant
+   * someone could hold the role's permissions with the switch left off — no
+   * register to take, no way to release a child — because ticking the role
+   * did not touch it. There is no second control left to forget: whatever the
+   * record's own stored flag says, what is actually sent is derived from the
+   * role ticked on save.
+   */
+  it('sends isFormTeacher true when the Form teacher role is ticked, regardless of the loaded flag', async () => {
+    const user = userEvent.setup();
+    renderEdit(member({ roleNames: ['TEACHER'], isFormTeacher: false }));
+
+    const roles = within(await screen.findByRole('group', { name: 'Roles' }));
+    await user.click(roles.getByLabelText('Form teacher'));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    expect(updateMutate.mock.calls[0][0].values).toMatchObject({
+      roleNames: ['TEACHER', 'FORM_TEACHER'],
+      isFormTeacher: true,
+    });
+  });
+
+  it('sends isFormTeacher false when the Form teacher role is unticked, regardless of the loaded flag', async () => {
+    const user = userEvent.setup();
+    renderEdit(member({ roleNames: ['TEACHER', 'FORM_TEACHER'], isFormTeacher: true }));
+
+    const roles = within(await screen.findByRole('group', { name: 'Roles' }));
+    await user.click(roles.getByLabelText('Form teacher'));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    expect(updateMutate.mock.calls[0][0].values).toMatchObject({
+      roleNames: ['TEACHER'],
+      isFormTeacher: false,
+    });
+  });
+
+  it('has no separate Form teacher switch any more', async () => {
+    renderEdit(member());
+    await screen.findByRole('group', { name: 'Roles' });
+
+    expect(screen.queryByRole('switch', { name: 'Form teacher' })).not.toBeInTheDocument();
   });
 
   it('says why it will not save when a role is one this form cannot set', async () => {

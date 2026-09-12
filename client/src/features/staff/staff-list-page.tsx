@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
+import { useClasses, useSubjects } from '@/features/academics/api';
 import { useBulkExitStaff, useStaffList } from './api';
 import type { StaffMember } from '@/types/people';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -34,7 +35,7 @@ export function StaffListPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const list = useListQuery({
-    filterKeys: ['status', 'employmentType', 'department'],
+    filterKeys: ['status', 'employmentType', 'department', 'classId', 'subjectId'],
     defaultSortBy: 'lastName',
     // The staff query is slower than most list screens, so it gets the
     // longer of the two debounce delays client_arch.md calls for (§12) —
@@ -43,6 +44,8 @@ export function StaffListPage() {
   });
   const staff = useStaffList(list.query);
   const bulkExit = useBulkExitStaff();
+  const classes = useClasses();
+  const subjects = useSubjects();
 
   const selectedMembers = useMemo(
     () => (staff.data?.items ?? []).filter((member) => selectedIds.includes(member.id)),
@@ -178,6 +181,24 @@ export function StaffListPage() {
         filters={[
           { key: 'status', label: 'Status', options: STATUS_OPTIONS, allLabel: 'All statuses' },
           { key: 'employmentType', label: 'Employment', options: EMPLOYMENT_OPTIONS },
+          {
+            key: 'classId',
+            label: 'Class',
+            options: (classes.data ?? []).map((schoolClass) => ({
+              value: schoolClass.id,
+              label: schoolClass.name,
+            })),
+            allLabel: 'All classes',
+          },
+          {
+            key: 'subjectId',
+            label: 'Subject',
+            options: (subjects.data ?? []).map((subject) => ({
+              value: subject.id,
+              label: subject.name,
+            })),
+            allLabel: 'All subjects',
+          },
         ]}
       />
 
