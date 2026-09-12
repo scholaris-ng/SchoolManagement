@@ -1,5 +1,12 @@
 export type Gender = 'MALE' | 'FEMALE';
 
+/**
+ * Whether the pupil sleeps at school. Nothing academic turns on it: it exists
+ * because boarding is billed to boarders and to nobody else, and bulk billing
+ * has to tell them apart without asking the office child by child.
+ */
+export type BoardingStatus = 'DAY' | 'BOARDING';
+
 export type StudentStatus =
   | 'ACTIVE'
   | 'GRADUATED'
@@ -23,6 +30,7 @@ export interface Student {
   photoConsent: boolean;
   admissionDate: string;
   status: StudentStatus;
+  boardingStatus: BoardingStatus;
   currentClassId?: string | null;
   currentClassName?: string | null;
   currentLevelName?: string | null;

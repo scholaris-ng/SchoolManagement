@@ -27,10 +27,26 @@ import { PermissionGate } from '@/components/guards/permission-gate';
  * and the payment appears against the student on its own. The number is the
  * whole hand-off, which is why it can be copied in one click.
  */
-export function PaymentAccountsCard({ studentId, currency = 'NGN' }: { studentId: string; currency?: string }) {
+export function PaymentAccountsCard({
+  studentId,
+  currency = 'NGN',
+  invoiceId,
+  defaultAmount,
+}: {
+  studentId: string;
+  currency?: string;
+  /**
+   * Ties the account to one bill. Whatever lands on it settles that invoice
+   * automatically, instead of arriving as money on account for the office to
+   * match up the next morning.
+   */
+  invoiceId?: string;
+  /** Pre-fills the amount — the invoice's outstanding balance, on its page. */
+  defaultAmount?: number;
+}) {
   const accounts = useStudentPaymentAccounts(studentId);
   const create = useCreatePaymentAccount();
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : '');
   const [bvn, setBvn] = useState('');
   const [note, setNote] = useState('');
 
@@ -39,7 +55,13 @@ export function PaymentAccountsCard({ studentId, currency = 'NGN' }: { studentId
   const submit = async () => {
     const value = Number(amount);
     if (!value || value <= 0 || !bvnValid) return;
-    await create.mutateAsync({ studentId, amount: value, bvn, note: note.trim() || undefined });
+    await create.mutateAsync({
+      studentId,
+      amount: value,
+      bvn,
+      note: note.trim() || undefined,
+      invoiceId,
+    });
     setAmount('');
     setBvn('');
     setNote('');

@@ -2,11 +2,11 @@
  * The admin dashboard payload, mirroring `AdminDashboard` in
  * `client/src/types/analytics.ts` exactly.
  *
- * Several fields have no source yet — the finance and calendar modules do not
- * exist server-side. They are answered as zero or empty rather than dropped:
- * the client's type requires them, and an honest zero with a comment naming
- * the missing module is easier to reason about than a field that quietly
- * disappears.
+ * The finance figures are real now that the ledger exists. What is left with
+ * no source is the calendar, which has no events table. Those fields are
+ * answered as zero or empty rather than dropped: the client's type requires
+ * them, and an honest zero with a comment naming the missing module is easier
+ * to reason about than a field that quietly disappears.
  */
 
 export interface StatDeltaDTO {
@@ -160,11 +160,9 @@ export interface BursarCollectionTrendPointDTO {
  * The bursar's landing screen, mirroring `BursarDashboard` in
  * `client/src/types/analytics.ts` exactly.
  *
- * The whole payload is ledger-shaped — invoices, payments, arrears — and none
- * of that has a table yet (see `finance.routes`, where fee *items* are real
- * but invoices, payments and debtors are still served empty). Every figure
- * here is the same honest zero or empty list `AdminDashboardDTO`'s finance
- * section already answers with, not a fabricated total.
+ * The whole payload is ledger-shaped — invoices, payments, arrears — and every
+ * figure on it is now read from those tables. Whole-ledger rather than
+ * current-term: see `DashboardService.fetchBursar` for why.
  */
 export interface BursarDashboardDTO {
   currency: string;

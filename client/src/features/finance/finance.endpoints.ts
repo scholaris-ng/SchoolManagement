@@ -5,6 +5,7 @@ import type {
   FeeItem,
   FeeStructure,
   FinanceOverview,
+  GenerateInvoicesResult,
   Invoice,
   Payment,
   PaymentAccount,
@@ -40,6 +41,31 @@ export interface CreatePaymentAccountInput {
   /** The paying guardian's BVN — verified by Raven, never stored by us. */
   bvn: string;
   note?: string;
+  /** Ties the account to one bill, so the credit settles it automatically. */
+  invoiceId?: string;
+}
+
+/**
+ * What the server accepts for a fee structure, which is *not* a `FeeStructure`:
+ * a line here names a fee item and a price, where a line coming back also
+ * carries its own id and the item's name. Typing the request separately is
+ * what stops a screen posting a read model back and being surprised.
+ */
+export interface FeeStructureInput {
+  name: string;
+  /** Null means "any term in this session" — the same fees every term. */
+  termId: string | null;
+  sessionId: string;
+  levelIds: string[];
+  classIds: string[];
+  lines: { feeItemId: string; amount: number; isOptional: boolean }[];
+  isActive: boolean;
+}
+
+/** Bulk billing: `{ dueDate }`, plus the term where the structure has none. */
+export interface GenerateInvoicesInput {
+  dueDate: string;
+  termId?: string;
 }
 
 /**
@@ -70,11 +96,18 @@ export const FinanceEndpoints = {
   fetchFeeStructures: (query: ListQuery) =>
     http.get<Paginated<FeeStructure>>('/fee-structures', { query }),
 
-  createFeeStructure: (values: Partial<FeeStructure>) =>
+  createFeeStructure: (values: Partial<FeeStructureInput>) =>
     http.post<FeeStructure>('/fee-structures', values),
 
-  updateFeeStructure: (id: string, values: Partial<FeeStructure>) =>
+  updateFeeStructure: (id: string, values: Partial<FeeStructureInput>) =>
     http.patch<FeeStructure>(`/fee-structures/${id}`, values),
+
+  /**
+   * Bills every pupil the structure covers who has not already been billed for
+   * the term. Safe to call twice — the second call reports them all skipped.
+   */
+  generateInvoices: (id: string, input: GenerateInvoicesInput) =>
+    http.post<GenerateInvoicesResult>(`/fee-structures/${id}/generate`, input),
 
   fetchDiscounts: () => http.get<Discount[]>('/discounts'),
 

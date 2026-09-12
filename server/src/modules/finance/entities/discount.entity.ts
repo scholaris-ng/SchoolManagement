@@ -21,8 +21,11 @@ export const DISCOUNT_MODES: readonly DiscountMode[] = ['PERCENTAGE', 'FIXED'];
  * sibling reduction, a staff-child concession (spec section 26).
  *
  * Like a fee item, a discount is a definition, not money that has moved: it
- * says what *could* be waived, not that anything was. Applying one to an
- * actual invoice line is a ledger concern and waits on that table existing.
+ * says what *could* be waived, not that anything was. What was actually waived
+ * on a bill lives on `invoice_lines.discount_amount`, snapshotted there at
+ * issue, so editing this row never rewrites a discount a family was already
+ * given. Granting one to a named student for a term is the piece still to
+ * build — today the bursar keys the amount onto the invoice line.
  */
 @Entity('discounts')
 @Index(['schoolId'])

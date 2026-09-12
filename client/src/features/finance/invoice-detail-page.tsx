@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import { PaymentAccountsCard } from './payment-accounts-card';
 import { Field, Row } from './invoice-detail-page-parts';
 
 export function InvoiceDetailPage() {
@@ -177,6 +178,25 @@ export function InvoiceDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/*
+        Only while something is still owed, and never on the printed copy: a
+        family holding a paid receipt does not need somewhere to pay, and the
+        account number belongs to this bill specifically — a credit landing on
+        it settles this invoice rather than sitting on account.
+      */}
+      {record.balance > 0 && (
+        <PermissionGate require="payment.manage">
+          <div className="no-print">
+            <PaymentAccountsCard
+              studentId={record.studentId}
+              currency={currency}
+              invoiceId={record.id}
+              defaultAmount={record.balance}
+            />
+          </div>
+        </PermissionGate>
+      )}
     </PageContainer>
   );
 }

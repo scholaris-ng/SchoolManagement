@@ -4,6 +4,8 @@
  */
 export { FeeItemDialog } from './fee-item-dialog';
 export { DiscountDialog } from './discount-dialog';
+export { FeeStructureDialog } from './fee-structure-dialog';
+export { GenerateInvoicesDialog } from './generate-invoices-dialog';
 
 
 export function Toggle({

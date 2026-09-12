@@ -6,6 +6,8 @@ import type {
   CreatePaymentAccountInput,
   FetchPaymentsQuery,
   RavenWebhookBody,
+  ReconcilePaymentInput,
+  RecordPaymentInput,
 } from '../validators/payments.schema';
 
 const service = () => PaymentsService.Instance;
@@ -18,6 +20,38 @@ export class PaymentsController {
         req.validated!.query as FetchPaymentsQuery,
       );
       res.status(200).json(ApiResponse.paginated(page));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Cash, transfer, POS or cheque taken at the desk. Never an online credit. */
+  static async record(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = req.validated!.body as RecordPaymentInput;
+      const payment = await service().recordManualPayment(contextOf(req), body);
+      res.status(201).json(ApiResponse.created(payment, `Payment ${payment.reference} recorded`));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async reconcile(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const { note } = req.validated!.body as ReconcilePaymentInput;
+      res
+        .status(200)
+        .json(ApiResponse.ok(await service().reconcilePayment(contextOf(req), id, note || undefined)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async receipt(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { paymentId } = req.validated!.params as { paymentId: string };
+      res.status(200).json(ApiResponse.ok(await service().fetchReceipt(contextOf(req), paymentId)));
     } catch (error) {
       next(error);
     }

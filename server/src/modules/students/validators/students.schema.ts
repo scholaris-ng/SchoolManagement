@@ -36,6 +36,9 @@ const studentBody = z.object({
   dateOfBirth,
   admissionDate: isoDate,
   currentClassId: z.string().uuid('Select a class'),
+  // Defaults to DAY. Boarding is billed only to boarders, and the safe
+  // direction for a field nobody filled in is the one that under-bills.
+  boardingStatus: z.enum(['DAY', 'BOARDING']).default('DAY'),
   houseId: z.string().uuid().optional().or(z.literal('')),
   photoUrl: z.string().url().max(500).nullable().optional(),
   photoStoragePath: z.string().max(500).nullable().optional(),

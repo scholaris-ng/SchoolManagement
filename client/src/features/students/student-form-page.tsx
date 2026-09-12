@@ -33,6 +33,11 @@ const GENDER_OPTIONS = [
   { value: 'FEMALE', label: 'Female' },
 ];
 
+const BOARDING_OPTIONS = [
+  { value: 'DAY', label: 'Day student' },
+  { value: 'BOARDING', label: 'Boarder' },
+];
+
 const emptyValues: StudentFormValues = {
   admissionNo: '',
   firstName: '',
@@ -42,6 +47,7 @@ const emptyValues: StudentFormValues = {
   dateOfBirth: '',
   admissionDate: toDateInputValue(new Date()),
   currentClassId: '',
+  boardingStatus: 'DAY',
   houseId: '',
   photoUrl: null,
   photoStoragePath: null,
@@ -86,6 +92,7 @@ export function StudentFormPage() {
       dateOfBirth: toDateInputValue(student.dateOfBirth),
       admissionDate: toDateInputValue(student.admissionDate),
       currentClassId: student.currentClassId ?? '',
+      boardingStatus: student.boardingStatus ?? 'DAY',
       houseId: student.houseId ?? '',
       photoUrl: student.photoUrl ?? null,
       photoStoragePath: null,
@@ -243,6 +250,14 @@ export function StudentFormPage() {
                     </>
                   ) : undefined
                 }
+              />
+              <SelectField
+                control={form.control}
+                name="boardingStatus"
+                label="Day or boarding"
+                options={BOARDING_OPTIONS}
+                native
+                hint="Boarding fees are only billed to boarders."
               />
               <SelectField
                 control={form.control}

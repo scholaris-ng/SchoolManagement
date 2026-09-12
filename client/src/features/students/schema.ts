@@ -39,6 +39,11 @@ export const studentFormSchema = z.object({
   dateOfBirth: dateOfBirthSchema,
   admissionDate: z.string().min(1, 'Admission date is required'),
   currentClassId: z.string().min(1, 'Select a class'),
+  /**
+   * Defaults to day. Boarding is billed only to boarders, and the safe
+   * direction for a field nobody thought about is the one that under-bills.
+   */
+  boardingStatus: z.enum(['DAY', 'BOARDING']).default('DAY'),
   houseId: z.string().optional().or(z.literal('')),
   photoUrl: z.string().optional().nullable(),
   photoStoragePath: z.string().optional().nullable(),

@@ -1,4 +1,4 @@
-import type { Gender, StudentStatus } from '../entities/student.entity';
+import type { BoardingStatus, Gender, StudentStatus } from '../entities/student.entity';
 
 /** Matches `client/src/types/people.ts` field for field. */
 export interface StudentDTO {
@@ -15,6 +15,7 @@ export interface StudentDTO {
   photoConsent: boolean;
   admissionDate: string;
   status: StudentStatus;
+  boardingStatus: BoardingStatus;
   currentClassId: string | null;
   currentClassName: string | null;
   currentLevelName: string | null;

@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../shared/entities/baseEntity';
 import { School } from '../../school/entities/school.entity';
 import { Student } from '../../students/entities/student.entity';
+import { Invoice } from './invoice.entity';
 
 export type PaymentProvider = 'RAVEN';
 
@@ -21,6 +22,7 @@ export type PaymentAccountStatus = 'ACTIVE' | 'PAID' | 'CLOSED';
 @Index(['schoolId'])
 @Index(['schoolId', 'studentId'])
 @Index(['provider', 'accountNumber'], { unique: true })
+@Index(['invoiceId'])
 export class PaymentAccount extends BaseEntity {
   @Column({ name: 'school_id', type: 'uuid' })
   schoolId: string;
@@ -35,6 +37,19 @@ export class PaymentAccount extends BaseEntity {
   @ManyToOne(() => Student, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'student_id' })
   student?: Student;
+
+  /**
+   * The bill this account was raised for, when it was raised for one. A credit
+   * landing on a tied account allocates itself against that invoice, which is
+   * the difference between a transfer that pays a bill and a transfer that
+   * merely arrives and waits for the office to say what it was for.
+   */
+  @Column({ name: 'invoice_id', type: 'uuid', nullable: true })
+  invoiceId: string | null;
+
+  @ManyToOne(() => Invoice, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'invoice_id' })
+  invoice?: Invoice | null;
 
   @Column({ type: 'varchar', length: 20 })
   provider: PaymentProvider;

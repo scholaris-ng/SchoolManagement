@@ -13,9 +13,13 @@ export type PaymentSource = 'RAVEN' | 'MANUAL';
  *
  * A row here is written only from something that proves the money moved: a
  * provider's own record of a credit, confirmed by calling the provider back
- * rather than trusting the notification that prompted it; or, later, a member
- * of staff recording cash they took at the desk. A browser returning from a
- * payment page proves nothing and never writes one of these.
+ * rather than trusting the notification that prompted it; or a member of staff
+ * recording cash they took at the desk. A browser returning from a payment
+ * page proves nothing and never writes one of these.
+ *
+ * Which bills a credit settled lives in `payment_allocations`, not here. A
+ * payment can pay part of one invoice, all of two, or nothing at all — money
+ * on account that the office places later.
  *
  * No soft delete: a payment that was reversed is marked `REVERSED`, not
  * removed. The ledger has to keep adding up to what the bank says.
@@ -25,6 +29,7 @@ export type PaymentSource = 'RAVEN' | 'MANUAL';
 @Index(['schoolId', 'studentId'])
 @Index(['schoolId', 'paidAt'])
 @Index(['provider', 'providerReference'], { unique: true })
+@Index(['verificationCode'], { unique: true })
 export class Payment extends BaseEntity {
   @Column({ name: 'school_id', type: 'uuid' })
   schoolId: string;
@@ -62,6 +67,24 @@ export class Payment extends BaseEntity {
   @Column({ name: 'provider_reference', type: 'varchar', length: 80, nullable: true })
   providerReference: string | null;
 
+  /**
+   * The reference the *payer* quotes — a teller number off a bank slip, a POS
+   * terminal's stub, a cheque number. Distinct from `providerReference`, which
+   * is unique per provider and could not hold this: two families genuinely do
+   * write the same narration on a deposit slip.
+   */
+  @Column({ name: 'external_reference', type: 'varchar', length: 80, nullable: true })
+  externalReference: string | null;
+
+  /**
+   * Printed on the receipt so a family can have one checked later. Globally
+   * unique, not per school, because the code is the whole lookup — a public
+   * `/verify/:code` page is not built yet, but the code is generated and
+   * stored from today so receipts issued now stay verifiable when it is.
+   */
+  @Column({ name: 'verification_code', type: 'varchar', length: 16 })
+  verificationCode: string;
+
   @Column({ type: 'varchar', length: 20 })
   method: PaymentMethod;
 
@@ -85,8 +108,20 @@ export class Payment extends BaseEntity {
   @Column({ name: 'payer_name', type: 'varchar', length: 160, nullable: true })
   payerName: string | null;
 
+  /**
+   * Whether somebody has checked this credit against the bank statement. A
+   * Raven credit is already proven — it was read back from Raven's API — but
+   * cash taken at the desk is only ever as good as the count, so the bursar's
+   * sign-off is recorded separately from the payment itself.
+   */
   @Column({ name: 'is_reconciled', type: 'boolean', default: false })
   isReconciled: boolean;
+
+  @Column({ name: 'reconciled_at', type: 'timestamptz', nullable: true })
+  reconciledAt: Date | null;
+
+  @Column({ name: 'reconciled_by_user_id', type: 'uuid', nullable: true })
+  reconciledByUserId: string | null;
 
   @Column({ type: 'text', nullable: true })
   note: string | null;

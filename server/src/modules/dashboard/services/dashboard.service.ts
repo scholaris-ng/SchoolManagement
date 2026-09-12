@@ -10,6 +10,7 @@ import { SessionRepository } from '../../academics/repositories/session.reposito
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
 import { AdmissionRepository } from '../../admissions/repositories/admission.repository';
 import { PaymentRepository } from '../../finance/repositories/payment.repository';
+import { LedgerRepository } from '../../finance/repositories/ledger.repository';
 import type {
   AdminDashboardDTO,
   BursarDashboardDTO,
@@ -25,6 +26,10 @@ const ATTENDANCE_TREND_DAYS = 14;
 
 /** The client slices the activity feed to six; sending more would be wasted rows. */
 const ACTIVITY_LIMIT = 6;
+
+/** What the bursar's two lists show without scrolling. */
+const RECENT_PAYMENTS_LIMIT = 8;
+const TOP_DEBTORS_LIMIT = 8;
 
 /**
  * The administrator's landing screen.
@@ -54,6 +59,7 @@ export class DashboardService {
     private readonly sessions = SessionRepository.Instance,
     private readonly admissions = AdmissionRepository.Instance,
     private readonly payments = PaymentRepository.Instance,
+    private readonly ledger = LedgerRepository.Instance,
   ) {}
 
   async fetchAdmin(context: RequestContext): Promise<AdminDashboardDTO> {
@@ -71,6 +77,7 @@ export class DashboardService {
       attendanceTrend,
       sessions,
       feesCollected,
+      feeTotals,
     ] = await Promise.all([
       this.schools.findById(schoolId),
       this.students.countActive(schoolId),
@@ -86,9 +93,13 @@ export class DashboardService {
       }),
       this.sessions.fetchForSchool(schoolId),
       this.payments.sumCollected(schoolId),
+      this.ledger.overviewTotals(schoolId),
     ]);
 
     if (!school) throw AppError.notFound('School');
+
+    // Net of discounts on both sides — see `AnalyticsService.fetchFinanceOverview`.
+    const netBilled = feeTotals.totalBilled - feeTotals.totalDiscount;
 
     // Scoped to the current session — last year's decided applications should
     // not keep counting toward "open" once this year's admissions cycle has
@@ -116,13 +127,10 @@ export class DashboardService {
       attendanceMarkedClasses: today.markedClasses,
       totalClasses,
 
-      // Collected is real — every Raven credit lands in `payments`. Billed
-      // and outstanding wait on invoices: without a bill there is nothing to
-      // owe, and a collection rate with no denominator would be a made-up one.
-      feesBilled: 0,
+      feesBilled: feeTotals.totalBilled,
       feesCollected,
-      feesOutstanding: 0,
-      collectionRate: 0,
+      feesOutstanding: round2(netBilled - feesCollected),
+      collectionRate: netBilled > 0 ? Math.round((feesCollected / netBilled) * 1000) / 10 : 0,
 
       admissionsInProgress,
       admissionsAccepted: admissionCounts.ACCEPTED,
@@ -147,8 +155,10 @@ export class DashboardService {
       // Calendar module: no events table.
       upcomingEvents: [],
 
-      // Retention risk is derived from fee arrears and attendance, neither of
-      // which exists yet.
+      // Retention risk weighs arrears against attendance decline and guardian
+      // engagement. Arrears are real now; the other two signals are not, and a
+      // risk score built on one of three inputs would rank families by who
+      // owes money and call it a model.
       atRiskCount: 0,
     };
   }
@@ -204,28 +214,45 @@ export class DashboardService {
    * The bursar's landing screen: what has been billed, what has come in, and
    * who still owes.
    *
-   * The whole payload is ledger-shaped, and the ledger — invoices, payments,
-   * arrears — has no table yet, only fee item *definitions* do. Every figure
-   * is answered as an honest zero or empty list, the same choice `fetchAdmin`
-   * makes for its finance section, rather than fabricating a collection rate
-   * no invoice backs.
+   * Whole-ledger rather than current-term. A bursar's first question in the
+   * morning is what is outstanding altogether, and a term-scoped total would
+   * quietly forgive last term's arrears every time the school turned the page.
    */
   async fetchBursar(context: RequestContext): Promise<BursarDashboardDTO> {
-    const school = await this.schools.findById(context.schoolId);
+    const { schoolId } = context;
+
+    const [school, totals, collected, recentPayments, unreconciled, topDebtors, collectionTrend] =
+      await Promise.all([
+        this.schools.findById(schoolId),
+        this.ledger.overviewTotals(schoolId),
+        this.payments.sumCollected(schoolId),
+        this.payments.recentForDashboard(schoolId, RECENT_PAYMENTS_LIMIT),
+        this.payments.unreconciledSummary(schoolId),
+        this.ledger.topDebtors(schoolId, TOP_DEBTORS_LIMIT),
+        this.ledger.monthlyTrend(schoolId),
+      ]);
+
     if (!school) throw AppError.notFound('School');
+
+    const netBilled = totals.totalBilled - totals.totalDiscount;
 
     return {
       currency: school.settings?.currency ?? 'NGN',
-      billed: 0,
-      collected: 0,
-      outstanding: 0,
-      collectionRate: 0,
-      recentPayments: [],
-      unreconciled: { count: 0, amount: 0 },
-      topDebtors: [],
-      collectionTrend: [],
+      billed: totals.totalBilled,
+      collected,
+      outstanding: round2(netBilled - collected),
+      collectionRate: netBilled > 0 ? Math.round((collected / netBilled) * 1000) / 10 : 0,
+      recentPayments,
+      unreconciled,
+      topDebtors,
+      collectionTrend,
     };
   }
+}
+
+/** Money that has been through subtraction, back to two places. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 /** Matching how the rest of the server reads "today" (`studentRelations.service`). */

@@ -38,6 +38,17 @@ export interface FeeStructure {
   version: number;
 }
 
+/**
+ * What one bulk-billing run did. `skipped` is not an error: it counts the
+ * pupils this structure had already billed for the term, which is what makes
+ * pressing the button twice safe.
+ */
+export interface GenerateInvoicesResult {
+  created: number;
+  skipped: number;
+  invoiceIds: string[];
+}
+
 export type DiscountType = 'SIBLING' | 'STAFF_CHILD' | 'SCHOLARSHIP' | 'EARLY_PAYMENT' | 'OTHER';
 
 export interface Discount {
@@ -130,6 +141,11 @@ export interface PaymentAccount {
   status: 'ACTIVE' | 'PAID' | 'CLOSED';
   note?: string | null;
   createdAt: string;
+  /**
+   * The bill this account was raised for, when it was raised for one. A credit
+   * landing on a tied account settles that invoice on its own.
+   */
+  invoiceId?: string | null;
 }
 
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'ONLINE' | 'CHEQUE';

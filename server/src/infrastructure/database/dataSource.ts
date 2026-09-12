@@ -35,8 +35,13 @@ import { StudentGuardian } from '../../modules/guardians/entities/studentGuardia
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
 import { FeeItem } from '../../modules/finance/entities/feeItem.entity';
 import { Discount } from '../../modules/finance/entities/discount.entity';
+import { FeeStructure } from '../../modules/finance/entities/feeStructure.entity';
+import { FeeStructureLine } from '../../modules/finance/entities/feeStructureLine.entity';
+import { Invoice } from '../../modules/finance/entities/invoice.entity';
+import { InvoiceLine } from '../../modules/finance/entities/invoiceLine.entity';
 import { PaymentAccount } from '../../modules/finance/entities/paymentAccount.entity';
 import { Payment } from '../../modules/finance/entities/payment.entity';
+import { PaymentAllocation } from '../../modules/finance/entities/paymentAllocation.entity';
 import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
 import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
@@ -79,8 +84,13 @@ export const entities = [
   AdmissionStageEvent,
   FeeItem,
   Discount,
+  FeeStructure,
+  FeeStructureLine,
+  Invoice,
+  InvoiceLine,
   PaymentAccount,
   Payment,
+  PaymentAllocation,
   ImportJob,
   Notification,
   NotificationPreference,

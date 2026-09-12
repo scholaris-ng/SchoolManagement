@@ -3,11 +3,11 @@
  * `client/src/types/analytics.ts`, `types/attendance.ts`, `types/finance.ts`
  * and `types/admissions.ts` exactly.
  *
- * Most of what this screen wants has no source yet — the assessment, register,
- * ledger and admissions tables do not exist server-side. Following the same
- * rule as `dashboard.dto.ts`: the fields are answered as zero or empty rather
- * than dropped, so the client renders its own empty state instead of an error,
- * and each gap is commented with the module that will fill it.
+ * The register, ledger and admissions tables are all real now; assessment is
+ * what this screen still asks for and cannot get. Following the same rule as
+ * `dashboard.dto.ts`: the fields with no source are answered as zero or empty
+ * rather than dropped, so the client renders its own empty state instead of an
+ * error, and each gap is commented with the module that will fill it.
  */
 
 /* -- Academic ------------------------------------------------------------- */

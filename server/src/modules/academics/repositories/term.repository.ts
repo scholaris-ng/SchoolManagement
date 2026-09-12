@@ -5,7 +5,9 @@ import type { TermDTO } from '../dto/academics.dto';
 
 const PROJECTION = `
   t.id, t.school_id AS "schoolId", t.session_id AS "sessionId",
-  s.name AS "sessionName", t.name, t.sequence,
+  s.name AS "sessionName",
+  to_char(s.start_date, 'YYYY-MM-DD') AS "sessionStartDate",
+  t.name, t.sequence,
   to_char(t.start_date, 'YYYY-MM-DD') AS "startDate",
   to_char(t.end_date,   'YYYY-MM-DD') AS "endDate",
   t.teaching_weeks AS "teachingWeeks", t.is_current AS "isCurrent", t.status
@@ -43,6 +45,25 @@ export class TermRepository extends TenantRepository<Term> {
        JOIN academic_sessions s ON s.id = t.session_id
        WHERE t.school_id = $1 AND t.id = $2 AND t.deleted_at IS NULL`,
       [schoolId, id],
+    );
+    return rows[0] ?? null;
+  }
+
+  /**
+   * The term the school has marked current, if it has marked one.
+   *
+   * Cheaper than `fetchForSchool().find(...)` and says what it means at the
+   * call site — the ledger asks this on every bulk-billing run and every
+   * overview that was not given a term of its own.
+   */
+  async findCurrent(schoolId: string): Promise<TermDTO | null> {
+    const rows: TermDTO[] = await this.repo.query(
+      `SELECT ${PROJECTION}
+       FROM terms t
+       JOIN academic_sessions s ON s.id = t.session_id
+       WHERE t.school_id = $1 AND t.deleted_at IS NULL AND t.is_current = true
+       LIMIT 1`,
+      [schoolId],
     );
     return rows[0] ?? null;
   }

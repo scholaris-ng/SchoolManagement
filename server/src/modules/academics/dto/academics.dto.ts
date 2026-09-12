@@ -24,6 +24,16 @@ export interface TermDTO {
   schoolId: string;
   sessionId: string;
   sessionName: string;
+  /**
+   * The session's own start date, not the term's.
+   *
+   * Term sequences restart every year, so "is this term earlier than that
+   * one?" is only answerable as `(session start, term sequence)`. The ledger's
+   * carry-forward asks that question on every invoice it issues, and carrying
+   * the date here saves it a second lookup. Additive to the client's `Term`,
+   * which simply ignores it.
+   */
+  sessionStartDate: string;
   name: string;
   sequence: number;
   startDate: string;

@@ -99,6 +99,7 @@ export class StudentsService {
           dateOfBirth: input.dateOfBirth,
           admissionDate: input.admissionDate,
           status: 'ACTIVE',
+          boardingStatus: input.boardingStatus,
           currentClassId: schoolClass.id,
           houseId: nullIfBlank(input.houseId),
           photoUrl: input.photoUrl ?? null,

@@ -21,6 +21,7 @@ const PROJECTION = `
   s.photo_url AS "photoUrl", s.photo_consent AS "photoConsent",
   to_char(s.admission_date, 'YYYY-MM-DD') AS "admissionDate",
   s.status,
+  s.boarding_status AS "boardingStatus",
   s.current_class_id AS "currentClassId",
   c.name AS "currentClassName",
   l.name AS "currentLevelName",

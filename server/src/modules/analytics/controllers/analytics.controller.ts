@@ -72,7 +72,10 @@ export class AnalyticsController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      res.status(200).json(ApiResponse.ok(await service().fetchFinanceOverview(contextOf(req))));
+      const { termId } = req.validated!.query as { termId?: string };
+      res
+        .status(200)
+        .json(ApiResponse.ok(await service().fetchFinanceOverview(contextOf(req), termId)));
     } catch (error) {
       next(error);
     }

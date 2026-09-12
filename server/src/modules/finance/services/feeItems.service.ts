@@ -11,8 +11,10 @@ import type { FeeCategory } from '../entities/feeItem.entity';
 /**
  * What a school charges for.
  *
- * Fee items are definitions, not money that has moved — an invoice or a
- * payment is a claim about a family and stays unbuilt until the ledger lands.
+ * Fee items are definitions, not money that has moved. An invoice built from
+ * one copies its name and amount rather than pointing at it, so editing an
+ * amount here changes what is billed from now on and never rewrites a bill a
+ * parent is already holding (spec section 26).
  */
 export class FeeItemsService {
   static Instance = new FeeItemsService();

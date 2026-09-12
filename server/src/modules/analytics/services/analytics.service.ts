@@ -9,6 +9,8 @@ import { AcademicScopeService } from '../../academics/services/academicScope.ser
 import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
 import { AdmissionsService } from '../../admissions/services/admissions.service';
+import { LedgerRepository } from '../../finance/repositories/ledger.repository';
+import { PaymentRepository } from '../../finance/repositories/payment.repository';
 import type {
   AdmissionFunnelDTO,
   AttendanceTrendPointDTO,
@@ -22,13 +24,12 @@ import type {
 /**
  * The management analytics screen.
  *
- * Read-only aggregation. Attendance is real, and reads the register the
- * attendance module now keeps; admissions is real, and reads the applications
- * table; assessment and finance still have no tables and are an honest nothing
- * — the same gaps the admin dashboard reports as zero. Each panel is still
- * served rather than left to 404, because
- * a screen that renders "no data yet" tells the truth about an unbuilt module,
- * while a wall of failed requests only looks broken.
+ * Read-only aggregation. Attendance reads the register, admissions reads the
+ * applications table, and finance now reads the ledger. Assessment is the last
+ * one still an honest nothing — the same gap the admin dashboard reports as
+ * zero. Its panel is still served rather than left to 404, because a screen
+ * that renders "no data yet" tells the truth about an unbuilt module, while a
+ * wall of failed requests only looks broken.
  *
  * The methods still waiting on a module return real rows for the dimensions
  * that do exist (classes, staff, terms, sessions) and zero for the measures
@@ -45,6 +46,8 @@ export class AnalyticsService {
     private readonly staff = StaffRepository.Instance,
     private readonly attendance = AttendanceRepository.Instance,
     private readonly scope = AcademicScopeService.Instance,
+    private readonly ledger = LedgerRepository.Instance,
+    private readonly payments = PaymentRepository.Instance,
   ) {}
 
   /* -- Academic ----------------------------------------------------------- */
@@ -123,27 +126,46 @@ export class AnalyticsService {
 
   /* -- Finance ------------------------------------------------------------ */
 
-  async fetchFinanceOverview(context: RequestContext): Promise<FinanceOverviewDTO> {
+  /**
+   * The bursar's headline figures.
+   *
+   * `termId` narrows billed, collected and the category split to one term;
+   * the trend and the debtor count stay whole-ledger on purpose. A family that
+   * owes for last term is still a debtor today, and a twelve-month chart of a
+   * single term would be eleven empty months.
+   */
+  async fetchFinanceOverview(
+    context: RequestContext,
+    termId?: string,
+  ): Promise<FinanceOverviewDTO> {
     const school = await this.schools.findById(context.schoolId);
     if (!school) throw AppError.notFound('School');
 
-    return {
-      // The currency is real: it is a school setting, not a ledger figure, and
-      // the client formats every zero below with it.
-      currency: school.settings?.currency ?? 'NGN',
+    const [totals, collected, unreconciled, collectionTrend, byCategory] = await Promise.all([
+      this.ledger.overviewTotals(context.schoolId, termId),
+      this.ledger.collectedTotal(context.schoolId, termId),
+      this.payments.unreconciledSummary(context.schoolId),
+      this.ledger.monthlyTrend(context.schoolId),
+      this.ledger.byCategory(context.schoolId, termId),
+    ]);
 
-      // Finance module: no fee, invoice or payment tables exist. Billed and
-      // collected are both nothing, which makes outstanding nothing too.
-      totalBilled: 0,
-      totalCollected: 0,
-      totalOutstanding: 0,
-      totalDiscount: 0,
-      collectionRate: 0,
-      debtorCount: 0,
-      unreconciledCount: 0,
-      unreconciledAmount: 0,
-      collectionTrend: [],
-      byCategory: [],
+    // Net of discounts on both sides: a waived charge was never going to be
+    // collected, and counting it as billed would report a school that gives
+    // scholarships as one that fails to collect.
+    const netBilled = totals.totalBilled - totals.totalDiscount;
+
+    return {
+      currency: school.settings?.currency ?? 'NGN',
+      totalBilled: totals.totalBilled,
+      totalCollected: collected,
+      totalOutstanding: round2(netBilled - collected),
+      totalDiscount: totals.totalDiscount,
+      collectionRate: netBilled > 0 ? Math.round((collected / netBilled) * 1000) / 10 : 0,
+      debtorCount: totals.debtorCount,
+      unreconciledCount: unreconciled.count,
+      unreconciledAmount: unreconciled.amount,
+      collectionTrend,
+      byCategory,
     };
   }
 
@@ -287,6 +309,11 @@ function daysBefore(date: string, days: number): string {
   const cursor = new Date(`${date}T00:00:00Z`);
   cursor.setUTCDate(cursor.getUTCDate() - days);
   return cursor.toISOString().slice(0, 10);
+}
+
+/** Money that has been through subtraction, back to two places. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function mean(values: number[]): number {

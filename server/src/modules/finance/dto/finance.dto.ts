@@ -3,6 +3,14 @@ import type { DiscountMode, DiscountType } from '../entities/discount.entity';
 import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentAccount.entity';
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
 
+/**
+ * The status the *client* knows about. `OVERDUE` is not a stored state — see
+ * `Invoice.status` — but the projections derive it, so the wire type carries
+ * it. `DRAFT` is in the client's union and nothing here ever produces one:
+ * this server issues an invoice or does not raise it at all.
+ */
+export type InvoiceStatusDTO = 'DRAFT' | 'ISSUED' | 'PART_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+
 /** Mirrors `client/src/types/finance.ts` — the client's copy is the contract. */
 export interface FeeItemDTO {
   id: string;
@@ -30,6 +38,151 @@ export interface DiscountDTO {
   description: string | null;
 }
 
+/** Mirrors `FeeStructureLine` in `client/src/types/finance.ts`. */
+export interface FeeStructureLineDTO {
+  id: string;
+  feeItemId: string;
+  feeItemName: string;
+  amount: number;
+  isOptional: boolean;
+}
+
+/** Mirrors `FeeStructure` in `client/src/types/finance.ts`. */
+export interface FeeStructureDTO {
+  id: string;
+  schoolId: string;
+  name: string;
+  sessionId: string;
+  sessionName: string;
+  termId: string | null;
+  termName: string | null;
+  levelIds: string[];
+  levelNames: string[];
+  classIds: string[];
+  lines: FeeStructureLineDTO[];
+  /** What every pupil in scope is billed. The figure the office quotes. */
+  mandatoryTotal: number;
+  optionalTotal: number;
+  isActive: boolean;
+  version: number;
+}
+
+/** What one bulk-billing run did. Mirrors `GenerateInvoicesResult` on the client. */
+export interface GenerateInvoicesResultDTO {
+  created: number;
+  /** Already had a live invoice for this structure and term — not an error. */
+  skipped: number;
+  invoiceIds: string[];
+}
+
+/** Mirrors `InvoiceLine` in `client/src/types/finance.ts`. */
+export interface InvoiceLineDTO {
+  id: string;
+  feeItemId: string;
+  description: string;
+  quantity: number;
+  unitAmount: number;
+  discountAmount: number;
+  lineTotal: number;
+  isOptional: boolean;
+}
+
+/**
+ * Mirrors `Invoice` in `client/src/types/finance.ts`.
+ *
+ * `amountPaid` and `balance` are computed from allocations on every read, and
+ * `status` may come back `OVERDUE` even though no row is ever stored that way.
+ */
+export interface InvoiceDTO {
+  id: string;
+  schoolId: string;
+  invoiceNo: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sessionId: string;
+  sessionName: string;
+  termId: string;
+  termName: string;
+  issueDate: string;
+  dueDate: string;
+  /** Empty in list projections — only the detail read pays for the join. */
+  lines: InvoiceLineDTO[];
+  subtotal: number;
+  discountTotal: number;
+  broughtForward: number;
+  total: number;
+  amountPaid: number;
+  balance: number;
+  status: InvoiceStatusDTO;
+  note: string | null;
+  createdAt: string;
+  version: number;
+}
+
+/** Mirrors `PaymentAllocation` in `client/src/types/finance.ts`. */
+export interface PaymentAllocationDTO {
+  id: string;
+  invoiceId: string;
+  invoiceNo: string;
+  amount: number;
+}
+
+/** Mirrors `StudentLedgerEntry` in `client/src/types/finance.ts`. */
+export interface StudentLedgerEntryDTO {
+  id: string;
+  date: string;
+  type: 'INVOICE' | 'PAYMENT' | 'DISCOUNT' | 'ADJUSTMENT' | 'CREDIT';
+  reference: string;
+  description: string;
+  debit: number;
+  credit: number;
+  runningBalance: number;
+}
+
+/** Mirrors `StudentFinanceSummary` in `client/src/types/finance.ts`. */
+export interface StudentFinanceSummaryDTO {
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  totalBilled: number;
+  totalPaid: number;
+  totalDiscount: number;
+  balance: number;
+  lastPaymentAt: string | null;
+  overdueInvoices: number;
+}
+
+/** Mirrors `StudentLedgerResult` in `client/src/features/students/students.types.ts`. */
+export interface StudentLedgerResultDTO {
+  summary: StudentFinanceSummaryDTO;
+  entries: StudentLedgerEntryDTO[];
+}
+
+/** Mirrors `Receipt` in `client/src/types/finance.ts`. */
+export interface ReceiptDTO {
+  id: string;
+  receiptNo: string;
+  paymentId: string;
+  schoolName: string;
+  schoolLogoUrl: string | null;
+  schoolAddress: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  amount: number;
+  /** "One hundred and eighty-five thousand naira only" — a receipt convention. */
+  amountInWords: string;
+  method: PaymentMethod;
+  paidAt: string;
+  receivedByName: string;
+  allocations: { invoiceNo: string; description: string; amount: number }[];
+  balanceAfter: number;
+  verificationCode: string;
+}
+
 /** Mirrors `PaymentAccount` in `client/src/types/finance.ts`. */
 export interface PaymentAccountDTO {
   id: string;
@@ -48,6 +201,8 @@ export interface PaymentAccountDTO {
   status: PaymentAccountStatus;
   note: string | null;
   createdAt: string;
+  /** The bill this was raised for, when it was raised for one. */
+  invoiceId: string | null;
 }
 
 /** Mirrors `Payment` in `client/src/types/finance.ts`. */
@@ -66,8 +221,9 @@ export interface PaymentDTO {
   status: PaymentStatus;
   paidAt: string;
   recordedByName: string | null;
-  /** Empty until invoices exist to allocate against. */
-  allocations: never[];
+  /** Which bills this credit settled. Empty for money paid on account. */
+  allocations: PaymentAllocationDTO[];
+  /** What is left of the payment once its allocations are taken off. */
   unallocatedAmount: number;
   isReconciled: boolean;
   receiptNo: string | null;

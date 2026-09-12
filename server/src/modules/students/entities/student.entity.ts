@@ -6,6 +6,16 @@ import { House } from '../../academics/entities/house.entity';
 
 export type Gender = 'MALE' | 'FEMALE';
 
+/**
+ * Whether the pupil sleeps at school. Nothing academic turns on it — it is
+ * here because boarding is billed to boarders and to nobody else, and the fee
+ * generator has to be able to tell them apart without asking the office
+ * child by child.
+ */
+export type BoardingStatus = 'DAY' | 'BOARDING';
+
+export const BOARDING_STATUSES: readonly BoardingStatus[] = ['DAY', 'BOARDING'];
+
 export type StudentStatus =
   | 'ACTIVE'
   | 'GRADUATED'
@@ -74,6 +84,10 @@ export class Student extends SoftDeletableEntity {
 
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status: StudentStatus;
+
+  /** Defaults to DAY: under-billing beats charging a day pupil for a bed. */
+  @Column({ name: 'boarding_status', type: 'varchar', length: 10, default: 'DAY' })
+  boardingStatus: BoardingStatus;
 
   /**
    * Where the pupil sits today. The full history lives in `student_enrollments`

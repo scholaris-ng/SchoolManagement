@@ -1,11 +1,19 @@
 import { useState } from 'react';
-import { Coins, Percent, Plus } from 'lucide-react';
+import { Coins, Percent, Plus, ReceiptText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useDiscounts, useFeeItems, useFeeStructures, useSaveDiscount, useSaveFeeItem } from './api';
-import type { Discount, FeeItem } from '@/types/finance';
+import {
+  useDiscounts,
+  useFeeItems,
+  useFeeStructures,
+  useGenerateInvoices,
+  useSaveDiscount,
+  useSaveFeeItem,
+  useSaveFeeStructure,
+} from './api';
+import type { Discount, FeeItem, FeeStructure } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -17,7 +25,12 @@ import {
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { EmptyState, LoadingState } from '@/components/ui/feedback';
-import { FeeItemDialog, DiscountDialog } from './fees-page-parts';
+import {
+  FeeItemDialog,
+  DiscountDialog,
+  FeeStructureDialog,
+  GenerateInvoicesDialog,
+} from './fees-page-parts';
 
 
 
@@ -41,14 +54,33 @@ export function FeesPage() {
 
   const saveFeeItem = useSaveFeeItem();
   const saveDiscount = useSaveDiscount();
+  const saveStructure = useSaveFeeStructure();
+  const generateInvoices = useGenerateInvoices();
 
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: FeeItem }>({ open: false });
   const [discountDialog, setDiscountDialog] = useState<{ open: boolean; discount?: Discount }>({
     open: false,
   });
+  const [structureDialog, setStructureDialog] = useState<{
+    open: boolean;
+    structure?: FeeStructure;
+  }>({ open: false });
+  const [generateDialog, setGenerateDialog] = useState<{
+    open: boolean;
+    structure?: FeeStructure;
+  }>({ open: false });
 
   const currency = 'NGN';
   const canManage = can('fee.manage');
+  /**
+   * Billing is a separate permission from defining what the school charges: a
+   * clerk may keep the fee list tidy without being able to raise four hundred
+   * claims against families.
+   */
+  const canBill = can('invoice.manage');
+
+  const newLabel =
+    tab === 'discounts' ? 'New discount' : tab === 'structures' ? 'New fee structure' : 'New fee item';
 
   return (
     <PageContainer>
@@ -60,14 +92,14 @@ export function FeesPage() {
           canManage && (
             <Button
               data-cy="fees-new-item"
-              onClick={() =>
-                tab === 'discounts'
-                  ? setDiscountDialog({ open: true })
-                  : setItemDialog({ open: true })
-              }
+              onClick={() => {
+                if (tab === 'discounts') return setDiscountDialog({ open: true });
+                if (tab === 'structures') return setStructureDialog({ open: true });
+                return setItemDialog({ open: true });
+              }}
             >
               <Plus />
-              {tab === 'discounts' ? 'New discount' : 'New fee item'}
+              {newLabel}
             </Button>
           )
         }
@@ -201,6 +233,27 @@ export function FeesPage() {
                         )}
                       </div>
                       {!structure.isActive && <Badge tone="warning">Inactive</Badge>}
+                      {canManage && (
+                        <Button
+                          data-cy="finance-structure-edit"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setStructureDialog({ open: true, structure })}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {canBill && structure.isActive && (
+                        <Button
+                          data-cy="finance-structure-generate"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setGenerateDialog({ open: true, structure })}
+                        >
+                          <ReceiptText />
+                          Generate invoices
+                        </Button>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {structure.lines.map((line) => (
@@ -277,6 +330,30 @@ export function FeesPage() {
             .then(() => setItemDialog({ open: false }))
         }
         saving={saveFeeItem.isPending}
+      />
+
+      <FeeStructureDialog
+        key={structureDialog.structure?.id ?? 'new-structure'}
+        state={structureDialog}
+        onOpenChange={(open) => setStructureDialog({ open })}
+        onSave={(values) =>
+          saveStructure
+            .mutateAsync({ id: structureDialog.structure?.id, values })
+            .then(() => setStructureDialog({ open: false }))
+        }
+        saving={saveStructure.isPending}
+      />
+
+      <GenerateInvoicesDialog
+        key={generateDialog.structure?.id ?? 'generate'}
+        state={generateDialog}
+        onOpenChange={(open) => setGenerateDialog({ open })}
+        onConfirm={(input) =>
+          generateInvoices
+            .mutateAsync({ id: generateDialog.structure!.id, input })
+            .then(() => setGenerateDialog({ open: false }))
+        }
+        saving={generateInvoices.isPending}
       />
 
       <DiscountDialog
