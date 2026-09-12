@@ -8,38 +8,42 @@
  * type is plain JSON (icons are string keys, not component references) and can
  * travel over the API unchanged.
  *
- * `ab10Content` is the shipped default. `site-context.tsx` overlays whatever the
- * public API returns for a tenant on top of it, so a school that has filled in
- * nothing still gets a complete, credible page.
+ * The shape follows the school's own site section for section, so that
+ * `default-content.ts` can hold its copy verbatim rather than a paraphrase.
  */
 
 /* -- Primitives ------------------------------------------------------------ */
 
 export type SiteIconName =
   | 'award'
+  | 'bed'
   | 'book'
+  | 'bus'
   | 'church'
+  | 'clipboard'
   | 'compass'
+  | 'cpu'
+  | 'droplet'
   | 'flask'
   | 'globe'
   | 'handshake'
   | 'heart'
   | 'laptop'
   | 'library'
+  | 'megaphone'
+  | 'monitor'
   | 'music'
   | 'palette'
+  | 'school'
   | 'shield'
+  | 'shirt'
   | 'sparkles'
-  | 'sprout'
   | 'stethoscope'
   | 'target'
+  | 'trees'
   | 'trophy'
   | 'users'
-  | 'utensils'
-  | 'bus'
-  | 'bed'
-  | 'droplet'
-  | 'trees';
+  | 'utensils';
 
 export interface SiteImage {
   src: string;
@@ -60,7 +64,6 @@ export interface SiteBrand {
   shortName: string;
   legalName: string;
   motto: string;
-  tagline: string;
   crestUrl: string;
   /** Hex values; the layout publishes them as CSS custom properties. */
   colors: {
@@ -73,18 +76,26 @@ export interface SiteBrand {
 }
 
 export interface SiteHeroSlide {
-  eyebrow: string;
   title: string;
   body: string;
   image: SiteImage;
-}
-
-export interface SiteStat {
-  value: string;
-  label: string;
+  /** The two calls to action the school pairs with each slide. */
+  links: SiteLink[];
 }
 
 export interface SiteValue {
+  name: string;
+  icon: SiteIconName;
+}
+
+export interface SitePerson {
+  name: string;
+  role: string;
+  photo?: SiteImage;
+}
+
+/** A named block of copy with an icon — facilities, school features, ethos. */
+export interface SiteFeature {
   name: string;
   description: string;
   icon: SiteIconName;
@@ -92,23 +103,17 @@ export interface SiteValue {
 
 export interface SiteProgramme {
   slug: string;
+  /** Full name as the school writes it. */
   name: string;
-  ageRange: string;
+  /** Short label for navigation and cards. */
+  navLabel: string;
   summary: string;
   image: SiteImage;
-  /** Short bullets shown on the home page card. */
-  highlights: string[];
-  /** Longer prose for the programme's own page. */
-  overview: string;
-  curriculum: string[];
-  dayInTheLife: { time: string; activity: string }[];
-}
-
-export interface SitePerson {
-  name: string;
-  role: string;
-  photo?: SiteImage;
-  bio?: string;
+  /** Body copy, verbatim, one string per paragraph. */
+  overview: string[];
+  head?: SitePerson;
+  features: SiteFeature[];
+  gallery: SiteImage[];
 }
 
 export interface SiteTestimonial {
@@ -116,100 +121,74 @@ export interface SiteTestimonial {
   quote: string;
   author: string;
   role: string;
+  photo?: SiteImage;
 }
 
 export interface SiteNewsItem {
   id: string;
   title: string;
   excerpt: string;
-  /** ISO date. */
-  date: string;
-  category: string;
+  /** Displayed exactly as the school publishes it. */
+  dateLabel: string;
+  author: string;
   image: SiteImage;
-}
-
-export interface SiteEvent {
-  id: string;
-  title: string;
-  /** ISO date. */
-  date: string;
-  endDate?: string;
-  location?: string;
-  description?: string;
-}
-
-export interface SiteFacility {
-  name: string;
-  description: string;
-  icon: SiteIconName;
-}
-
-export interface SiteFaq {
-  question: string;
-  answer: string;
 }
 
 export interface SiteContent {
   brand: SiteBrand;
   hero: {
     slides: SiteHeroSlide[];
-    primaryCta: SiteLink;
-    secondaryCta: SiteLink;
-    stats: SiteStat[];
   };
-  welcome: {
-    eyebrow: string;
+  facilities: {
+    title: string;
+    intro: string;
+    items: SiteFeature[];
+  };
+  offers: string;
+  about: {
     title: string;
     body: string[];
-    signatory: SitePerson;
+    founder: SitePerson;
     images: SiteImage[];
-  };
-  about: {
-    foundedOn: string;
-    history: string[];
+    excursions: { title: string; body: string };
     vision: string;
     mission: string;
     philosophy: string;
+    philosophyStrap: string;
     aspiration: string;
-    acronym: { letter: string; word: string; meaning: string }[];
-    milestones: { year: string; title: string; description: string }[];
-    leadership: SitePerson[];
+    location: string;
+    curriculum: string[];
+    religiousBelief: string[];
+    nameMeaning: { letter: string; word: string; image: SiteImage }[];
+    values: SiteValue[];
+    management: { title: string; intro: string; people: SitePerson[] };
   };
-  values: SiteValue[];
   programmes: SiteProgramme[];
-  academics: {
-    intro: string;
-    curricula: { name: string; description: string }[];
-    subjects: string[];
-    examinations: string[];
-    enrichment: { name: string; description: string; icon: SiteIconName }[];
-  };
-  facilities: {
-    intro: string;
-    items: SiteFacility[];
-    image: SiteImage;
-  };
+  testimonials: { title: string; intro: string; items: SiteTestimonial[] };
+  news: { title: string; subtitle: string; items: SiteNewsItem[] };
   gallery: SiteImage[];
-  news: SiteNewsItem[];
-  events: SiteEvent[];
-  testimonials: SiteTestimonial[];
-  admissions: {
-    open: boolean;
-    session: string;
+  /** Fields of the school's own multi-step registration form. */
+  registration: {
+    title: string;
     intro: string;
-    steps: { title: string; description: string }[];
-    requirements: string[];
-    faqs: SiteFaq[];
+    steps: { legend: string; fields: { name: string; label: string; type: string }[] }[];
   };
-  subsidiaries: { name: string; description: string; href: string; icon: SiteIconName }[];
+  subsidiaries: { name: string; href: string; icon: SiteIconName }[];
+  portals: { name: string; href: string }[];
   contact: {
-    addressLines: string[];
+    title: string;
+    intro: string;
+    address: string;
     phones: string[];
-    whatsapp: string;
+    whatsapp: string[];
     email: string;
-    officeHours: { days: string; hours: string }[];
+    facebook: { label: string; url: string };
     mapEmbedUrl: string;
-    socials: { platform: string; url: string }[];
+    videoEmbedUrl: string;
   };
-  portals: { name: string; description: string; href: string }[];
+  footer: {
+    quickLinks: SiteLink[];
+    signUp: { title: string; body: string; cta: string };
+    policyUrl: string;
+  };
 }

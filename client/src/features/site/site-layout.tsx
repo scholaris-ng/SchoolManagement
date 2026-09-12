@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { SiteContentProvider, useSite } from './site-context';
 import { SiteHeader } from './components/site-header';
 import { SiteFooter } from './components/site-footer';
+import { RegistrationSection } from './components/registration-form';
 import './site.css';
 
 /**
@@ -36,8 +37,8 @@ function SiteFrame() {
   } as React.CSSProperties;
 
   useEffect(() => {
-    document.title = `${content.brand.name} — ${content.brand.tagline}`;
-  }, [content.brand.name, content.brand.tagline]);
+    document.title = `${content.brand.name} — ${content.brand.motto}`;
+  }, [content.brand.name, content.brand.motto]);
 
   // Fresh navigations start at the top; a link carrying a hash scrolls to its
   // target once the destination page has rendered.
@@ -61,6 +62,8 @@ function SiteFrame() {
           <Outlet />
         </Suspense>
       </main>
+      {/* The school ends every page on its registration form; so does this. */}
+      <RegistrationSection />
       <SiteFooter />
     </div>
   );

@@ -70,7 +70,7 @@ export function SiteContentProvider({ children }: { children: React.ReactNode })
 function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteContent {
   if (!page) return base;
 
-  const { school, website, news, events } = page;
+  const { school, website, news } = page;
 
   return {
     ...base,
@@ -79,7 +79,6 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
       name: school.name || base.brand.name,
       shortName: school.shortName || base.brand.shortName,
       motto: school.branding.motto || base.brand.motto,
-      tagline: website.tagline || base.brand.tagline,
       crestUrl: school.branding.logoUrl || base.brand.crestUrl,
       colors: {
         ...base.brand.colors,
@@ -88,73 +87,70 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
       },
     },
     hero: {
-      ...base.hero,
       slides: website.heroImageUrl
         ? [
-            {
-              ...base.hero.slides[0],
-              image: { src: website.heroImageUrl, alt: school.name },
-            },
+            { ...base.hero.slides[0], image: { src: website.heroImageUrl, alt: school.name } },
             ...base.hero.slides.slice(1),
           ]
         : base.hero.slides,
     },
     about: {
       ...base.about,
-      history: website.about ? website.about.split('\n\n').filter(Boolean) : base.about.history,
+      body: website.about ? splitParagraphs(website.about) : base.about.body,
       vision: website.vision || base.about.vision,
       mission: website.mission || base.about.mission,
-    },
-    welcome: {
-      ...base.welcome,
-      body: website.about ? website.about.split('\n\n').filter(Boolean) : base.welcome.body,
     },
     gallery: website.gallery.length
       ? website.gallery.map((item) => ({ src: item.url, alt: item.caption ?? school.name }))
       : base.gallery,
     news: news.length
-      ? news.map((post) => ({
-          id: post.id,
-          title: post.title,
-          excerpt: post.excerpt,
-          date: post.publishedAt ?? '',
-          category: toTitleCase(post.category),
-          image: post.coverImageUrl
-            ? { src: post.coverImageUrl, alt: post.title }
-            : base.news[0].image,
-        }))
+      ? {
+          ...base.news,
+          items: news.map((post) => ({
+            id: post.id,
+            title: post.title,
+            excerpt: post.excerpt,
+            dateLabel: post.publishedAt ? formatDateLabel(post.publishedAt) : '',
+            author: post.authorName,
+            image: post.coverImageUrl
+              ? { src: post.coverImageUrl, alt: post.title }
+              : base.news.items[0].image,
+          })),
+        }
       : base.news,
-    events: events.length
-      ? events.map((event) => ({
-          id: event.id,
-          title: event.title,
-          date: event.startDate,
-          endDate: event.endDate === event.startDate ? undefined : event.endDate,
-        }))
-      : base.events,
     testimonials: website.testimonials.length
-      ? website.testimonials.map((item) => ({
-          id: item.id,
-          quote: item.quote,
-          author: item.author,
-          role: item.role,
-        }))
+      ? {
+          ...base.testimonials,
+          items: website.testimonials.map((item) => ({
+            id: item.id,
+            quote: item.quote,
+            author: item.author,
+            role: item.role,
+          })),
+        }
       : base.testimonials,
-    admissions: {
-      ...base.admissions,
-      open: website.admissionsOpen,
-      intro: website.admissionsIntro || base.admissions.intro,
-    },
     contact: {
       ...base.contact,
-      addressLines: website.address ? website.address.split(/,\s*/) : base.contact.addressLines,
+      intro: website.admissionsIntro || base.contact.intro,
+      address: website.address || base.contact.address,
       phones: website.contactPhone ? [website.contactPhone] : base.contact.phones,
       email: website.contactEmail || base.contact.email,
-      socials: website.socialLinks.length ? website.socialLinks : base.contact.socials,
+      facebook: findFacebook(website.socialLinks) ?? base.contact.facebook,
     },
   };
 }
 
-function toTitleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
+function splitParagraphs(value: string): string[] {
+  return value.split(/\n{2,}/).filter(Boolean);
+}
+
+function formatDateLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function findFacebook(links: { platform: string; url: string }[]) {
+  const match = links.find((link) => link.platform.toLowerCase() === 'facebook');
+  return match ? { label: match.platform, url: match.url } : undefined;
 }

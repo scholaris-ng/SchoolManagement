@@ -5,9 +5,10 @@ import { SiteLayout } from './site-layout';
 /**
  * The public school website, mounted at `/s/:slug`.
  *
- * It sits outside the authenticated shell and is code-split away from it: a
- * prospective parent reading the admissions page never downloads the bursar's
- * invoicing screens, and a signed-in bursar never downloads this.
+ * The page list mirrors the school's own menu: home, About Us, the two school
+ * sections, Events and Contact Us. It sits outside the authenticated shell and
+ * is code-split away from it, so a prospective parent reading about the High
+ * School never downloads the bursar's invoicing screens.
  */
 
 const SiteHomePage = lazy(() =>
@@ -16,17 +17,8 @@ const SiteHomePage = lazy(() =>
 const SiteAboutPage = lazy(() =>
   import('./pages/about-page').then((m) => ({ default: m.SiteAboutPage })),
 );
-const SiteSchoolsPage = lazy(() =>
-  import('./pages/schools-page').then((m) => ({ default: m.SiteSchoolsPage })),
-);
 const SiteProgrammePage = lazy(() =>
   import('./pages/programme-page').then((m) => ({ default: m.SiteProgrammePage })),
-);
-const SiteAcademicsPage = lazy(() =>
-  import('./pages/academics-page').then((m) => ({ default: m.SiteAcademicsPage })),
-);
-const SiteAdmissionsPage = lazy(() =>
-  import('./pages/admissions-page').then((m) => ({ default: m.SiteAdmissionsPage })),
 );
 const SiteNewsEventsPage = lazy(() =>
   import('./pages/news-events-page').then((m) => ({ default: m.SiteNewsEventsPage })),
@@ -41,10 +33,7 @@ export const siteRoute: RouteObject = {
   children: [
     { index: true, element: <SiteHomePage /> },
     { path: 'about', element: <SiteAboutPage /> },
-    { path: 'schools', element: <SiteSchoolsPage /> },
     { path: 'schools/:programme', element: <SiteProgrammePage /> },
-    { path: 'academics', element: <SiteAcademicsPage /> },
-    { path: 'admissions', element: <SiteAdmissionsPage /> },
     { path: 'news-and-events', element: <SiteNewsEventsPage /> },
     { path: 'contact', element: <SiteContactPage /> },
     // An unknown page on a school's site belongs back on that school's home

@@ -69,22 +69,25 @@ describe('public site content', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the shipped content when the school has published none of its own', () => {
+  it("renders the school's own copy when it has published none through the platform", () => {
     usePublicSchool.mockReturnValue({ data: undefined, isPending: false });
 
     renderHome();
 
-    expect(screen.getByText(defaultContent.hero.slides[0].title)).toBeInTheDocument();
-    expect(screen.getByText(defaultContent.testimonials[0].author)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: defaultContent.hero.slides[0].title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(defaultContent.testimonials.items[0].author)).toBeInTheDocument();
+    expect(screen.getByText(defaultContent.facilities.title)).toBeInTheDocument();
   });
 
-  it("prefers the school's own content over the shipped default", () => {
+  it('prefers content published through the platform over the shipped copy', () => {
     usePublicSchool.mockReturnValue({ data: remotePage(), isPending: false });
 
     renderHome();
 
     expect(screen.getByText('Mrs Bello')).toBeInTheDocument();
-    expect(screen.queryByText(defaultContent.testimonials[0].author)).not.toBeInTheDocument();
+    expect(screen.queryByText(defaultContent.testimonials.items[0].author)).not.toBeInTheDocument();
   });
 
   it('resolves a school section from its slug', () => {
@@ -97,6 +100,8 @@ describe('public site content', () => {
       { route: '/s/ab10/schools/high-school', path: '/s/:slug/schools/:programme' },
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: 'High School' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'AB.10 Schools High School' }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,52 +1,57 @@
 import type { SiteContent } from './site-content';
 
 /**
- * The public site's information architecture.
+ * The public site's menu, mirroring the school's own.
  *
- * Derived from content rather than hard-coded so that adding a fourth school
- * section, or renaming one, changes the menu without anyone editing the header.
- * `href` values are site-relative; `SiteContext.path()` turns them into real
- * URLs under `/s/:slug`.
+ * Their menu has three entries under Schools even though two of them lead to
+ * the same page, and it carries the student portals and the group's clinics
+ * alongside. That is kept as it is: this is their information architecture, not
+ * a tidier one invented for them.
  */
+
+export interface SiteNavChild {
+  label: string;
+  href: string;
+  external?: boolean;
+}
 
 export interface SiteNavItem {
   label: string;
   href: string;
-  children?: { label: string; description?: string; href: string; external?: boolean }[];
+  external?: boolean;
+  children?: SiteNavChild[];
 }
 
 export function buildNav(content: SiteContent): SiteNavItem[] {
+  const [highSchool, nurseryPrimary] = content.programmes;
+
   return [
     { label: 'Home', href: '' },
+    { label: 'About Us', href: 'about' },
     {
-      label: 'About',
-      href: 'about',
+      label: 'Schools',
+      href: `schools/${highSchool.slug}`,
       children: [
-        { label: 'Our story', description: 'How AB.10 began and where it is going', href: 'about' },
-        { label: 'Vision & values', description: 'What we stand for', href: 'about#values' },
-        { label: 'Leadership', description: 'The people who run the school', href: 'about#leadership' },
+        { label: 'High School', href: `schools/${highSchool.slug}` },
+        { label: 'Nursery/Primary', href: `schools/${nurseryPrimary.slug}` },
+        { label: 'Creche/After School', href: `schools/${nurseryPrimary.slug}` },
+        ...content.portals.map((portal) => ({
+          label: portal.name,
+          href: portal.href,
+          external: true,
+        })),
       ],
     },
+    { label: 'Events', href: 'news-and-events' },
     {
-      label: 'Our Schools',
-      href: 'schools',
-      children: content.programmes.map((programme) => ({
-        label: programme.name,
-        description: programme.ageRange,
-        href: `schools/${programme.slug}`,
+      label: 'Subsidiaries',
+      href: 'contact#subsidiaries',
+      children: content.subsidiaries.map((subsidiary) => ({
+        label: subsidiary.name,
+        href: subsidiary.href,
+        external: true,
       })),
     },
-    {
-      label: 'Academics',
-      href: 'academics',
-      children: [
-        { label: 'Curriculum', description: 'Nigerian and British, taught side by side', href: 'academics' },
-        { label: 'Examinations', description: 'WASSCE, NECO, UTME, IGCSE and more', href: 'academics#examinations' },
-        { label: 'Facilities', description: 'Laboratories, library, studio and field', href: 'academics#facilities' },
-      ],
-    },
-    { label: 'Admissions', href: 'admissions' },
-    { label: 'News & Events', href: 'news-and-events' },
-    { label: 'Contact', href: 'contact' },
+    { label: 'Contact Us', href: 'contact' },
   ];
 }
