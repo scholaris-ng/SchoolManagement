@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
-import { Alert, EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Alert, EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import {
   Dialog,
   DialogBody,
@@ -83,6 +83,28 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
 function labelFor(from: ApplicationStatus, to: ApplicationStatus): string {
   if (to === 'ACCEPTED' && from !== 'OFFERED') return 'Admit without screening';
   return STATUS_LABEL[to];
+}
+
+/** What each button actually does, for a reader who has never seen this workflow before. */
+function descriptionFor(from: ApplicationStatus, to: ApplicationStatus): string {
+  switch (to) {
+    case 'SCREENING':
+      return 'Starts the school’s own review — interviews, tests, or whatever it normally does before deciding.';
+    case 'SHORTLISTED':
+      return 'Marks the applicant as a strong candidate, without yet offering them a place.';
+    case 'OFFERED':
+      return 'Reserves a specific class for the applicant and tells the family. They still need to accept before enrolment.';
+    case 'ACCEPTED':
+      return from === 'OFFERED'
+        ? 'Records that the family has accepted the offered place. The applicant can then be enrolled as a student.'
+        : 'Skips screening, shortlisting and a separate offer, and admits the applicant straight away. They can then be enrolled as a student.';
+    case 'REJECTED':
+      return 'Declines the application. This ends it — no further stage is possible.';
+    case 'WITHDRAWN':
+      return 'Records that the family pulled out of the process themselves, rather than the school declining them.';
+    default:
+      return STATUS_LABEL[to];
+  }
 }
 
 export function AdmissionDetailPage() {
@@ -156,6 +178,12 @@ export function AdmissionDetailPage() {
 
   const canManage = can('admission.manage');
   const nextStatuses = NEXT_STATUSES[record.status];
+  // True once the application has reached a decision without ever passing
+  // through `SCREENING` — the only way to tell, after the fact, that a place
+  // was offered or accepted with the test waived rather than sat and passed.
+  const screeningWasSkipped =
+    (record.status === 'OFFERED' || record.status === 'ACCEPTED') &&
+    !record.timeline.some((event) => event.status === 'SCREENING');
 
   return (
     <PageContainer>
@@ -177,6 +205,22 @@ export function AdmissionDetailPage() {
             {record.applicantType === 'SELF' && (
               <Badge tone="neutral">Applied for themselves</Badge>
             )}
+            {screeningWasSkipped && (
+              <Tooltip
+                content={
+                  record.status === 'OFFERED'
+                    ? 'This applicant was offered a place without ever being screened.'
+                    : 'This applicant was accepted without ever being screened.'
+                }
+              >
+                {/* `Badge` renders a plain function component, not one that
+                    forwards refs — wrapped in a `span` so Radix has a real DOM
+                    node to anchor the tooltip to. */}
+                <span className="inline-flex">
+                  <Badge tone="warning">Screening skipped</Badge>
+                </span>
+              </Tooltip>
+            )}
             {record.submittedAt && (
               <span className="text-xs text-muted-foreground">
                 Submitted {formatDate(record.submittedAt)}
@@ -188,15 +232,16 @@ export function AdmissionDetailPage() {
           <>
             {canManage &&
               nextStatuses.map((status) => (
-                <Button
-                  key={status}
-                  data-cy={`admission-transition-${status.toLowerCase()}`}
-                  variant={status === 'REJECTED' || status === 'WITHDRAWN' ? 'outline' : 'primary'}
-                  onClick={() => openTransition(status)}
-                >
-                  {status === 'REJECTED' ? <X /> : <Check />}
-                  {labelFor(record.status, status)}
-                </Button>
+                <Tooltip key={status} content={descriptionFor(record.status, status)}>
+                  <Button
+                    data-cy={`admission-transition-${status.toLowerCase()}`}
+                    variant={status === 'REJECTED' || status === 'WITHDRAWN' ? 'outline' : 'primary'}
+                    onClick={() => openTransition(status)}
+                  >
+                    {status === 'REJECTED' ? <X /> : <Check />}
+                    {labelFor(record.status, status)}
+                  </Button>
+                </Tooltip>
               ))}
             {/* Enrolling creates the pupil and, with them, the guardian records
                 for everyone on the application — so it takes both permissions,
