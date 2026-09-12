@@ -8,6 +8,7 @@ import { SessionRepository } from '../../academics/repositories/session.reposito
 import { AcademicScopeService } from '../../academics/services/academicScope.service';
 import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
+import { AdmissionsService } from '../../admissions/services/admissions.service';
 import type {
   AdmissionFunnelDTO,
   AttendanceTrendPointDTO,
@@ -22,9 +23,10 @@ import type {
  * The management analytics screen.
  *
  * Read-only aggregation. Attendance is real, and reads the register the
- * attendance module now keeps; assessment, finance and admissions still have no
- * tables and are an honest nothing — the same three gaps the admin dashboard
- * reports as zero. Each panel is still served rather than left to 404, because
+ * attendance module now keeps; admissions is real, and reads the applications
+ * table; assessment and finance still have no tables and are an honest nothing
+ * — the same gaps the admin dashboard reports as zero. Each panel is still
+ * served rather than left to 404, because
  * a screen that renders "no data yet" tells the truth about an unbuilt module,
  * while a wall of failed requests only looks broken.
  *
@@ -153,23 +155,13 @@ export class AnalyticsService {
   ): Promise<AdmissionFunnelDTO> {
     const session = await this.resolveSession(context.schoolId, sessionId);
 
-    return {
-      sessionName: session?.name ?? 'Current session',
-
-      // Admissions module: applicants are not modelled yet, so every stage of
-      // the funnel is empty and the conversion between them is undefined —
-      // reported as zero rather than as a division by nothing.
-      received: 0,
-      screened: 0,
-      shortlisted: 0,
-      offered: 0,
-      accepted: 0,
-      rejected: 0,
-      withdrawn: 0,
-      conversionRate: 0,
-      trend: [],
-      byLevel: [],
-    };
+    // Counted beside the table it reads, in the admissions service, because
+    // the admissions screen draws the same chart from the same numbers.
+    return AdmissionsService.Instance.funnel(
+      context.schoolId,
+      session?.id ?? null,
+      session?.name ?? 'Current session',
+    );
   }
 
   /* -- Staff -------------------------------------------------------------- */

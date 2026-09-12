@@ -28,6 +28,8 @@ import { Staff } from '../../modules/staff/entities/staff.entity';
 import { Student } from '../../modules/students/entities/student.entity';
 import { StudentEnrollment } from '../../modules/students/entities/studentEnrollment.entity';
 import { StudentDocument } from '../../modules/students/entities/studentDocument.entity';
+import { AdmissionApplication } from '../../modules/admissions/entities/admissionApplication.entity';
+import { AdmissionStageEvent } from '../../modules/admissions/entities/admissionStageEvent.entity';
 import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
@@ -70,6 +72,8 @@ export const entities = [
   AttendanceRecord,
   Guardian,
   StudentGuardian,
+  AdmissionApplication,
+  AdmissionStageEvent,
   FeeItem,
   ImportJob,
   Notification,

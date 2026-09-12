@@ -71,6 +71,7 @@ export const engagementKeys = {
   public: {
     verification: (code: string) => ['public', 'verify', code] as const,
     website: (slug: string) => ['public', 'website', slug] as const,
+    admissionOptions: (slug: string) => ['public', 'admissions', slug] as const,
   }
 ,
 } as const;

@@ -15,11 +15,51 @@ import './site.css';
  * involved and nothing about an enrolled student can reach it (spec section 31).
  */
 export function SiteLayout() {
+  usePinLightTheme();
+
   return (
     <SiteContentProvider>
       <SiteFrame />
     </SiteContentProvider>
   );
+}
+
+/**
+ * Holds `document.documentElement`'s `data-theme` at `light` for as long as a
+ * public page is mounted.
+ *
+ * `ThemeProvider` (`app/providers/theme-provider.tsx`) writes the signed-in
+ * user's preference — or the visitor's OS setting, under "system" — onto that
+ * same attribute, and it does so with no notion of route: a browser in dark
+ * mode reaches this page exactly as it reaches the authenticated app. `site.css`
+ * insulates its own tokens from that by never reading `--background` and
+ * friends, but a component borrowed from the signed-in design system, such as
+ * the phone field's country picker, is built on those tokens and would render
+ * dark on this page's light card the moment a visitor's device prefers dark.
+ *
+ * A `MutationObserver` rather than a plain effect: `ThemeProvider`'s own
+ * effect can still fire while this page is open — a live OS theme change, most
+ * plausibly — and would overwrite a value set once on mount. Watching the
+ * attribute means every such write is caught and put back, for as long as this
+ * layout is on screen; the previous value is restored the moment it isn't.
+ */
+function usePinLightTheme(): void {
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.dataset.theme;
+    root.dataset.theme = 'light';
+
+    const observer = new MutationObserver(() => {
+      if (root.dataset.theme !== 'light') root.dataset.theme = 'light';
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+
+    return () => {
+      observer.disconnect();
+      if (previous === undefined) delete root.dataset.theme;
+      else root.dataset.theme = previous;
+    };
+  }, []);
 }
 
 function SiteFrame() {

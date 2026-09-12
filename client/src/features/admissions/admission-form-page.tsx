@@ -1,12 +1,18 @@
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
+import { NIGERIA_STATE_OPTIONS, citiesOfNigeriaState } from '@/lib/demographics';
 import { useLevelOptions, useSessionOptions } from '@/features/academics/api';
 import { useCreateAdmission } from './api';
-import { admissionFormSchema, type AdmissionFormValues } from './schema';
+import {
+  GENDER_OPTIONS,
+  RELATIONSHIP_OPTIONS,
+  admissionFormSchema,
+  type AdmissionFormValues,
+} from './schema';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { FormActions, FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
@@ -14,26 +20,28 @@ import {
   CheckboxField,
   DateField,
   FormSection,
+  RadioCardField,
   SelectField,
   TextField,
   TextareaField,
 } from '@/components/forms/form-field';
 import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/feedback';
 
-const GENDER_OPTIONS = [
-  { value: 'MALE', label: 'Male' },
-  { value: 'FEMALE', label: 'Female' },
+const APPLICANT_TYPE_OPTIONS = [
+  {
+    value: 'GUARDIAN',
+    label: 'A parent or guardian is applying',
+    description: 'For a child. The school writes to the parent about the decision.',
+  },
+  {
+    value: 'SELF',
+    label: 'The applicant is applying for themselves',
+    description: 'An older student. The school writes to them, and still needs a next of kin.',
+  },
 ];
 
-const RELATIONSHIP_OPTIONS = [
-  { value: 'FATHER', label: 'Father' },
-  { value: 'MOTHER', label: 'Mother' },
-  { value: 'GUARDIAN', label: 'Guardian' },
-  { value: 'SPONSOR', label: 'Sponsor' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-const emptyGuardian = {
+const emptyContact = {
   title: '',
   firstName: '',
   lastName: '',
@@ -42,13 +50,19 @@ const emptyGuardian = {
   phone: '',
   occupation: '',
   address: '',
+  city: '',
+  state: '',
   isPrimaryContact: false,
 };
 
 /**
  * Entering an application on someone's behalf — a walk-in at the office, or a
- * paper form typed up later. The same shape a public application form submits,
- * so both paths converge on one workflow.
+ * paper form typed up later.
+ *
+ * The same shape the public website submits, down to the applicant-type
+ * question at the top, so both paths converge on one record and one workflow.
+ * Whichever is chosen, the people named here are held on the application and
+ * are not guardian records: enrolling the child is what creates those.
  */
 export function AdmissionFormPage() {
   const navigate = useNavigate();
@@ -59,6 +73,7 @@ export function AdmissionFormPage() {
   const form = useForm<AdmissionFormValues>({
     resolver: zodResolver(admissionFormSchema),
     defaultValues: {
+      applicantType: 'GUARDIAN',
       sessionId: '',
       levelId: '',
       applicant: {
@@ -71,15 +86,29 @@ export function AdmissionFormPage() {
         nationality: 'Nigerian',
         stateOfOrigin: '',
         address: '',
+        city: '',
+        state: '',
         previousSchool: '',
+        previousClass: '',
         bloodGroup: '',
         medicalNotes: '',
+        email: '',
+        phone: '',
       },
-      guardians: [{ ...emptyGuardian, isPrimaryContact: true }],
+      contacts: [{ ...emptyContact, isPrimaryContact: true }],
     },
   });
 
-  const guardians = useFieldArray({ control: form.control, name: 'guardians' });
+  const contacts = useFieldArray({ control: form.control, name: 'contacts' });
+  const applicantType = useWatch({ control: form.control, name: 'applicantType' });
+  const isSelf = applicantType === 'SELF';
+
+  // City belongs to whichever state was picked, for the applicant and for
+  // each contact — `watchedContacts` follows the whole array so a list keyed
+  // by index stays live as rows are added, removed or edited.
+  const applicantState = useWatch({ control: form.control, name: 'applicant.state' });
+  const applicantCityOptions = citiesOfNigeriaState(applicantState);
+  const watchedContacts = useWatch({ control: form.control, name: 'contacts' });
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
@@ -112,6 +141,20 @@ export function AdmissionFormPage() {
           <CardContent className="space-y-8 pt-5">
             <FormError error={createAdmission.error} />
 
+            <FormSection
+              title="Who is applying"
+              description="This decides who the school corresponds with, and what the form asks for."
+              columns={1}
+            >
+              <RadioCardField
+                control={form.control}
+                name="applicantType"
+                label="Application filed by"
+                required
+                options={APPLICANT_TYPE_OPTIONS}
+              />
+            </FormSection>
+
             <FormSection title="Applying for" columns={2}>
               <SelectField
                 control={form.control}
@@ -133,7 +176,7 @@ export function AdmissionFormPage() {
               />
             </FormSection>
 
-            <FormSection title="The child" columns={2}>
+            <FormSection title={isSelf ? 'The applicant' : 'The child'} columns={2}>
               <TextField
                 control={form.control}
                 name="applicant.firstName"
@@ -147,7 +190,7 @@ export function AdmissionFormPage() {
                 name="applicant.gender"
                 label="Gender"
                 required
-                options={GENDER_OPTIONS}
+                options={[...GENDER_OPTIONS]}
                 native
               />
               <DateField
@@ -162,6 +205,12 @@ export function AdmissionFormPage() {
                 name="applicant.previousSchool"
                 label="Previous school"
               />
+              <TextField
+                control={form.control}
+                name="applicant.previousClass"
+                label="Previous class"
+                description="The class they are leaving, where they have been in school before."
+              />
               <TextField control={form.control} name="applicant.nationality" label="Nationality" />
               <TextField
                 control={form.control}
@@ -175,6 +224,34 @@ export function AdmissionFormPage() {
                 rows={2}
                 className="sm:col-span-2"
               />
+              <SelectField
+                control={form.control}
+                name="applicant.state"
+                label="State"
+                options={NIGERIA_STATE_OPTIONS}
+                placeholder="Select a state"
+                native
+                // The city list below belongs to this state, so a city picked
+                // under the old one cannot stand once it changes.
+                onValueChange={() => form.setValue('applicant.city', '', { shouldDirty: true })}
+              />
+              {applicantCityOptions.length > 0 ? (
+                <SelectField
+                  control={form.control}
+                  name="applicant.city"
+                  label="City"
+                  options={applicantCityOptions}
+                  placeholder="Select a city"
+                  native
+                />
+              ) : (
+                <TextField
+                  control={form.control}
+                  name="applicant.city"
+                  label="City"
+                  hint={!applicantState ? 'Pick a state to choose from a list.' : undefined}
+                />
+              )}
               <TextField control={form.control} name="applicant.bloodGroup" label="Blood group" />
               <TextareaField
                 control={form.control}
@@ -182,97 +259,169 @@ export function AdmissionFormPage() {
                 label="Medical notes"
                 rows={2}
                 className="sm:col-span-2"
-                description="Anything the school must know if the child is offered a place."
+                description="Anything the school must know if the applicant is offered a place."
               />
+
+              {/* Only an applicant applying for themselves is written to
+                  directly. On a parent-filed application these would end up
+                  holding the parent's details on the child's record. */}
+              {isSelf && (
+                <>
+                  <TextField
+                    control={form.control}
+                    name="applicant.email"
+                    label="Their email"
+                    type="email"
+                    required
+                  />
+                  <TextField
+                    control={form.control}
+                    name="applicant.phone"
+                    label="Their phone"
+                    type="tel"
+                    required
+                  />
+                </>
+              )}
             </FormSection>
 
             <FormSection
-              title="Parents and guardians"
-              description="At least one. The primary contact receives the admission decision and, later, portal access."
+              title={isSelf ? 'Parent, guardian or next of kin' : 'Parents and guardians'}
+              description={
+                isSelf
+                  ? 'At least one adult the school can reach about this application.'
+                  : 'At least one. The primary contact receives the admission decision.'
+              }
               columns={1}
             >
+              <Alert tone="info" title="Held with the application, not the parent register">
+                Nobody added here becomes a guardian record, gets portal access or is billed for
+                fees. That happens when the applicant is offered a place, accepts it and is
+                enrolled.
+              </Alert>
+
               <div className="space-y-4">
-                {guardians.fields.map((field, index) => (
-                  <div key={field.id} className="rounded-lg border border-border p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-sm font-medium">Guardian {index + 1}</p>
-                      {guardians.fields.length > 1 && (
-                        <Button
-                          data-cy="admissions-admission-form-remove"
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => guardians.remove(index)}
-                        >
-                          <Trash2 />
-                          Remove
-                        </Button>
-                      )}
+                {contacts.fields.map((field, index) => {
+                  const contactState = watchedContacts?.[index]?.state;
+                  const contactCityOptions = citiesOfNigeriaState(contactState);
+
+                  return (
+                    <div key={field.id} className="rounded-lg border border-border p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-medium">Contact {index + 1}</p>
+                        {contacts.fields.length > 1 && (
+                          <Button
+                            data-cy="admissions-admission-form-remove"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => contacts.remove(index)}
+                          >
+                            <Trash2 />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <TextField
+                          control={form.control}
+                          name={`contacts.${index}.firstName`}
+                          label="First name"
+                          required
+                        />
+                        <TextField
+                          control={form.control}
+                          name={`contacts.${index}.lastName`}
+                          label="Surname"
+                          required
+                        />
+                        <SelectField
+                          control={form.control}
+                          name={`contacts.${index}.relationship`}
+                          label="Relationship"
+                          required
+                          options={[...RELATIONSHIP_OPTIONS]}
+                          native
+                        />
+                        <TextField
+                          control={form.control}
+                          name={`contacts.${index}.occupation`}
+                          label="Occupation"
+                        />
+                        <TextField
+                          control={form.control}
+                          name={`contacts.${index}.email`}
+                          label="Email"
+                          type="email"
+                          required
+                        />
+                        <TextField
+                          control={form.control}
+                          name={`contacts.${index}.phone`}
+                          label="Phone"
+                          type="tel"
+                          required
+                        />
+                        <TextareaField
+                          control={form.control}
+                          name={`contacts.${index}.address`}
+                          label="Home address"
+                          rows={2}
+                          className="sm:col-span-2"
+                        />
+                        <SelectField
+                          control={form.control}
+                          name={`contacts.${index}.state`}
+                          label="State"
+                          options={NIGERIA_STATE_OPTIONS}
+                          placeholder="Select a state"
+                          native
+                          onValueChange={() =>
+                            form.setValue(`contacts.${index}.city`, '', { shouldDirty: true })
+                          }
+                        />
+                        {contactCityOptions.length > 0 ? (
+                          <SelectField
+                            control={form.control}
+                            name={`contacts.${index}.city`}
+                            label="City"
+                            options={contactCityOptions}
+                            placeholder="Select a city"
+                            native
+                          />
+                        ) : (
+                          <TextField
+                            control={form.control}
+                            name={`contacts.${index}.city`}
+                            label="City"
+                            hint={!contactState ? 'Pick a state to choose from a list.' : undefined}
+                          />
+                        )}
+                        <CheckboxField
+                          control={form.control}
+                          name={`contacts.${index}.isPrimaryContact`}
+                          label="Primary contact"
+                          description="Receives the decision, and is billed for fees once enrolled."
+                          className="sm:col-span-2"
+                        />
+                      </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <TextField
-                        control={form.control}
-                        name={`guardians.${index}.firstName`}
-                        label="First name"
-                        required
-                      />
-                      <TextField
-                        control={form.control}
-                        name={`guardians.${index}.lastName`}
-                        label="Surname"
-                        required
-                      />
-                      <SelectField
-                        control={form.control}
-                        name={`guardians.${index}.relationship`}
-                        label="Relationship"
-                        required
-                        options={RELATIONSHIP_OPTIONS}
-                        native
-                      />
-                      <TextField
-                        control={form.control}
-                        name={`guardians.${index}.occupation`}
-                        label="Occupation"
-                      />
-                      <TextField
-                        control={form.control}
-                        name={`guardians.${index}.email`}
-                        label="Email"
-                        type="email"
-                        required
-                      />
-                      <TextField
-                        control={form.control}
-                        name={`guardians.${index}.phone`}
-                        label="Phone"
-                        type="tel"
-                        required
-                      />
-                      <CheckboxField
-                        control={form.control}
-                        name={`guardians.${index}.isPrimaryContact`}
-                        label="Primary contact"
-                        description="Receives the decision and is billed for fees."
-                        className="sm:col-span-2"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <Button
                   data-cy="admissions-admission-form-add-another-guardian"
                   type="button"
                   variant="outline"
-                  onClick={() => guardians.append({ ...emptyGuardian })}
+                  onClick={() => contacts.append({ ...emptyContact })}
                 >
                   <Plus />
-                  Add another guardian
+                  Add another contact
                 </Button>
 
-                {form.formState.errors.guardians?.message && (
+                {form.formState.errors.contacts?.message && (
                   <p role="alert" className="text-xs text-danger">
-                    {form.formState.errors.guardians.message}
+                    {form.formState.errors.contacts.message}
                   </p>
                 )}
               </div>

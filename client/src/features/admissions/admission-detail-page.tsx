@@ -7,6 +7,7 @@ import {
   FileText,
   GraduationCap,
   Mail,
+  MapPin,
   Phone,
   UserPlus,
   X,
@@ -142,6 +143,13 @@ export function AdmissionDetailPage() {
           <>
             <StatusBadge status={record.status} />
             <Badge tone="neutral">{record.applicationNo}</Badge>
+            {/* Where it came from, and who filled it in. Both change how the
+                office handles it: a website application has been checked by
+                nobody, and a self-filed one is answered to the applicant. */}
+            {record.source === 'WEBSITE' && <Badge tone="neutral">From the website</Badge>}
+            {record.applicantType === 'SELF' && (
+              <Badge tone="neutral">Applied for themselves</Badge>
+            )}
             {record.submittedAt && (
               <span className="text-xs text-muted-foreground">
                 Submitted {formatDate(record.submittedAt)}
@@ -163,12 +171,20 @@ export function AdmissionDetailPage() {
                   {STATUS_LABEL[status]}
                 </Button>
               ))}
-            {record.status === 'ACCEPTED' && !record.convertedStudentId && can('student.create') && (
-              <Button data-cy="admissions-admission-detail-enrol-as-a-student" onClick={() => setConvertOpen(true)}>
-                <UserPlus />
-                Enrol as a student
-              </Button>
-            )}
+            {/* Enrolling creates the pupil and, with them, the guardian records
+                for everyone on the application — so it takes both permissions,
+                and the server enforces the same pair. */}
+            {record.status === 'ACCEPTED' &&
+              !record.convertedStudentId &&
+              can({ allOf: ['student.create', 'guardian.manage'] }) && (
+                <Button
+                  data-cy="admissions-admission-detail-enrol-as-a-student"
+                  onClick={() => setConvertOpen(true)}
+                >
+                  <UserPlus />
+                  Enrol as a student
+                </Button>
+              )}
             {record.convertedStudentId && (
               <Button data-cy="admissions-admission-detail-open-student-record" variant="outline" asChild>
                 <Link to={`/students/${record.convertedStudentId}`}>
@@ -201,8 +217,19 @@ export function AdmissionDetailPage() {
                 <Field label="Nationality" value={applicant.nationality ?? '—'} />
                 <Field label="State of origin" value={applicant.stateOfOrigin ?? '—'} />
                 <Field label="Previous school" value={applicant.previousSchool ?? '—'} />
+                <Field label="Previous class" value={applicant.previousClass ?? '—'} />
                 <Field label="Blood group" value={applicant.bloodGroup ?? '—'} />
                 <Field label="Home address" value={applicant.address ?? '—'} />
+                <Field label="City" value={applicant.city ?? '—'} />
+                <Field label="State" value={applicant.state ?? '—'} />
+                {/* Only ever filled where the applicant applied for themselves,
+                    so it is shown only then rather than as two empty rows. */}
+                {record.applicantType === 'SELF' && (
+                  <>
+                    <Field label="Their email" value={applicant.email ?? '—'} />
+                    <Field label="Their phone" value={applicant.phone ?? '—'} />
+                  </>
+                )}
                 {applicant.medicalNotes && (
                   <div className="sm:col-span-2">
                     <dt className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -217,32 +244,47 @@ export function AdmissionDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Parents and guardians</CardTitle>
+              <CardTitle>
+                {record.applicantType === 'SELF'
+                  ? 'Parent, guardian or next of kin'
+                  : 'Parents and guardians'}
+              </CardTitle>
+              <CardDescription>
+                {record.convertedStudentId
+                  ? 'These people now have guardian records, created when the applicant was enrolled.'
+                  : 'Held with this application only. Nobody here has a guardian record, portal access or a fee account until the applicant is enrolled.'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <ul className="divide-y divide-border">
-                {record.guardians.map((guardian, index) => (
+                {record.contacts.map((contact, index) => (
                   <li key={index} className="space-y-1 px-5 py-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">
-                        {guardian.title ? `${guardian.title} ` : ''}
-                        {guardian.firstName} {guardian.lastName}
+                        {contact.title ? `${contact.title} ` : ''}
+                        {contact.firstName} {contact.lastName}
                       </p>
-                      <Badge tone="neutral">{humanizeEnum(guardian.relationship)}</Badge>
-                      {guardian.isPrimaryContact && <Badge tone="primary">Primary contact</Badge>}
+                      <Badge tone="neutral">{humanizeEnum(contact.relationship)}</Badge>
+                      {contact.isPrimaryContact && <Badge tone="primary">Primary contact</Badge>}
                     </div>
                     <p className="flex flex-wrap items-center gap-3 text-muted-foreground">
                       <span className="flex items-center gap-1.5">
                         <Phone className="size-3" aria-hidden="true" />
-                        {guardian.phone}
+                        {contact.phone}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Mail className="size-3" aria-hidden="true" />
-                        {guardian.email}
+                        {contact.email}
                       </span>
                     </p>
-                    {guardian.occupation && (
-                      <p className="text-xs text-muted-foreground">{guardian.occupation}</p>
+                    {contact.occupation && (
+                      <p className="text-xs text-muted-foreground">{contact.occupation}</p>
+                    )}
+                    {(contact.address || contact.city || contact.state) && (
+                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                        {[contact.address, contact.city, contact.state].filter(Boolean).join(', ')}
+                      </p>
                     )}
                   </li>
                 ))}

@@ -84,11 +84,13 @@ export function AdmissionsListPage() {
         ),
       },
       {
-        id: 'guardian',
-        header: 'Guardian',
+        id: 'contact',
+        header: 'Contact',
         hideOnMobile: true,
         cell: (application) => {
-          const primary = application.guardians.find((g) => g.isPrimaryContact) ?? application.guardians[0];
+          const primary =
+            application.contacts.find((contact) => contact.isPrimaryContact) ??
+            application.contacts[0];
           if (!primary) return '—';
           return (
             <div className="min-w-0 text-sm">

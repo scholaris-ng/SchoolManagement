@@ -27,6 +27,7 @@ import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import analyticsRoutes from './modules/analytics/routes/analytics.routes';
 import staffRoutes from './modules/staff/routes/staff.routes';
 import admissionsRoutes from './modules/admissions/routes/admissions.routes';
+import publicAdmissionsRoutes from './modules/admissions/routes/publicAdmissions.routes';
 import importsRoutes from './modules/imports/routes/imports.routes';
 import curriculumRoutes from './modules/curriculum/routes/curriculum.routes';
 import calendarRoutes from './modules/calendar/routes/calendar.routes';
@@ -77,6 +78,10 @@ export function createApp(): Express {
   // be registered last.
   app.use(env.apiPrefix, authRoutes);
   app.use(env.apiPrefix, schoolRoutes);
+  // The school website's application form: the only unauthenticated write in
+  // the API, and the one route where the tenant comes from a slug in the path
+  // rather than from a session. It carries its own rate limit.
+  app.use(env.apiPrefix, publicAdmissionsRoutes);
   app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
 
   const api = [

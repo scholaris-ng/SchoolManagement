@@ -654,32 +654,8 @@ export const defaultContent: SiteContent = {
 
   registration: {
     title: 'Student Registration',
-    intro: 'A single click is enough to start a journey of becoming a full-fledged student.',
-    steps: [
-      {
-        legend: 'Student',
-        fields: [
-          { name: 'surname', label: 'Surname', type: 'text' },
-          { name: 'otherNames', label: 'Other names', type: 'text' },
-          { name: 'dateOfBirth', label: 'Date of Birth', type: 'date' },
-        ],
-      },
-      {
-        legend: 'Contact',
-        fields: [
-          { name: 'whatsapp', label: 'Whatsapp', type: 'tel' },
-          { name: 'email', label: 'Email', type: 'email' },
-        ],
-      },
-      {
-        legend: 'Schooling',
-        fields: [
-          { name: 'entranceClass', label: 'Entrance to Which Class', type: 'text' },
-          { name: 'formerClass', label: 'Former Class', type: 'text' },
-          { name: 'formerSchool', label: 'Former School', type: 'text' },
-        ],
-      },
-    ],
+    intro:
+      'A few minutes is enough to start a journey of becoming a full-fledged student. Apply for your child, for several of your children at once, or for yourself.',
   },
 
   subsidiaries: [

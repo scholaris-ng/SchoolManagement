@@ -45,6 +45,47 @@ export class AuditService implements IAuditService {
     this.announceIfCritical(context, event);
   }
 
+  /**
+   * An entry for something that happened without anybody signed in.
+   *
+   * The public website is the only surface that reaches a write with no
+   * session: a family submitting an application has no user id, no membership
+   * and no role. The entry still has to exist, so the actor is recorded by the
+   * name they gave and the address they came from, and `actorUserId` stays
+   * null rather than being attributed to whoever happens to read it later.
+   */
+  async recordSystem(
+    schoolId: string,
+    event: AuditEvent & {
+      actorName: string;
+      actorRole?: string;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+      requestId?: string;
+    },
+  ): Promise<void> {
+    try {
+      await this.repo.append({
+        schoolId,
+        actorUserId: null,
+        actorName: event.actorName,
+        actorRole: event.actorRole ?? 'Public',
+        action: event.action,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        entityLabel: event.entityLabel ?? null,
+        before: event.before ?? null,
+        after: event.after ?? null,
+        ipAddress: event.ipAddress ?? null,
+        userAgent: event.userAgent ?? null,
+        requestId: event.requestId ?? null,
+        severity: event.severity ?? 'INFO',
+      });
+    } catch (error) {
+      console.error(`[${event.requestId ?? 'public'}] Audit write failed for ${event.action}:`, error);
+    }
+  }
+
   async recordMany(context: RequestContext, events: AuditEvent[]): Promise<void> {
     if (events.length === 0) return;
     try {

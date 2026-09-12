@@ -42,10 +42,14 @@ export function createQueryClient(): QueryClient {
       },
     }),
     mutationCache: new MutationCache({
-      onError: (error) => {
+      onError: (error, _variables, _context, mutation) => {
         if (isApiError(error) && error.isUnauthenticated) return;
         // Version conflicts are handled by the calling feature with a dialog.
         if (isApiError(error) && error.isVersionConflict) return;
+        // Same opt-out the queries have, for the same reason: a family whose
+        // application was refused is told inside the form they are filling in,
+        // not by an application-shaped toast on a marketing page.
+        if (mutation.meta?.silent) return;
         toast.error(describeError(error));
       },
     }),

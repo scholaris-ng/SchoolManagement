@@ -1,42 +1,71 @@
 import { Router } from 'express';
-import type { NextFunction, Request, Response } from 'express';
-import { authorise } from '../../../shared/middleware/authorise.middleware';
+import { authorise, authoriseAll } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
-import { ApiResponse } from '../../../shared/response/apiResponse';
-import { paginatedResult } from '../../../shared/pagination/paginate';
-import { fetchAdmissionsSchema, type FetchAdmissionsQuery } from '../validators/admissions.schema';
+import {
+  admissionIdParamSchema,
+  convertAdmissionSchema,
+  createAdmissionSchema,
+  fetchAdmissionsSchema,
+  transitionAdmissionSchema,
+} from '../validators/admissions.schema';
+import { AdmissionsController } from '../controllers/admissions.controller';
 
 /**
- * The applicant list, and nothing behind it yet.
+ * Admissions, as staff work them (spec section 10).
  *
- * Applicants are not modelled: there is no application table, no stage history
- * and no conversion path into the register. The list is still served so the
- * admissions screen renders its own empty state, which says "no applications"
- * rather than showing a failed request.
+ * The funnel chart is not here: it lives in the analytics module with the
+ * other aggregates, because the analytics screen reads it as well as this one.
  *
- * Everything else the client calls here — a single application, a stage
- * transition, and converting an accepted applicant into a student — writes, and
- * a write with nothing to write to is not worth faking. Those stay unrouted
- * until the tables exist.
- *
- * The funnel chart lives in the analytics module with the other aggregates,
- * because it is read by the analytics screen as well as this one.
+ * `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. The
+ * public submission route is mounted separately, ahead of them, in
+ * `publicAdmissions.routes.ts`.
  */
-/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
 
 router.get(
   '/admissions',
   authorise('admission.read'),
   validate(fetchAdmissionsSchema),
-  (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { page, pageSize } = req.validated!.query as FetchAdmissionsQuery;
-      res.status(200).json(ApiResponse.paginated(paginatedResult([], page, pageSize, 0)));
-    } catch (error) {
-      next(error);
-    }
-  },
+  AdmissionsController.fetchAll,
+);
+
+router.get(
+  '/admissions/:id',
+  authorise('admission.read'),
+  validate(admissionIdParamSchema),
+  AdmissionsController.fetchOne,
+);
+
+router.post(
+  '/admissions',
+  authorise('admission.manage'),
+  validate(createAdmissionSchema),
+  AdmissionsController.create,
+);
+
+/**
+ * A stage change is sent as an intent, not a write. Which stages this caller
+ * may actually reach is the service's decision: moving an application along
+ * needs `admission.manage`, while offering, accepting or refusing a place
+ * needs `admission.decide` on top of it.
+ */
+router.post(
+  '/admissions/:id/transition',
+  authorise('admission.manage', 'admission.decide'),
+  validate(transitionAdmissionSchema),
+  AdmissionsController.transition,
+);
+
+/**
+ * Enrolment. Needs the permission to create a pupil and the permission to
+ * manage guardians, because it creates both — this one call is where an
+ * application's contacts finally become guardian records.
+ */
+router.post(
+  '/admissions/:id/convert',
+  authoriseAll('student.create', 'guardian.manage'),
+  validate(convertAdmissionSchema),
+  AdmissionsController.convert,
 );
 
 export default router;

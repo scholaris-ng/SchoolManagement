@@ -67,8 +67,8 @@ export function ConvertApplicantDialog({
         <DialogHeader>
           <DialogTitle>Enrol {applicantName}</DialogTitle>
           <DialogDescription>
-            Everything already on the application carries across — names, date of birth, guardians
-            and uploaded documents. Nothing is typed twice.
+            Everything already on the application carries across — names, date of birth and the
+            people to contact. Nothing is typed twice.
           </DialogDescription>
         </DialogHeader>
 
@@ -103,11 +103,13 @@ export function ConvertApplicantDialog({
               <ul className="list-disc space-y-0.5 pl-4">
                 <li>A student record is created and added to the class register.</li>
                 <li>
-                  {application.guardians.length} guardian
-                  {application.guardians.length === 1 ? '' : 's'} are created or matched by email and
-                  linked to the child.
+                  The {application.contacts.length} contact
+                  {application.contacts.length === 1 ? '' : 's'} on this application become guardian
+                  records now, matched by email where the school already knows them. This is the
+                  first point at which they do.
                 </li>
-                <li>An enrolment record is opened for the current session.</li>
+                <li>An enrolment record is opened for the session applied for.</li>
+                <li>Portal access stays closed until a guardian is invited from their record.</li>
                 <li>Photo consent starts off, until a guardian gives it.</li>
               </ul>
             </Alert>

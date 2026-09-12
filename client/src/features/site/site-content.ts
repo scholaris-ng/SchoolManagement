@@ -167,11 +167,18 @@ export interface SiteContent {
   testimonials: { title: string; intro: string; items: SiteTestimonial[] };
   news: { title: string; subtitle: string; items: SiteNewsItem[] };
   gallery: SiteImage[];
-  /** Fields of the school's own multi-step registration form. */
+  /**
+   * The heading above the application form.
+   *
+   * The fields themselves are no longer content: the form produces a real
+   * admission application, so its shape is the one the admissions module
+   * defines (`@/features/admissions/schema`) and a school editing its website
+   * cannot rename a column out from under it. What a school does own is what
+   * it says here.
+   */
   registration: {
     title: string;
     intro: string;
-    steps: { legend: string; fields: { name: string; label: string; type: string }[] }[];
   };
   subsidiaries: { name: string; href: string; icon: SiteIconName }[];
   portals: { name: string; href: string }[];

@@ -1,23 +1,47 @@
-import { useState } from 'react';
-import { ArrowLeft, ArrowRight, MessageCircle, Send } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useFieldArray, useForm, useWatch, type FieldPath } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { AlertCircle, ArrowLeft, ArrowRight, MessageCircle, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { errorMessage } from '@/lib/api-error';
+import { usePublicAdmissionOptions, useSubmitApplication } from '@/features/public/api';
+import type { PublicAdmissionOptions, PublicApplicationReceipt } from '@/types/admissions';
 import { useSite } from '../site-context';
+import {
+  emptySiteApplicant,
+  emptySiteContact,
+  fieldsForStep,
+  siteApplicationSchema,
+  stepsFor,
+  type SiteApplicationValues,
+} from '../application.schema';
 import { Container, SiteImage } from './site-ui';
+import { ApplicantsStep, ContactsStep, SchoolingStep, WhoStep } from './registration-steps';
+import { ApplicationReceipt, ReviewStep } from './registration-review';
 
 /**
- * The school's own Student Registration block, reproduced step for step.
+ * The school's application form, on its own website.
  *
- * Their site collects surname, other names, date of birth, WhatsApp, email and
- * the class details across a short wizard, and it appears at the foot of every
- * page under the anchor the "Join Us" button points at. Both are kept.
+ * It takes the same application the admissions office takes at the desk, in
+ * the same shape, validated by the same schema — `@/features/admissions/schema`
+ * is the single definition both forms extend. What a parent fills in here
+ * arrives in the admissions list as a real application with a reference
+ * number, not as an email somebody has to key in again.
  *
- * There is no unauthenticated write endpoint, and adding one would open a spam
- * surface on a route that deliberately holds no session, so the completed form
- * is handed to the visitor's mail client with WhatsApp as the one-tap
- * alternative most parents will actually use.
+ * Two things are deliberate. The first question is who is filling the form in,
+ * because a parent applying for three children and an SS2 student applying for
+ * themselves need different questions and different people written to; the
+ * steps after it are chosen from that answer rather than fixed.
  *
- * TODO(api): when `POST /public/enquiries` exists, submit there and keep the
- * mail client as the fallback for a failed request.
+ * The second is what submitting does NOT do. It creates applications, and
+ * nothing else — no account, and no guardian record for whoever filled it in.
+ * Anyone can reach this form; a guardian record carries portal access to a
+ * child's file and a fee liability, so it is created only when the school
+ * enrols the child, after screening and acceptance.
+ *
+ * A school that has not published its sessions and classes falls back to the
+ * mail handoff this form has always had, with the same wizard in front of it.
  */
 export function RegistrationSection() {
   const { content } = useSite();
@@ -25,8 +49,8 @@ export function RegistrationSection() {
 
   return (
     <section id="becomeastudent" className="site-band py-16 sm:py-20">
-      <Container className="grid items-center gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-        <div>
+      <Container className="grid items-start gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
+        <div className="lg:sticky lg:top-28">
           <p className="site-eyebrow site-eyebrow--light">Join Us</p>
           <h2 className="mt-4 text-[1.75rem] text-white sm:text-[2.125rem]">{registration.title}</h2>
           <p className="mt-4 text-[1.0625rem] leading-relaxed text-white/75">{registration.intro}</p>
@@ -37,55 +61,112 @@ export function RegistrationSection() {
         </div>
 
         <div className="rounded-2xl bg-white p-6 sm:p-8">
-          <RegistrationForm />
+          <ApplicationForm />
         </div>
       </Container>
     </section>
   );
 }
 
-function RegistrationForm() {
+function ApplicationForm() {
+  const { slug } = useParams<{ slug: string }>();
   const { content } = useSite();
-  const { registration, contact } = content;
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const { contact } = content;
 
-  const steps = registration.steps;
-  const current = steps[step];
-  const isLast = step === steps.length - 1;
+  const admissions = usePublicAdmissionOptions(slug);
+  const submit = useSubmitApplication(slug);
 
-  const set = (name: string, value: string) =>
-    setValues((previous) => ({ ...previous, [name]: value }));
+  const [stepIndex, setStepIndex] = useState(0);
+  const [receipt, setReceipt] = useState<PublicApplicationReceipt | null>(null);
 
-  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!isLast) {
-      setStep(step + 1);
-      return;
-    }
-    const body = steps
-      .flatMap((entry) => entry.fields)
-      .map((field) => `${field.label}: ${values[field.name] ?? ''}`)
-      .join('\n');
-    const subject = encodeURIComponent('Student Registration');
-    window.location.href = `mailto:${contact.email}?subject=${subject}&body=${encodeURIComponent(body)}`;
+  const form = useForm<SiteApplicationValues>({
+    resolver: zodResolver(siteApplicationSchema),
+    defaultValues: {
+      // Unset on purpose: the first step is a real question, and a pre-picked
+      // answer is one a visitor can walk past without reading.
+      applicantType: undefined,
+      sessionId: '',
+      applicants: [{ ...emptySiteApplicant }],
+      contacts: [{ ...emptySiteContact, isPrimaryContact: true }],
+      consentGiven: undefined as unknown as true,
+    },
+  });
+
+  const applicants = useFieldArray({ control: form.control, name: 'applicants' });
+  const contacts = useFieldArray({ control: form.control, name: 'contacts' });
+  const applicantType = useWatch({ control: form.control, name: 'applicantType' }) ?? null;
+
+  const steps = useMemo(() => stepsFor(applicantType), [applicantType]);
+  // Clamped, and every read below uses the clamped index: the step list is
+  // rebuilt whenever the first answer changes, and a stale index must never
+  // leave the form on a step that no longer exists.
+  const current = Math.min(stepIndex, steps.length - 1);
+  const step = steps[current];
+  const isLast = current === steps.length - 1;
+
+  const options: PublicAdmissionOptions | null = admissions.data ?? null;
+  // Online submission needs the school to have published what it is taking
+  // applications for. Without that there is nothing valid to submit against,
+  // and the form hands the completed application to the office by email.
+  const canSubmitOnline = Boolean(
+    options?.open && options.sessions.length > 0 && options.levels.length > 0,
+  );
+
+  /** Checks only the fields this step put on screen — see `fieldsForStep`. */
+  const goNext = async () => {
+    const fields = fieldsForStep(step.id, applicantType, {
+      applicants: applicants.fields.length,
+      contacts: contacts.fields.length,
+    }) as FieldPath<SiteApplicationValues>[];
+
+    if (await form.trigger(fields)) setStepIndex(current + 1);
   };
 
+  const onSubmit = form.handleSubmit(async (values) => {
+    if (!canSubmitOnline) {
+      handOffToEmail(values, contact.email, options);
+      return;
+    }
+
+    const result = await submit.mutateAsync({
+      applicantType: values.applicantType,
+      sessionId: values.sessionId,
+      applicants: values.applicants,
+      contacts: values.contacts,
+      consentGiven: true,
+    });
+    setReceipt(result);
+  });
+
+  if (receipt) {
+    return (
+      <ApplicationReceipt
+        receipt={receipt}
+        whatsapp={contact.whatsapp[0]}
+        onStartAnother={() => {
+          form.reset();
+          setStepIndex(0);
+          setReceipt(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <form onSubmit={onSubmit}>
-      <ol className="mb-6 flex gap-2" aria-label="Registration steps">
+    <form onSubmit={onSubmit} noValidate>
+      <ol className="mb-6 flex gap-2" aria-label="Application steps">
         {steps.map((entry, index) => (
-          <li key={entry.legend} className="flex-1">
+          <li key={entry.id} className="min-w-0 flex-1">
             <span
               className={cn(
                 'block h-1 rounded-full',
-                index <= step ? 'bg-[var(--site-accent)]' : 'bg-[var(--site-line)]',
+                index <= current ? 'bg-[var(--site-accent)]' : 'bg-[var(--site-line)]',
               )}
             />
             <span
               className={cn(
-                'mt-2 block text-xs font-medium',
-                index === step ? 'text-[var(--site-ink)]' : 'text-[var(--site-muted)]',
+                'mt-2 block truncate text-xs font-medium',
+                index === current ? 'text-[var(--site-ink)]' : 'text-[var(--site-muted)]',
               )}
             >
               {entry.legend}
@@ -94,55 +175,76 @@ function RegistrationForm() {
         ))}
       </ol>
 
-      <fieldset>
-        <legend className="sr-only">{current.legend}</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {current.fields.map((field) => (
-            <div key={field.name} className={field.type === 'email' ? 'sm:col-span-2' : undefined}>
-              <label
-                htmlFor={`reg-${field.name}`}
-                className="mb-1.5 block text-sm font-medium text-[var(--site-ink)]"
-              >
-                {field.label}
-              </label>
-              <input
-                id={`reg-${field.name}`}
-                name={field.name}
-                type={field.type}
-                required
-                value={values[field.name] ?? ''}
-                onChange={(event) => set(field.name, event.target.value)}
-                className="w-full rounded-lg border border-[var(--site-line)] bg-white px-3.5 py-2.5 text-[0.9375rem] text-[var(--site-ink)] outline-none transition-colors placeholder:text-[var(--site-muted)] focus:border-[var(--site-brand)] focus:ring-4 focus:ring-[var(--site-brand-soft)]"
-              />
-            </div>
-          ))}
-        </div>
-      </fieldset>
+      <div>
+        <h3 className="text-lg text-[var(--site-ink)]">{step.legend}</h3>
+        <p className="mb-5 mt-1 text-sm text-[var(--site-muted)]">{step.hint}</p>
+
+        {step.id === 'who' && <WhoStep control={form.control} />}
+        {step.id === 'contacts' && (
+          <ContactsStep
+            control={form.control}
+            setValue={form.setValue}
+            applicantType={applicantType}
+            contacts={contacts}
+          />
+        )}
+        {step.id === 'applicants' && (
+          <ApplicantsStep
+            control={form.control}
+            setValue={form.setValue}
+            applicantType={applicantType}
+            applicants={applicants}
+          />
+        )}
+        {step.id === 'schooling' && (
+          <SchoolingStep
+            control={form.control}
+            applicantType={applicantType}
+            options={options}
+            names={form
+              .getValues('applicants')
+              .map((applicant) => [applicant.firstName, applicant.lastName].filter(Boolean).join(' '))}
+          />
+        )}
+        {step.id === 'review' && (
+          <ReviewStep control={form.control} values={form.getValues()} options={options} />
+        )}
+      </div>
+
+      {submit.isError && (
+        <p
+          role="alert"
+          className="mt-5 flex items-start gap-2 rounded-lg border border-[var(--site-accent)] bg-[color-mix(in_srgb,var(--site-accent)_6%,white)] p-3 text-sm text-[var(--site-ink)]"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--site-accent)]" aria-hidden="true" />
+          {errorMessage(submit.error, 'The application could not be sent. Please try again.')}
+        </p>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {step > 0 && (
+        {current > 0 && (
           <button
             type="button"
-            onClick={() => setStep(step - 1)}
+            onClick={() => setStepIndex(current - 1)}
             className="site-btn site-btn--outline"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             Previous
           </button>
         )}
-        <button type="submit" className="site-btn site-btn--primary">
-          {isLast ? (
-            <>
-              <Send className="size-4" aria-hidden="true" />
-              Register
-            </>
-          ) : (
-            <>
-              Next
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </>
-          )}
-        </button>
+
+        {isLast ? (
+          <button type="submit" className="site-btn site-btn--primary" disabled={submit.isPending}>
+            <Send className="size-4" aria-hidden="true" />
+            {submit.isPending ? 'Sending…' : 'Submit application'}
+          </button>
+        ) : (
+          <button type="button" onClick={goNext} className="site-btn site-btn--primary">
+            Next
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </button>
+        )}
+
         <a
           href={`https://wa.me/${contact.whatsapp[0]}`}
           target="_blank"
@@ -154,9 +256,66 @@ function RegistrationForm() {
         </a>
       </div>
 
-      <p className="mt-4 text-xs text-[var(--site-muted)]">
-        Registering opens your mail application with the details prepared for the school office.
+      <p className="mt-4 text-xs leading-relaxed text-[var(--site-muted)]">
+        {canSubmitOnline
+          ? 'Submitting sends the application straight to the admissions office and gives you a reference number.'
+          : 'Submitting opens your mail application with the details prepared for the school office.'}
       </p>
     </form>
   );
+}
+
+/**
+ * The fallback for a school that has not published what it is admitting into.
+ *
+ * The same completed application, laid out as text for whoever reads the
+ * office inbox. It is worth keeping rather than refusing the visitor: a family
+ * that has filled in four steps should not be told to start again somewhere
+ * else.
+ */
+function handOffToEmail(
+  values: SiteApplicationValues,
+  to: string,
+  options: PublicAdmissionOptions | null,
+): void {
+  const levelName = (levelId: string) =>
+    options?.levels.find((level) => level.id === levelId)?.name ?? levelId;
+  const sessionName =
+    options?.sessions.find((session) => session.id === values.sessionId)?.name ?? values.sessionId;
+
+  const lines = [
+    `Application filed by: ${values.applicantType === 'SELF' ? 'the applicant' : 'a parent or guardian'}`,
+    `Academic session: ${sessionName}`,
+    '',
+    ...values.applicants.flatMap((applicant, index) => [
+      `Applicant ${index + 1}`,
+      `  Name: ${[applicant.lastName, applicant.firstName, applicant.middleName].filter(Boolean).join(' ')}`,
+      `  Gender: ${applicant.gender}`,
+      `  Date of birth: ${applicant.dateOfBirth}`,
+      `  Applying into: ${levelName(applicant.levelId)}`,
+      `  Former school: ${applicant.previousSchool || '—'}`,
+      `  Former class: ${applicant.previousClass || '—'}`,
+      `  Blood group: ${applicant.bloodGroup || '—'}`,
+      `  Notes: ${applicant.medicalNotes || '—'}`,
+      applicant.email ? `  Email: ${applicant.email}` : '',
+      applicant.phone ? `  Phone: ${applicant.phone}` : '',
+      applicant.address || applicant.city || applicant.state
+        ? `  Address: ${[applicant.address, applicant.city, applicant.state].filter(Boolean).join(', ')}`
+        : '',
+      '',
+    ]),
+    ...values.contacts.flatMap((contact, index) => [
+      `Contact ${index + 1}${contact.isPrimaryContact ? ' (primary)' : ''}`,
+      `  Name: ${[contact.firstName, contact.lastName].filter(Boolean).join(' ')}`,
+      `  Relationship: ${contact.relationship}`,
+      `  Email: ${contact.email}`,
+      `  Phone: ${contact.phone}`,
+      `  Occupation: ${contact.occupation || '—'}`,
+      `  Address: ${[contact.address, contact.city, contact.state].filter(Boolean).join(', ') || '—'}`,
+      '',
+    ]),
+  ].filter((line) => line !== '');
+
+  const subject = encodeURIComponent('Student application');
+  window.location.href = `mailto:${to}?subject=${subject}&body=${encodeURIComponent(lines.join('\n'))}`;
 }

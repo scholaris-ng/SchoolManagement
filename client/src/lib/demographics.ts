@@ -1,4 +1,4 @@
-import { Country, State } from 'country-state-city';
+import { City, Country, State } from 'country-state-city';
 import type { SelectOption } from '@/components/ui/input';
 
 /**
@@ -27,6 +27,37 @@ export function statesOfNationality(nationality: string | undefined): SelectOpti
   return State.getStatesOfCountry(country.isoCode).map((state) => ({
     value: state.name,
     label: state.name,
+  }));
+}
+
+/**
+ * Nigeria's states, for a "State" field that means where someone currently
+ * lives rather than {@link statesOfNationality}'s "state of origin" — the
+ * two are different questions on the same form and must not share a list.
+ * Fixed to Nigeria rather than following a nationality field: every school on
+ * the platform today is Nigerian, the same assumption the phone field's
+ * default dial code makes.
+ */
+export const NIGERIA_STATE_OPTIONS: SelectOption[] = State.getStatesOfCountry('NG').map((state) => ({
+  value: state.name,
+  label: state.name,
+}));
+
+/**
+ * City belongs to State the same way State belongs to Country above: the list
+ * on offer follows whichever state was picked, by looking its ISO code back up
+ * from the name the form actually stores — Rivers gives Port Harcourt, Bori,
+ * Buguma and the rest of that state's list, not the whole country's 400-odd
+ * entries. A state the dataset holds no cities for, or none picked yet, comes
+ * back empty — the caller falls back to a free text box rather than trapping
+ * the user with nothing to choose, same as `statesOfNationality`.
+ */
+export function citiesOfNigeriaState(state: string | undefined): SelectOption[] {
+  const match = State.getStatesOfCountry('NG').find((entry) => entry.name === state);
+  if (!match) return [];
+  return City.getCitiesOfState('NG', match.isoCode).map((city) => ({
+    value: city.name,
+    label: city.name,
   }));
 }
 
