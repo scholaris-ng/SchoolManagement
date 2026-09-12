@@ -14,6 +14,25 @@ import type { PersonaKey, Permission } from '@/types/rbac';
 import type { AuthenticatedUser, SchoolMembership, SessionPayload } from '@/types/tenant';
 
 /**
+ * This file mixes a component (`AuthProvider`) with plain hooks (`useAuth`
+ * and friends) in the same module — needed for the ergonomics of importing
+ * both from one path, but it is exactly what defeats React Fast Refresh's
+ * ability to hot-patch a file in place (`react-refresh/only-export-components`
+ * is off in `.eslintrc.cjs` for this reason). Left alone, an edit anywhere in
+ * this file's import graph can leave two live `AuthContext` objects — the
+ * `<AuthProvider>` already mounted from the app's initial load still holding
+ * the old one, a freshly re-evaluated lazy-loaded route reading the new one —
+ * and `useAuth` throws "must be used inside <AuthProvider>" even though one
+ * plainly wraps the tree. A full reload can never produce two, so that is
+ * what every edit gets instead of a partial hot update.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate();
+  });
+}
+
+/**
  * Session state for the whole app.
  *
  * Two distinct questions are answered here, deliberately separately:

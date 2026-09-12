@@ -2,6 +2,20 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { localStore, storageKeys } from '@/lib/storage';
 import { useAuth } from './auth-provider';
 
+/**
+ * Mixes a component (`ThemeProvider`) with a plain hook (`useTheme`) in the
+ * same module, which is what defeats React Fast Refresh's ability to
+ * hot-patch it in place — see the matching note in `auth-provider.tsx`, the
+ * file this one imports from. Forcing a full reload instead of a partial hot
+ * update is what stops a stray `useTheme`/`useAuth` "must be used inside
+ * provider" error from surfacing after an edit.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate();
+  });
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeContextValue {

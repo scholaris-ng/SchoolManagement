@@ -6,6 +6,20 @@ import { defaultContent } from './default-content';
 import type { SiteContent } from './site-content';
 
 /**
+ * Mixes a component (`SiteContentProvider`) with plain hooks (`useSite`,
+ * `useSiteContent`) in the same module, which is what defeats React Fast
+ * Refresh's ability to hot-patch it in place — see the matching note in
+ * `app/providers/auth-provider.tsx`. Forcing a full reload instead of a
+ * partial hot update is what stops a stray `useSite` "must be used inside
+ * provider" error from surfacing after an edit.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate();
+  });
+}
+
+/**
  * Resolves the content one public site renders.
  *
  * The shipped `defaultContent` is the floor: a school that has filled in

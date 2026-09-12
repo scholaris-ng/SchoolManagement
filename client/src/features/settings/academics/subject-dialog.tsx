@@ -1,4 +1,4 @@
-import { WEEKDAYS } from '@/lib/weekdays';
+// import { WEEKDAYS } from '@/lib/weekdays';
 import type { SchoolLevel } from '@/types/academics';
 import type { TimetablePeriod, Weekday } from '@/types/curriculum';
 import { useState } from 'react';
