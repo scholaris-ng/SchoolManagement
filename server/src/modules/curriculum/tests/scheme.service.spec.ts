@@ -3,10 +3,13 @@ import { SchemeRepository } from '../repositories/scheme.repository';
 import { AcademicScopeService } from '../../academics/services/academicScope.service';
 import { CurriculumRepository } from '../repositories/curriculum.repository';
 import { TermRepository } from '../../academics/repositories/term.repository';
+import { AuditService } from '../../audit/services/audit.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import type { RequestContext } from '../../../shared/types/context';
 import type { TermDTO } from '../../academics/dto/academics.dto';
 import type { CurriculumTopicDTO } from '../dto/curriculum.dto';
-import type { LessonNoteDTO } from '../dto/scheme.dto';
+import type { LessonNoteDTO, SchemeOfWorkDTO } from '../dto/scheme.dto';
 
 describe('allocateWeeks', () => {
   it('gives every topic what it asked for when the term has room', () => {
@@ -128,6 +131,117 @@ describe('SchemeService.updateLessonNote status rules', () => {
     await expect(
       SchemeService.Instance.updateLessonNote(context({}), 'note-1', { content: 'x' }, 0),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('SchemeService.updateScheme notifications', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const scheme = (over: Partial<SchemeOfWorkDTO> = {}): SchemeOfWorkDTO =>
+    ({
+      id: 'scheme-1',
+      schoolId: 'school-1',
+      subjectId: 'subject-1',
+      subjectName: 'Mathematics',
+      classId: 'class-1',
+      className: 'JSS 1',
+      termId: 'term-1',
+      termName: 'First Term',
+      sessionName: '2026/2027',
+      curriculumId: 'cur-1',
+      status: 'DRAFT',
+      weeks: [],
+      createdById: 'teacher-1',
+      createdByName: 'Mr Teacher',
+      approvedByName: null,
+      approvedAt: null,
+      version: 1,
+      ...over,
+    }) as SchemeOfWorkDTO;
+
+  const context = (over: { userId?: string; permissions?: string[] } = {}) =>
+    ({
+      schoolId: 'school-1',
+      user: { id: over.userId ?? 'teacher-1', displayName: 'Mrs Bello' },
+      membership: { staffId: 'staff-1', guardianId: null, studentId: null, roles: [], customRoleNames: [] },
+      can: (permission: string) => (over.permissions ?? []).includes(permission),
+      requestId: 'req-1',
+      ipAddress: null,
+      userAgent: null,
+    }) as unknown as RequestContext;
+
+  beforeEach(() => {
+    jest.spyOn(AcademicScopeService.Instance, 'forContext').mockResolvedValue({
+      classIds: null,
+      subjectIds: null,
+      pairs: null,
+    } as never);
+    jest
+      .spyOn(AppDataSource, 'transaction')
+      .mockImplementation(((run: (manager: unknown) => unknown) => run({})) as typeof AppDataSource.transaction);
+    jest.spyOn(SchemeRepository.Instance, 'saveWeeksIfVersionMatches').mockResolvedValue(true);
+    jest.spyOn(AuditService.Instance, 'record').mockResolvedValue(undefined as never);
+  });
+
+  it('notifies school admins when a draft is submitted for approval', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findOneDTO')
+      .mockResolvedValueOnce(scheme({ status: 'DRAFT' }))
+      .mockResolvedValueOnce(scheme({ status: 'SUBMITTED' }));
+    const notifyAdmins = jest
+      .spyOn(NotificationsService.Instance, 'notifySchoolAdmins')
+      .mockResolvedValue(undefined);
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+
+    await SchemeService.Instance.updateScheme(
+      context({ userId: 'teacher-1' }),
+      'scheme-1',
+      { status: 'SUBMITTED' },
+      1,
+    );
+
+    expect(notifyAdmins).toHaveBeenCalledWith(
+      'school-1',
+      expect.objectContaining({
+        category: 'SYSTEM',
+        title: 'Scheme of work submitted for approval',
+        entityType: 'SchemeOfWork',
+        entityId: 'scheme-1',
+        exceptUserId: 'teacher-1',
+      }),
+    );
+    expect(notifyUser).not.toHaveBeenCalled();
+  });
+
+  it("notifies the scheme's author when it is approved", async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findOneDTO')
+      .mockResolvedValueOnce(scheme({ status: 'SUBMITTED', createdById: 'teacher-1' }))
+      .mockResolvedValueOnce(scheme({ status: 'APPROVED', createdById: 'teacher-1' }));
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+    const notifyAdmins = jest
+      .spyOn(NotificationsService.Instance, 'notifySchoolAdmins')
+      .mockResolvedValue(undefined);
+
+    await SchemeService.Instance.updateScheme(
+      context({ userId: 'principal-1', permissions: ['scheme.approve'] }),
+      'scheme-1',
+      { status: 'APPROVED' },
+      1,
+    );
+
+    expect(notifyUser).toHaveBeenCalledWith(
+      'school-1',
+      'teacher-1',
+      expect.objectContaining({
+        category: 'SYSTEM',
+        title: 'Scheme of work approved',
+        severity: 'SUCCESS',
+        entityType: 'SchemeOfWork',
+        entityId: 'scheme-1',
+      }),
+    );
+    expect(notifyAdmins).not.toHaveBeenCalled();
   });
 });
 

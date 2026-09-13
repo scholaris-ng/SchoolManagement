@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderPage, authStub } from '@/test/harness';
 import { ApiError } from '@/lib/api-error';
@@ -195,6 +195,10 @@ describe('TimetablePage', () => {
     fireEvent.dragOver(targetCell, { dataTransfer });
     fireEvent.drop(targetCell, { dataTransfer });
 
+    // Wait for the cell's "saving" spinner to clear, so the move's whole
+    // async lifecycle (including the state update after it settles) finishes
+    // inside this test rather than leaking into the next one.
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(saveMutate).toHaveBeenCalledWith({
       entryId: 'tte_1',
       classId: 'cls_1',
@@ -221,6 +225,7 @@ describe('TimetablePage', () => {
     fireEvent.dragOver(targetCell, { dataTransfer });
     fireEvent.drop(targetCell, { dataTransfer });
 
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(saveMutate).toHaveBeenCalledWith({
       entryId: 'tte_1',
       classId: 'cls_1',
@@ -251,7 +256,7 @@ describe('TimetablePage', () => {
     fireEvent.dragOver(targetCell, { dataTransfer });
     fireEvent.drop(targetCell, { dataTransfer });
 
-    await vi.waitFor(() => expect(saveMutate).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(toast.error).toHaveBeenCalledWith(
       'That move would clash',
       expect.objectContaining({ description: expect.stringContaining('already teaches') }),
@@ -304,6 +309,7 @@ describe('TimetablePage', () => {
     fireEvent.dragOver(trash, { dataTransfer });
     fireEvent.drop(trash, { dataTransfer });
 
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(deleteMutate).toHaveBeenCalledWith('tte_1');
     expect(saveMutate).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: 'Edit lesson' })).not.toBeInTheDocument();
@@ -323,7 +329,7 @@ describe('TimetablePage', () => {
 
     fireEvent.change(screen.getByLabelText('Class'), { target: { value: 'cls_1' } });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const lastCall = useCurrentTimetable.mock.calls.at(-1)?.[0];
       expect(lastCall).toMatchObject({ classId: 'cls_1', teacherId: undefined });
     });
@@ -335,7 +341,7 @@ describe('TimetablePage', () => {
 
     fireEvent.change(screen.getByLabelText('Teacher'), { target: { value: 'stf_2' } });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const lastCall = useCurrentTimetable.mock.calls.at(-1)?.[0];
       expect(lastCall).toMatchObject({ teacherId: 'stf_2', classId: undefined });
     });
@@ -346,12 +352,12 @@ describe('TimetablePage', () => {
     await screen.findByRole('button', { name: /Mathematics/ });
 
     fireEvent.change(screen.getByLabelText('Class'), { target: { value: 'cls_1' } });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(useCurrentTimetable.mock.calls.at(-1)?.[0]).toMatchObject({ classId: 'cls_1' });
     });
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'sub_2' } });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(useCurrentTimetable.mock.calls.at(-1)?.[0]).toMatchObject({
         classId: 'cls_1',
         subjectId: 'sub_2',
@@ -380,6 +386,88 @@ describe('TimetablePage', () => {
 
     await user.click(confirmButton);
     expect(clearMutate).toHaveBeenCalled();
+  });
+
+  /**
+   * A period can hold lessons for more than one class at once (research
+   * feature 25 allows it, and the server's clash rules only look at the
+   * class/teacher/room actually being placed). The grid must offer a way to
+   * add a second lesson to a period that already has one, not just to empty
+   * cells.
+   */
+  it('offers an add button on a period that already holds a lesson, to place a second class into it', async () => {
+    const user = userEvent.setup();
+    renderPage(<TimetablePage />);
+    await screen.findByRole('button', { name: /Mathematics/ });
+
+    // Monday/Period 2 already has JSS 1 Silver's English lesson.
+    const addButton = screen.getByRole('button', { name: 'Add a lesson on Monday in Period 2' });
+    await user.click(addButton);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Add a lesson' })).toBeInTheDocument();
+
+    // The existing lesson in that period is untouched by opening the dialog
+    // (Radix marks the rest of the page aria-hidden while the dialog is open,
+    // so `hidden: true` is needed to still find it by role).
+    expect(
+      screen.getByRole('button', { name: /English Language/, hidden: true }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Copying a lesson keeps it on a clipboard until the user pastes it
+   * somewhere else (or cancels) — useful for a subject that repeats across
+   * the week without re-filling the dialog each time.
+   */
+  it('copies a lesson and pastes it into another period without opening the dialog', async () => {
+    const user = userEvent.setup();
+    renderPage(<TimetablePage />);
+
+    const lesson = await screen.findByRole('button', { name: /Mathematics/ });
+    const copyButton = within(lesson.parentElement as HTMLElement).getByRole('button', {
+      name: 'Copy this lesson to paste elsewhere',
+    });
+    await user.click(copyButton);
+
+    expect(await screen.findByText('Copied: Mathematics · JSS 1 Gold')).toBeInTheDocument();
+
+    const pasteButton = screen.getByRole('button', {
+      name: 'Paste the copied lesson into Tuesday Period 1',
+    });
+    await user.click(pasteButton);
+
+    expect(saveMutate).toHaveBeenCalledWith({
+      classId: 'cls_1',
+      subjectId: 'sub_1',
+      teacherId: 'stf_1',
+      roomId: null,
+      periodId: 'per_1',
+      day: 'TUESDAY',
+    });
+    // No dialog should have opened for a paste.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The clipboard stays active so the same lesson can be pasted again.
+    expect(screen.getByText('Copied: Mathematics · JSS 1 Gold')).toBeInTheDocument();
+  });
+
+  it('clears the clipboard when copying is cancelled', async () => {
+    const user = userEvent.setup();
+    renderPage(<TimetablePage />);
+
+    const lesson = await screen.findByRole('button', { name: /Mathematics/ });
+    const copyButton = within(lesson.parentElement as HTMLElement).getByRole('button', {
+      name: 'Copy this lesson to paste elsewhere',
+    });
+    await user.click(copyButton);
+    await screen.findByText('Copied: Mathematics · JSS 1 Gold');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Copied: Mathematics · JSS 1 Gold')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add a lesson on Tuesday in Period 1' }),
+    ).toBeInTheDocument();
   });
 
   it('has nothing to clear when the timetable is already empty', async () => {

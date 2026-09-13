@@ -1,6 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlarmClock, CalendarRange, Plus, Printer, Trash2 } from 'lucide-react';
+import {
+  AlarmClock,
+  CalendarRange,
+  ClipboardPaste,
+  Copy,
+  Loader2,
+  Plus,
+  Printer,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
@@ -23,7 +33,7 @@ import { NativeSelect } from '@/components/ui/input';
 import {
   ConfirmDialog,
 } from '@/components/ui/dialog';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Alert, EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { EntryDialog } from './timetable-page-parts';
 
 export interface SlotTarget {
@@ -67,6 +77,29 @@ export function TimetablePage() {
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [dragOverTrash, setDragOverTrash] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  // A copied lesson, kept until the user pastes it elsewhere or cancels — not
+  // cleared after one paste, so the same lesson can be dropped into several
+  // periods (e.g. three times a week) without re-copying each time.
+  const [clipboard, setClipboard] = useState<TimetableEntry | null>(null);
+  // Which cell a drag-move or paste is currently being saved into — a
+  // dragged drop or a paste click has no dialog of its own to carry a
+  // "Saving…" state, so the cell itself shows a spinner until the request
+  // resolves (success or a clash toast) instead of appearing to do nothing.
+  const [pendingSlotKey, setPendingSlotKey] = useState<string | null>(null);
+  // The lesson currently being deleted by a drag onto the trash zone — that
+  // zone vanishes the instant the drop event fires (the browser fires
+  // dragend right away), well before the request resolves, so the card
+  // itself carries the "removing" state instead.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clipboard) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setClipboard(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clipboard]);
 
   /**
    * Updates one or more filters in a single history entry.
@@ -110,6 +143,8 @@ export function TimetablePage() {
    */
   const moveEntry = async (entry: TimetableEntry, day: Weekday, periodId: string) => {
     if (entry.day === day && entry.periodId === periodId) return;
+    const slotKey = `${day}:${periodId}`;
+    setPendingSlotKey(slotKey);
     try {
       await saveEntry.mutateAsync({
         entryId: entry.id,
@@ -124,17 +159,50 @@ export function TimetablePage() {
       toast.error('That move would clash', {
         description: isApiError(error) ? error.message : 'That lesson could not be moved.',
       });
+    } finally {
+      setPendingSlotKey((current) => (current === slotKey ? null : current));
+    }
+  };
+
+  /**
+   * Places a copy of the clipboard lesson into a slot — same class, subject,
+   * teacher and room, new day/period. Clash detection runs exactly as it
+   * would for a fresh placement, so a target that would double-book someone
+   * is refused with the usual message rather than silently duplicated.
+   */
+  const pasteEntry = async (day: Weekday, periodId: string) => {
+    if (!clipboard) return;
+    const slotKey = `${day}:${periodId}`;
+    setPendingSlotKey(slotKey);
+    try {
+      await saveEntry.mutateAsync({
+        classId: clipboard.classId,
+        subjectId: clipboard.subjectId,
+        teacherId: clipboard.teacherId,
+        roomId: clipboard.roomId ?? null,
+        periodId,
+        day,
+      });
+    } catch (error) {
+      toast.error('That placement would clash', {
+        description: isApiError(error) ? error.message : 'That lesson could not be placed there.',
+      });
+    } finally {
+      setPendingSlotKey((current) => (current === slotKey ? null : current));
     }
   };
 
   /** Dragging a lesson onto the trash zone deletes it, same as the dialog's Remove button. */
   const removeEntry = async (entry: TimetableEntry) => {
+    setPendingDeleteId(entry.id);
     try {
       await deleteEntry.mutateAsync(entry.id);
     } catch (error) {
       toast.error('Could not remove that lesson', {
         description: isApiError(error) ? error.message : 'Try again in a moment.',
       });
+    } finally {
+      setPendingDeleteId((current) => (current === entry.id ? null : current));
     }
   };
 
@@ -279,6 +347,29 @@ export function TimetablePage() {
         </CardContent>
       </Card>
 
+      {clipboard && (
+        <Alert
+          tone="info"
+          className="no-print"
+          icon={<ClipboardPaste />}
+          title={`Copied: ${clipboard.subjectName} · ${clipboard.className}`}
+          action={
+            <Button
+              data-cy="timetable-cancel-paste"
+              variant="outline"
+              size="sm"
+              onClick={() => setClipboard(null)}
+            >
+              <X />
+              Cancel
+            </Button>
+          }
+        >
+          Click the paste icon on any period to place it there — it stays copied until you cancel
+          or press Esc.
+        </Alert>
+      )}
+
       {periods.length === 0 ? (
         <Card>
           <EmptyState
@@ -350,12 +441,13 @@ export function TimetablePage() {
                       // real gate: it rejects a move only if the target slot
                       // already has this same class, teacher, or room.
                       const isDropTarget = canManage && draggingEntryId !== null;
+                      const isPending = pendingSlotKey === slotKey;
 
                       return (
                         <td
                           key={day.value}
                           className={cn(
-                            'p-1 align-top transition-colors',
+                            'relative p-1 align-top transition-colors',
                             isDropTarget && dragOverKey === slotKey && 'bg-primary-subtle',
                           )}
                           onDragOver={
@@ -386,29 +478,21 @@ export function TimetablePage() {
                               : undefined
                           }
                         >
-                          {cellEntries.length === 0 ? (
-                            canManage ? (
-                              <button
-                                type="button"
-                                data-cy={`timetable-add-${day.value}-${period.id}`}
-                                onClick={() => {
-                                  setConflict(null);
-                                  setSlot({ day: day.value, periodId: period.id });
-                                }}
-                                className="grid h-16 w-full place-items-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 no-print"
-                                aria-label={`Add a lesson on ${day.label} in ${period.name}`}
-                              >
-                                <Plus className="size-4" aria-hidden="true" />
-                              </button>
-                            ) : (
-                              <div className="h-16" />
-                            )
-                          ) : (
-                            <div className="space-y-1">
-                              {cellEntries.map((entry) => (
+                          {isPending && (
+                            <div
+                              data-cy="timetable-slot-saving"
+                              role="status"
+                              aria-label="Saving…"
+                              className="absolute inset-0 z-10 grid place-items-center rounded-md bg-card/70 no-print"
+                            >
+                              <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                            </div>
+                          )}
+                          <div className="space-y-1">
+                            {cellEntries.map((entry) => (
+                              <div key={entry.id} className="group/entry relative">
                                 <button
                                   data-cy="timetable-entry-roomname"
-                                  key={entry.id}
                                   type="button"
                                   disabled={!canManage}
                                   draggable={canManage}
@@ -427,9 +511,10 @@ export function TimetablePage() {
                                     setSlot({ day: day.value, periodId: period.id, entry });
                                   }}
                                   className={cn(
-                                    'w-full rounded-md border border-primary/30 bg-primary-subtle p-2 text-left transition-colors hover:border-primary disabled:cursor-default',
+                                    'w-full rounded-md border border-primary/30 bg-primary-subtle p-2 pr-6 text-left transition-colors hover:border-primary disabled:cursor-default',
                                     canManage && 'cursor-grab active:cursor-grabbing',
-                                    draggingEntryId === entry.id && 'opacity-40',
+                                    (draggingEntryId === entry.id || pendingDeleteId === entry.id) &&
+                                      'opacity-40',
                                   )}
                                 >
                                   <p className="truncate text-xs font-semibold text-primary">
@@ -444,9 +529,81 @@ export function TimetablePage() {
                                     </p>
                                   )}
                                 </button>
-                              ))}
-                            </div>
-                          )}
+                                {canManage && (
+                                  <button
+                                    type="button"
+                                    data-cy="timetable-copy-entry"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setClipboard(entry);
+                                    }}
+                                    title={`Copy ${entry.subjectName} · ${entry.className}`}
+                                    aria-label="Copy this lesson to paste elsewhere"
+                                    className="absolute right-1 top-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-card hover:text-foreground focus-visible:opacity-100 group-hover/entry:opacity-100 no-print"
+                                  >
+                                    <Copy className="size-3.5" aria-hidden="true" />
+                                  </button>
+                                )}
+                                {pendingDeleteId === entry.id && (
+                                  <div
+                                    role="status"
+                                    aria-label="Removing…"
+                                    className="absolute inset-0 grid place-items-center no-print"
+                                  >
+                                    <Loader2
+                                      className="size-4 animate-spin text-muted-foreground"
+                                      aria-hidden="true"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+
+                            {canManage ? (
+                              <button
+                                type="button"
+                                data-cy={
+                                  clipboard
+                                    ? `timetable-paste-${day.value}-${period.id}`
+                                    : `timetable-add-${day.value}-${period.id}`
+                                }
+                                disabled={clipboard ? saveEntry.isPending : false}
+                                onClick={() => {
+                                  if (clipboard) {
+                                    void pasteEntry(day.value, period.id);
+                                  } else {
+                                    setConflict(null);
+                                    setSlot({ day: day.value, periodId: period.id });
+                                  }
+                                }}
+                                className={cn(
+                                  'grid w-full place-items-center rounded-md border border-dashed text-muted-foreground transition-colors no-print',
+                                  cellEntries.length === 0 ? 'h-16' : 'h-7',
+                                  clipboard
+                                    ? 'border-primary/60 text-primary hover:border-primary hover:bg-primary-subtle'
+                                    : 'border-border hover:border-primary/50 hover:bg-accent/40',
+                                )}
+                                title={
+                                  clipboard
+                                    ? `Paste ${clipboard.subjectName} · ${clipboard.className}`
+                                    : undefined
+                                }
+                                aria-label={
+                                  clipboard
+                                    ? `Paste the copied lesson into ${day.label} ${period.name}`
+                                    : `Add a lesson on ${day.label} in ${period.name}`
+                                }
+                              >
+                                {clipboard ? (
+                                  <ClipboardPaste className="size-4" aria-hidden="true" />
+                                ) : (
+                                  <Plus className="size-4" aria-hidden="true" />
+                                )}
+                              </button>
+                            ) : (
+                              cellEntries.length === 0 && <div className="h-16" />
+                            )}
+                          </div>
                         </td>
                       );
                     })}

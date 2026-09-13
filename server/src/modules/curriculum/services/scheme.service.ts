@@ -3,6 +3,7 @@ import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { AcademicScopeService, scopeAllows } from '../../academics/services/academicScope.service';
 import { CurriculumRepository } from '../repositories/curriculum.repository';
@@ -44,6 +45,7 @@ export class SchemeService {
     private readonly terms = TermRepository.Instance,
     private readonly scope = AcademicScopeService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly notifications = NotificationsService.Instance,
   ) {}
 
   /* -- Schemes --------------------------------------------------------------- */
@@ -181,6 +183,31 @@ export class SchemeService {
         before: { status: existing.status },
         after: { status: input.status },
       });
+
+      const label = `${existing.subjectName} · ${existing.className} · ${existing.termName}`;
+      if (input.status === 'SUBMITTED') {
+        void this.notifications.notifySchoolAdmins(schoolId, {
+          category: 'SYSTEM',
+          title: 'Scheme of work submitted for approval',
+          body: `${context.user.displayName} submitted the ${label} scheme of work for approval.`,
+          actionUrl: `/teaching/schemes/${id}`,
+          severity: 'INFO',
+          entityType: 'SchemeOfWork',
+          entityId: id,
+          exceptUserId: context.user.id,
+        });
+      } else if (input.status === 'APPROVED' && existing.createdById) {
+        void this.notifications.notifyUser(schoolId, existing.createdById, {
+          category: 'SYSTEM',
+          title: 'Scheme of work approved',
+          body: `Your ${label} scheme of work has been approved.`,
+          actionUrl: `/teaching/schemes/${id}`,
+          severity: 'SUCCESS',
+          entityType: 'SchemeOfWork',
+          entityId: id,
+          exceptUserId: context.user.id,
+        });
+      }
     }
 
     const dto = await this.schemes.findOneDTO(schoolId, id);
