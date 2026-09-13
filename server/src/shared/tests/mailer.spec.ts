@@ -2,6 +2,7 @@ import {
   escapeHtml,
   sendApplicationReceivedEmail,
   sendApplicationStatusEmail,
+  sendNotificationEmail,
   sendPasswordResetEmail,
   sendSchoolReadyEmail,
   sendStaffAccountEmail,
@@ -269,6 +270,63 @@ describe('sendApplicationStatusEmail', () => {
     const { html } = lastSend();
     expect(html).toContain('Please contact the school office to confirm this place.');
     expect(html).not.toContain('href="https://');
+  });
+});
+
+describe('sendNotificationEmail', () => {
+  it('carries the notification’s own title and body, subject matching the title', async () => {
+    await sendNotificationEmail({
+      to: 'teacher@brightfield.edu.ng',
+      firstName: 'Ada',
+      title: 'Scheme of work approved',
+      body: 'Your Mathematics · JSS 1 scheme of work has been approved.',
+      actionUrl: '/schemes/scheme-1',
+    });
+
+    const { html, subject, text } = lastSend();
+    expect(subject).toBe('Scheme of work approved — Scholaris');
+    expect(html).toContain('Your Mathematics · JSS 1 scheme of work has been approved.');
+    expect(text).toContain('Your Mathematics · JSS 1 scheme of work has been approved.');
+  });
+
+  it('turns a relative action URL into a link against the app, as a button and as text', async () => {
+    await sendNotificationEmail({
+      to: 'teacher@brightfield.edu.ng',
+      firstName: 'Ada',
+      title: 'Scheme of work approved',
+      body: 'Approved.',
+      actionUrl: '/schemes/scheme-1',
+    });
+
+    const { html, text } = lastSend();
+    expect(html).toContain('href="https://app.test/schemes/scheme-1"');
+    expect(html).toContain('Or paste this into your browser: https://app.test/schemes/scheme-1');
+    expect(text).toContain('https://app.test/schemes/scheme-1');
+  });
+
+  it('offers no link at all when the notification carries none', async () => {
+    await sendNotificationEmail({
+      to: 'teacher@brightfield.edu.ng',
+      firstName: 'Ada',
+      title: 'Scheme of work submitted for approval',
+      body: 'A teacher submitted a scheme.',
+    });
+
+    const { html } = lastSend();
+    expect(html).not.toContain('href="https://');
+  });
+
+  it('escapes a title or body carrying markup rather than letting it break the layout', async () => {
+    await sendNotificationEmail({
+      to: 'teacher@brightfield.edu.ng',
+      firstName: 'Ada',
+      title: 'Kings & Queens update',
+      body: '<b>bold</b> claim',
+    });
+
+    const { html } = lastSend();
+    expect(html).toContain('Kings &amp; Queens update');
+    expect(html).toContain('&lt;b&gt;bold&lt;/b&gt; claim');
   });
 });
 

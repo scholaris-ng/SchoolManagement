@@ -633,6 +633,56 @@ function offerAction(offerExpiresOn: string | null | undefined, hasLink: boolean
 }
 
 /**
+ * Recipient: anyone who has turned Email on for a notification category, from
+ * Notification settings in their profile. Trigger: `NotificationsService`
+ * fans this out alongside the in-app row it already wrote, for whichever
+ * category the event belongs to. Tone: matches whatever the notification
+ * itself said.
+ *
+ * One template for every category rather than one per category — a fee
+ * reminder, an attendance alert and a scheme-of-work approval all reach this
+ * function the same way, carrying only a title and a body. That keeps a new
+ * notification category from also needing a new email template; it costs
+ * this template not being able to say anything category-specific.
+ */
+export async function sendNotificationEmail(params: {
+  to: string;
+  firstName: string;
+  title: string;
+  body: string;
+  actionUrl?: string | null;
+}): Promise<void> {
+  const { to, firstName, title, body: message, actionUrl } = params;
+  const name = escapeHtml(firstName);
+  const url = actionUrl ? `${env.appUrl}${actionUrl}` : null;
+
+  const body = [
+    heading(escapeHtml(title)),
+    paragraph(`Hello ${name},`),
+    paragraph(escapeHtml(message)),
+    url ? button('Open in Scholaris', url) : '',
+    url ? buttonFallback(url) : '',
+    footnote(
+      `You are receiving this by email because that is turned on for this notification category. Change that any time from Notification settings in your profile.`,
+    ),
+  ].join('');
+
+  await send({
+    to,
+    subject: `${title} — Scholaris`,
+    html: emailLayout(body, title),
+    text: [
+      `Hello ${firstName},`,
+      '',
+      message,
+      ...(url ? ['', `Open: ${url}`] : []),
+      '',
+      'You are receiving this by email because that is turned on for this notification category.',
+    ].join('\n'),
+  });
+}
+
+/**
  * Recipient: a newly hired member of staff. Trigger: `POST /staff`, once the
  * account behind their new record exists. Tone: transactional — no emoji.
  *

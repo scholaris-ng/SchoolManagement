@@ -12,7 +12,8 @@ import {
   CardTitle,
 } from '@/components/ui/primitives';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
-import { PreferenceRow, PushCard } from './notification-settings-page-parts';
+// PushCard is commented out below along with it — push sending is off for now.
+import { PreferenceRow /* , PushCard */ } from './notification-settings-page-parts';
 import type { NotificationCategory, NotificationChannel } from '@/types/engagement';
 
 
@@ -46,7 +47,12 @@ export function NotificationSettingsPage() {
         breadcrumbs={[{ label: 'My profile', to: '/profile' }, { label: 'Notifications' }]}
       />
 
-      <PushCard />
+      {/*
+        Push is commented out across the app for now (see
+        notifications.service.ts) — enabling it on a device would promise a
+        notification the server never sends. Restore alongside the server change.
+      */}
+      {/* <PushCard /> */}
 
       {preferences.isPending ? (
         <LoadingState label="Loading your preferences…" />

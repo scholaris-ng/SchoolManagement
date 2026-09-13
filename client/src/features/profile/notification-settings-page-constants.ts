@@ -6,9 +6,9 @@ import {
   CreditCard,
   Gavel,
   Mail,
-  Megaphone,
-  MessageSquare,
-  Smartphone,
+  // Megaphone, // ANNOUNCEMENT below is commented out — no backend exists yet.
+  // MessageSquare, // MESSAGE below is commented out, and so is the SMS channel.
+  // Smartphone, // PUSH channel below is commented out — push sending is off for now.
   Sparkles,
   UserPlus,
 } from 'lucide-react';
@@ -17,14 +17,24 @@ import type { NotificationCategory, NotificationChannel } from '@/types/engageme
 
 export const CHANNELS: { key: NotificationChannel; label: string; hint: string; icon: typeof Bell }[] = [
   { key: 'IN_APP', label: 'In app', hint: 'The bell in the top bar', icon: Bell },
-  { key: 'PUSH', label: 'Push', hint: 'On this device, even when closed', icon: Smartphone },
+  // Push is commented out across the app for now (see notifications.service.ts) —
+  // toggling it here would promise a device notification the server won't send.
+  // { key: 'PUSH', label: 'Push', hint: 'On this device, even when closed', icon: Smartphone },
   { key: 'EMAIL', label: 'Email', hint: 'To your registered address', icon: Mail },
-  { key: 'SMS', label: 'SMS', hint: 'Where your school sends them', icon: MessageSquare },
+  // SMS has no delivery adapter anywhere in the server (it's a future item in
+  // ARCHITECTURE.md's adapter roadmap) — toggling it today would silently do
+  // nothing, so it's hidden until one ships.
+  // { key: 'SMS', label: 'SMS', hint: 'Where your school sends them', icon: MessageSquare },
 ];
 
-export const CATEGORY_META: Record<
-  NotificationCategory,
-  { label: string; description: string; icon: typeof Bell }
+/**
+ * Partial, not a full `Record`: ANNOUNCEMENT and MESSAGE are commented out
+ * below because their backend (`engagement.routes.ts`) is an intentional
+ * placeholder with no write routes — nothing can ever produce one of these
+ * notifications yet. `PreferenceRow` skips any category missing here.
+ */
+export const CATEGORY_META: Partial<
+  Record<NotificationCategory, { label: string; description: string; icon: typeof Bell }>
 > = {
   ATTENDANCE: {
     label: 'Attendance',
@@ -51,11 +61,11 @@ export const CATEGORY_META: Record<
     description: 'Upcoming events, meetings and deadlines.',
     icon: CalendarDays,
   },
-  MESSAGE: {
-    label: 'Messages',
-    description: 'Replies in your conversations with the school.',
-    icon: MessageSquare,
-  },
+  // MESSAGE: {
+  //   label: 'Messages',
+  //   description: 'Replies in your conversations with the school.',
+  //   icon: MessageSquare,
+  // },
   BEHAVIOUR: {
     label: 'Behaviour',
     description: 'Commendations, house points and concerns.',
@@ -66,11 +76,11 @@ export const CATEGORY_META: Record<
     description: 'When a child is released to an authorised adult.',
     icon: Gavel,
   },
-  ANNOUNCEMENT: {
-    label: 'Announcements',
-    description: 'Notices from the school office.',
-    icon: Megaphone,
-  },
+  // ANNOUNCEMENT: {
+  //   label: 'Announcements',
+  //   description: 'Notices from the school office.',
+  //   icon: Megaphone,
+  // },
   SYSTEM: {
     label: 'System',
     description: 'Account and security notices.',

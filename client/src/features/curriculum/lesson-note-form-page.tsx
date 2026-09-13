@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, Label } from '@/components/ui
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { StatusBadge } from '@/components/data/status-badge';
-import { Alert, LoadingState } from '@/components/ui/feedback';
+import { Alert, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { RichTextEditor } from '@/components/forms/rich-text-editor';
@@ -112,25 +112,48 @@ export function LessonNoteFormPage() {
 
   const valid = Boolean(draft.schemeId && draft.schemeWeekId && draft.content.trim());
 
+  // Save draft, Submit, Return and Approve all share one mutation, so
+  // `save.isPending` alone can't tell them apart — every button would show
+  // a spinner the moment any one of them was clicked. 'DRAFT' stands in for
+  // "Save draft", the one action with no status of its own.
+  const [pendingAction, setPendingAction] = useState<
+    'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'RETURNED' | null
+  >(null);
+
   const submit = async (status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'RETURNED') => {
-    const note = await save.mutateAsync({
-      values: {
-        schemeId: draft.schemeId,
-        schemeWeekId: draft.schemeWeekId,
-        date: draft.date,
-        content: draft.content.trim(),
-        assignment: draft.assignment.trim() || null,
-        challenges: draft.challenges.trim() || null,
-        studentDifficulties: draft.studentDifficulties.trim() || null,
-        ...(status ? { status } : {}),
-        ...(status === 'APPROVED' || status === 'RETURNED'
-          ? { reviewComment: reviewComment.trim() || null }
-          : {}),
-      },
-      version: existing.data?.version,
-    });
-    setDirty(false);
-    if (!isEdit) navigate(`/lesson-notes/${note.id}`);
+    setPendingAction(status ?? 'DRAFT');
+    try {
+      const isReview = status === 'APPROVED' || status === 'RETURNED';
+      const note = await save.mutateAsync({
+        values: {
+          // A reviewer's content fields are read-only on screen (`editable` is
+          // false once a note is SUBMITTED) and must stay that way on the
+          // wire too: sending them back unchanged still reads as "editing" to
+          // the server, which refuses to touch a submitted note's content
+          // until it is returned — a 409 even for a reviewer who otherwise has
+          // edit rights, because that check has no way to know nothing here
+          // actually changed. Approve/Return send only the status and comment.
+          ...(isReview
+            ? {}
+            : {
+                schemeId: draft.schemeId,
+                schemeWeekId: draft.schemeWeekId,
+                date: draft.date,
+                content: draft.content.trim(),
+                assignment: draft.assignment.trim() || null,
+                challenges: draft.challenges.trim() || null,
+                studentDifficulties: draft.studentDifficulties.trim() || null,
+              }),
+          ...(status ? { status } : {}),
+          ...(isReview ? { reviewComment: reviewComment.trim() || null } : {}),
+        },
+        version: existing.data?.version,
+      });
+      setDirty(false);
+      if (!isEdit) navigate(`/lesson-notes/${note.id}`);
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   if (isEdit && existing.isPending) {
@@ -143,8 +166,24 @@ export function LessonNoteFormPage() {
   }
 
   const note = existing.data;
-  const editable = !note || note.status === 'DRAFT' || note.status === 'RETURNED';
+  // Author-only, matching updateLessonNote on the server: a reviewer who
+  // also holds academics.manage must not see the fields they just returned
+  // turn writable for *them* — editing goes back to whoever wrote the note.
+  const editable = !note
+    ? true
+    : note.teacherId === membership?.staffId && (note.status === 'DRAFT' || note.status === 'RETURNED');
   const canReview = Boolean(note && note.status === 'SUBMITTED' && can('lessonnote.approve'));
+  // Approving needs no explanation, but sending a note back without saying why
+  // leaves the teacher with nothing to act on — see the "was returned for
+  // changes" fallback in notifications.service.ts's notifyLessonNoteStatusChange.
+  const canReturn = reviewComment.trim().length > 0;
+  // Always a non-empty string, never undefined: `Tooltip` renders a different
+  // element (a bare fragment instead of the Radix trigger it normally wraps
+  // the button in) once `content` is falsy, which would remount the button
+  // — and its focus — on the very keystroke that makes the comment non-empty.
+  const returnHint = canReturn
+    ? 'Sends this note back to the teacher with your comment.'
+    : 'Add a comment for the teacher before returning this note.';
   // Stricter than editing: the author, or a coordinator — the same line
   // curricula draw between "may change it" and "may remove it outright".
   const canDelete = Boolean(
@@ -198,8 +237,8 @@ export function LessonNoteFormPage() {
                   data-cy="curriculum-lesson-note-form-save-draft"
                   variant="outline"
                   onClick={() => void submit()}
-                  loading={save.isPending}
-                  disabled={!valid}
+                  loading={pendingAction === 'DRAFT'}
+                  disabled={!valid || (pendingAction !== null && pendingAction !== 'DRAFT')}
                 >
                   <Save />
                   Save draft
@@ -207,8 +246,8 @@ export function LessonNoteFormPage() {
                 <Button
                   data-cy="curriculum-lesson-note-form-submit"
                   onClick={() => void submit('SUBMITTED')}
-                  loading={save.isPending}
-                  disabled={!valid}
+                  loading={pendingAction === 'SUBMITTED'}
+                  disabled={!valid || (pendingAction !== null && pendingAction !== 'SUBMITTED')}
                 >
                   <Send />
                   Submit
@@ -217,16 +256,39 @@ export function LessonNoteFormPage() {
             )}
             {canReview && (
               <>
+                <Tooltip content={returnHint}>
+                  {/*
+                    Tooltip's Trigger attaches its hover/focus listeners to
+                    this one child via asChild — normally the Button itself,
+                    but a disabled Button carries `disabled:pointer-events-none`
+                    (button.tsx), which stops it from ever receiving hover at
+                    all. Wrapping it in a span gives the trigger something
+                    that stays hoverable and focusable (`tabIndex`) even
+                    while the button inside is disabled, so the reason still
+                    shows up.
+                  */}
+                  <span
+                    className="inline-flex"
+                    tabIndex={canReturn ? -1 : 0}
+                  >
+                    <Button
+                      data-cy="curriculum-lesson-note-form-return"
+                      variant="outline"
+                      onClick={() => void submit('RETURNED')}
+                      loading={pendingAction === 'RETURNED'}
+                      disabled={!canReturn || (pendingAction !== null && pendingAction !== 'RETURNED')}
+                    >
+                      <Undo2 />
+                      Return
+                    </Button>
+                  </span>
+                </Tooltip>
                 <Button
-                  data-cy="curriculum-lesson-note-form-return"
-                  variant="outline"
-                  onClick={() => void submit('RETURNED')}
-                  loading={save.isPending}
+                  data-cy="curriculum-lesson-note-form-approve"
+                  onClick={() => void submit('APPROVED')}
+                  loading={pendingAction === 'APPROVED'}
+                  disabled={pendingAction !== null && pendingAction !== 'APPROVED'}
                 >
-                  <Undo2 />
-                  Return
-                </Button>
-                <Button data-cy="curriculum-lesson-note-form-approve" onClick={() => void submit('APPROVED')} loading={save.isPending}>
                   <ShieldCheck />
                   Approve
                 </Button>
@@ -257,7 +319,8 @@ export function LessonNoteFormPage() {
               <SummaryField label="Week" value={note ? `Week ${note.weekNumber}` : undefined} />
               {note?.resources && (
                 <div className="sm:col-span-2">
-                  <SummaryField label="Teaching resources" value={note.resources} />
+                  <p className="text-xs font-medium text-muted-foreground">Teaching resources</p>
+                  <RichTextEditor defaultValue={note.resources} onChange={() => {}} readOnly />
                 </div>
               )}
             </div>
@@ -325,7 +388,8 @@ export function LessonNoteFormPage() {
                   <SummaryField label="Topic" value={selectedWeek.topicTitle} />
                   {selectedWeek.resources && (
                     <div className="sm:col-span-2">
-                      <SummaryField label="Teaching resources" value={selectedWeek.resources} />
+                      <p className="text-xs font-medium text-muted-foreground">Teaching resources</p>
+                      <RichTextEditor defaultValue={selectedWeek.resources} onChange={() => {}} readOnly />
                     </div>
                   )}
                 </div>

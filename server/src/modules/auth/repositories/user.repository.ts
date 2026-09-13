@@ -32,6 +32,20 @@ export class UserRepository extends BaseRepository<User> {
     return new Set(rows.map((row) => row.email.toLowerCase()));
   }
 
+  /**
+   * Email and first name for a batch of user ids, for fanning a notification
+   * out to email — one query rather than one lookup per recipient.
+   */
+  async findContactInfoForIds(
+    ids: string[],
+  ): Promise<{ id: string; email: string; firstName: string }[]> {
+    if (ids.length === 0) return [];
+    return this.repo.query(
+      `SELECT id, email, first_name AS "firstName" FROM users WHERE deleted_at IS NULL AND id = ANY($1::uuid[])`,
+      [ids],
+    );
+  }
+
   async create(data: DeepPartial<User>): Promise<User> {
     return this.repo.save(this.repo.create({ ...data, email: data.email?.toLowerCase() }));
   }

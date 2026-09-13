@@ -1,8 +1,11 @@
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
-import { sendPushToTokens } from '../../../infrastructure/firebase/push';
+// Push is commented out across the app for now — see pushTo() below.
+// import { sendPushToTokens } from '../../../infrastructure/firebase/push';
+import { sendNotificationEmail } from '../../../shared/utils/mailer';
 import { MembershipRepository } from '../../auth/repositories/membership.repository';
+import { UserRepository } from '../../auth/repositories/user.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
 import { NotificationPreferenceRepository } from '../repositories/notificationPreference.repository';
 import { PushTokenRepository } from '../repositories/pushToken.repository';
@@ -26,9 +29,11 @@ import type {
 /**
  * What a person gets when they have never touched the settings screen.
  *
- * In-app and push on, email and sms off — the two channels that actually
- * deliver today are the two that default to on, so nobody is promised a message
- * the server cannot send.
+ * In-app and push on; email and SMS off. Email now actually sends once someone
+ * turns it on for a category — it defaults off because turning it on for
+ * everybody the moment it started working would mean emailing people who never
+ * asked for it. SMS stays off because nothing sends it yet; flipping this to
+ * true would promise a message the server cannot deliver.
  */
 const DEFAULT_CHANNELS: Record<NotificationChannel, boolean> = {
   IN_APP: true,
@@ -66,6 +71,7 @@ export class NotificationsService {
     private readonly preferences = NotificationPreferenceRepository.Instance,
     private readonly pushTokens = PushTokenRepository.Instance,
     private readonly memberships = MembershipRepository.Instance,
+    private readonly users = UserRepository.Instance,
   ) {}
 
   // ─── The inbox ──────────────────────────────────────────────────────────────
@@ -216,10 +222,21 @@ export class NotificationsService {
         })),
       );
 
-      const wantsPush = wantsInApp.filter(
-        (userId) => preferenceOf.get(userId)?.push ?? DEFAULT_CHANNELS.PUSH,
+      // Push is commented out across the app for now — every category funnels
+      // through here, so this one block is the single place that needs it.
+      // Restore both lines together to bring push back for every category at once.
+      // const wantsPush = wantsInApp.filter(
+      //   (userId) => preferenceOf.get(userId)?.push ?? DEFAULT_CHANNELS.PUSH,
+      // );
+      // await this.pushTo(wantsPush, payload);
+
+      const wantsEmail = wantsInApp.filter(
+        (userId) => preferenceOf.get(userId)?.email ?? DEFAULT_CHANNELS.EMAIL,
       );
-      await this.pushTo(wantsPush, payload);
+      // Not awaited: an SMTP round trip per recipient must never make the
+      // business operation that triggered this wait on the inbox delivery,
+      // same as every other mail send in this codebase (`mailer.ts`).
+      void this.emailTo(wantsEmail, payload);
     } catch (error) {
       console.error(`[notifications] Failed to notify for ${payload.category}:`, error);
     }
@@ -235,24 +252,52 @@ export class NotificationsService {
     }
   }
 
-  private async pushTo(userIds: string[], payload: NotifyPayload): Promise<void> {
+  // Commented out along with its only call site, above — restore both together
+  // to bring push back.
+  // private async pushTo(userIds: string[], payload: NotifyPayload): Promise<void> {
+  //   if (userIds.length === 0) return;
+  //
+  //   const tokens = await this.pushTokens.tokensForUsers(userIds);
+  //   if (tokens.length === 0) return;
+  //
+  //   const result = await sendPushToTokens(
+  //     tokens.map((row) => row.token),
+  //     {
+  //       title: payload.title,
+  //       body: payload.body,
+  //       actionUrl: payload.actionUrl,
+  //       category: payload.category,
+  //     },
+  //   );
+  //
+  //   if (result.deadTokens.length > 0) {
+  //     await this.pushTokens.deleteTokens(result.deadTokens);
+  //   }
+  // }
+
+  /**
+   * One template, however many categories ask for it — see `mailer.ts`'s
+   * `sendNotificationEmail`. Never throws: a bounced or slow inbox must not
+   * turn the in-app notification this rides alongside into a failure too.
+   */
+  private async emailTo(userIds: string[], payload: NotifyPayload): Promise<void> {
     if (userIds.length === 0) return;
 
-    const tokens = await this.pushTokens.tokensForUsers(userIds);
-    if (tokens.length === 0) return;
-
-    const result = await sendPushToTokens(
-      tokens.map((row) => row.token),
-      {
-        title: payload.title,
-        body: payload.body,
-        actionUrl: payload.actionUrl,
-        category: payload.category,
-      },
-    );
-
-    if (result.deadTokens.length > 0) {
-      await this.pushTokens.deleteTokens(result.deadTokens);
+    try {
+      const recipients = await this.users.findContactInfoForIds(userIds);
+      await Promise.all(
+        recipients.map((recipient) =>
+          sendNotificationEmail({
+            to: recipient.email,
+            firstName: recipient.firstName,
+            title: payload.title,
+            body: payload.body,
+            actionUrl: payload.actionUrl,
+          }),
+        ),
+      );
+    } catch (error) {
+      console.error(`[notifications] Failed to email for ${payload.category}:`, error);
     }
   }
 }

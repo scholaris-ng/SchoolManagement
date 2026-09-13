@@ -5,6 +5,7 @@ import { CurriculumRepository } from '../repositories/curriculum.repository';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
+import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import type { RequestContext } from '../../../shared/types/context';
 import type { TermDTO } from '../../academics/dto/academics.dto';
@@ -106,9 +107,45 @@ describe('SchemeService.updateLessonNote status rules', () => {
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
+  it('an admin who returned the note may not edit it afterwards, even holding academics.manage', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValue(note({ teacherId: 'staff-2', status: 'RETURNED' }));
+    await expect(
+      SchemeService.Instance.updateLessonNote(
+        context({ staffId: 'staff-1', permissions: ['lessonnote.approve', 'academics.manage'] }),
+        'note-1',
+        { content: 'Rewritten by the admin.' },
+        1,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('the author may still edit their own note once it is returned to them', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValue(note({ teacherId: 'staff-1', status: 'RETURNED' }));
+    const update = jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+
+    await SchemeService.Instance.updateLessonNote(
+      context({ staffId: 'staff-1' }),
+      'note-1',
+      { content: 'Fixed per the review comment.' },
+      1,
+    );
+
+    expect(update).toHaveBeenCalledWith(
+      'school-1',
+      'note-1',
+      1,
+      expect.objectContaining({ content: 'Fixed per the review comment.' }),
+    );
+  });
+
   it('returning a submitted note stamps the reviewer and keeps the comment', async () => {
     jest.spyOn(SchemeRepository.Instance, 'findNoteDTO').mockResolvedValue(note({ teacherId: 'staff-2', status: 'SUBMITTED' }));
     const update = jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+    jest.spyOn(StaffRepository.Instance, 'findByIdScoped').mockResolvedValue(null);
 
     await SchemeService.Instance.updateLessonNote(
       context({ staffId: null, permissions: ['lessonnote.approve'] }),
@@ -131,6 +168,150 @@ describe('SchemeService.updateLessonNote status rules', () => {
     await expect(
       SchemeService.Instance.updateLessonNote(context({}), 'note-1', { content: 'x' }, 0),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('SchemeService.updateLessonNote notifications', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const context = (over: { staffId?: string | null; userId?: string; permissions?: string[] } = {}) =>
+    ({
+      schoolId: 'school-1',
+      user: { id: over.userId ?? 'user-1', displayName: 'Mrs Bello' },
+      membership: { staffId: over.staffId ?? 'staff-1', guardianId: null, studentId: null, roles: [], customRoleNames: [] },
+      can: (permission: string) => (over.permissions ?? ['lessonnote.read', 'lessonnote.manage']).includes(permission),
+      requestId: 'req-1',
+      ipAddress: null,
+      userAgent: null,
+    }) as unknown as RequestContext;
+
+  const note = (over: Partial<LessonNoteDTO> = {}): LessonNoteDTO =>
+    ({
+      id: 'note-1',
+      teacherId: 'staff-2',
+      subjectName: 'Mathematics',
+      className: 'JSS 1',
+      topic: 'Fractions',
+      status: 'DRAFT',
+      version: 1,
+      ...over,
+    }) as LessonNoteDTO;
+
+  it('notifies people who can review when a note is submitted', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValueOnce(note({ teacherId: 'staff-1', status: 'DRAFT' }))
+      .mockResolvedValueOnce(note({ teacherId: 'staff-1', status: 'SUBMITTED' }));
+    jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+    const notifyAdmins = jest
+      .spyOn(NotificationsService.Instance, 'notifySchoolAdmins')
+      .mockResolvedValue(undefined);
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+
+    await SchemeService.Instance.updateLessonNote(
+      context({ staffId: 'staff-1', userId: 'teacher-1' }),
+      'note-1',
+      { status: 'SUBMITTED' },
+      1,
+    );
+
+    expect(notifyAdmins).toHaveBeenCalledWith(
+      'school-1',
+      expect.objectContaining({
+        category: 'SYSTEM',
+        title: 'Lesson note submitted for review',
+        entityType: 'LessonNote',
+        entityId: 'note-1',
+        exceptUserId: 'teacher-1',
+      }),
+    );
+    expect(notifyUser).not.toHaveBeenCalled();
+  });
+
+  it("notifies the note's author, resolved from their staff record, when it is approved", async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValueOnce(note({ status: 'SUBMITTED' }))
+      .mockResolvedValueOnce(note({ status: 'APPROVED' }));
+    jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+    jest
+      .spyOn(StaffRepository.Instance, 'findByIdScoped')
+      .mockResolvedValue({ userId: 'teacher-user-1' } as never);
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+    const notifyAdmins = jest
+      .spyOn(NotificationsService.Instance, 'notifySchoolAdmins')
+      .mockResolvedValue(undefined);
+
+    await SchemeService.Instance.updateLessonNote(
+      context({ staffId: null, userId: 'reviewer-1', permissions: ['lessonnote.approve'] }),
+      'note-1',
+      { status: 'APPROVED' },
+      1,
+    );
+
+    expect(notifyUser).toHaveBeenCalledWith(
+      'school-1',
+      'teacher-user-1',
+      expect.objectContaining({
+        category: 'SYSTEM',
+        title: 'Lesson note approved',
+        severity: 'SUCCESS',
+        entityType: 'LessonNote',
+        entityId: 'note-1',
+        exceptUserId: 'reviewer-1',
+      }),
+    );
+    expect(notifyAdmins).not.toHaveBeenCalled();
+  });
+
+  it('carries the review comment into the notification when a note is returned', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValueOnce(note({ status: 'SUBMITTED' }))
+      .mockResolvedValueOnce(note({ status: 'RETURNED' }));
+    jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+    jest
+      .spyOn(StaffRepository.Instance, 'findByIdScoped')
+      .mockResolvedValue({ userId: 'teacher-user-1' } as never);
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+
+    await SchemeService.Instance.updateLessonNote(
+      context({ staffId: null, userId: 'reviewer-1', permissions: ['lessonnote.approve'] }),
+      'note-1',
+      { status: 'RETURNED', reviewComment: 'Add the assignment.' },
+      1,
+    );
+
+    expect(notifyUser).toHaveBeenCalledWith(
+      'school-1',
+      'teacher-user-1',
+      expect.objectContaining({
+        title: 'Lesson note returned for changes',
+        severity: 'WARNING',
+        body: expect.stringContaining('Add the assignment.'),
+      }),
+    );
+  });
+
+  it('skips the notification rather than throwing when the author has no linked user account', async () => {
+    jest
+      .spyOn(SchemeRepository.Instance, 'findNoteDTO')
+      .mockResolvedValueOnce(note({ status: 'SUBMITTED' }))
+      .mockResolvedValueOnce(note({ status: 'APPROVED' }));
+    jest.spyOn(SchemeRepository.Instance, 'updateNoteIfVersionMatches').mockResolvedValue(true);
+    jest.spyOn(StaffRepository.Instance, 'findByIdScoped').mockResolvedValue({ userId: null } as never);
+    const notifyUser = jest.spyOn(NotificationsService.Instance, 'notifyUser').mockResolvedValue(undefined);
+
+    await expect(
+      SchemeService.Instance.updateLessonNote(
+        context({ staffId: null, userId: 'reviewer-1', permissions: ['lessonnote.approve'] }),
+        'note-1',
+        { status: 'APPROVED' },
+        1,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(notifyUser).not.toHaveBeenCalled();
   });
 });
 

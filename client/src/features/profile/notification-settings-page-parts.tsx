@@ -48,6 +48,9 @@ export const PreferenceRow = memo(function PreferenceRow({
   ) => void;
 }) {
   const meta = CATEGORY_META[preference.category];
+  // No meta means this category is commented out in notification-settings-page-constants.ts
+  // (no backend produces it yet) — skip the row rather than showing a blank one.
+  if (!meta) return null;
 
   return (
     <li className="px-5 py-4">
@@ -101,6 +104,10 @@ export const PreferenceRow = memo(function PreferenceRow({
  * Push has to be enabled twice: once by the browser (permission) and once by
  * the server (a device token). Both states are shown honestly rather than
  * pretending a switch is all it takes.
+ *
+ * Not currently rendered — notification-settings-page.tsx comments this out
+ * while push sending is off across the app (see notifications.service.ts).
+ * Left defined, not deleted, so restoring it is a two-line uncomment.
  */
 export function PushCard() {
   const [state, setState] = useState<PushSupportState>('unsupported');

@@ -6,10 +6,12 @@ import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { AcademicScopeService, scopeAllows } from '../../academics/services/academicScope.service';
+import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { CurriculumRepository } from '../repositories/curriculum.repository';
 import { SchemeRepository } from '../repositories/scheme.repository';
 import type { CurriculumTopicDTO } from '../dto/curriculum.dto';
 import type { LessonNoteDTO, SchemeOfWorkDTO, SchemeSummaryDTO, SchemeWeekDTO } from '../dto/scheme.dto';
+import type { LessonNoteStatus } from '../entities/lessonNote.entity';
 import type { TermDTO } from '../../academics/dto/academics.dto';
 import type {
   CreateLessonNoteInput,
@@ -46,6 +48,7 @@ export class SchemeService {
     private readonly scope = AcademicScopeService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
+    private readonly staff = StaffRepository.Instance,
   ) {}
 
   /* -- Schemes --------------------------------------------------------------- */
@@ -190,7 +193,7 @@ export class SchemeService {
           category: 'SYSTEM',
           title: 'Scheme of work submitted for approval',
           body: `${context.user.displayName} submitted the ${label} scheme of work for approval.`,
-          actionUrl: `/teaching/schemes/${id}`,
+          actionUrl: `/schemes/${id}`,
           severity: 'INFO',
           entityType: 'SchemeOfWork',
           entityId: id,
@@ -201,7 +204,7 @@ export class SchemeService {
           category: 'SYSTEM',
           title: 'Scheme of work approved',
           body: `Your ${label} scheme of work has been approved.`,
-          actionUrl: `/teaching/schemes/${id}`,
+          actionUrl: `/schemes/${id}`,
           severity: 'SUCCESS',
           entityType: 'SchemeOfWork',
           entityId: id,
@@ -284,8 +287,14 @@ export class SchemeService {
   ): Promise<LessonNoteDTO> {
     const { schoolId } = context;
     const existing = await this.resolveVisibleNote(context, id);
-    const isAuthor = existing.teacherId === context.membership.staffId;
-    const mayEdit = isAuthor || context.can('academics.manage');
+    // Author-only, unlike scheme editing above and unlike this note's own
+    // delete path (`removeLessonNote`, which does take an `academics.manage`
+    // override): the two error messages below already say "only the teacher
+    // who wrote this note", and a reviewer must not be able to grant
+    // themselves write access to the very note they are reviewing by also
+    // holding `academics.manage` — returning a note hands editing back to
+    // its author, not to whoever returned it.
+    const mayEdit = existing.teacherId === context.membership.staffId;
     const editable = existing.status === 'DRAFT' || existing.status === 'RETURNED';
 
     const { status, reviewComment, ...content } = input;
@@ -322,9 +331,67 @@ export class SchemeService {
       if (!applied) throw AppError.versionConflict();
     }
 
+    if (status && status !== existing.status) {
+      await this.notifyLessonNoteStatusChange(context, existing, status, reviewComment ?? null);
+    }
+
     const dto = await this.schemes.findNoteDTO(schoolId, id);
     if (!dto) throw AppError.notFound('Lesson note');
     return dto;
+  }
+
+  /**
+   * Mirrors the scheme-of-work notifications above: submitted goes to the
+   * people who can review it, approved or returned goes back to the author.
+   * The author is known only by `teacherId` — a staff id, not a user id — so
+   * it is resolved through `Staff.userId` before `notifyUser` can be called;
+   * a staff record with no linked user account (or none at all) is silently
+   * skipped rather than thrown, the same as every other notify call in this
+   * codebase.
+   */
+  private async notifyLessonNoteStatusChange(
+    context: RequestContext,
+    note: LessonNoteDTO,
+    status: LessonNoteStatus,
+    reviewComment: string | null,
+  ): Promise<void> {
+    const { schoolId } = context;
+    const label = `${note.subjectName} · ${note.className} · ${note.topic}`;
+
+    if (status === 'SUBMITTED') {
+      void this.notifications.notifySchoolAdmins(schoolId, {
+        category: 'SYSTEM',
+        title: 'Lesson note submitted for review',
+        body: `${context.user.displayName} submitted a lesson note for ${label} for review.`,
+        actionUrl: `/lesson-notes/${note.id}`,
+        severity: 'INFO',
+        entityType: 'LessonNote',
+        entityId: note.id,
+        exceptUserId: context.user.id,
+      });
+      return;
+    }
+
+    if (status === 'APPROVED' || status === 'RETURNED') {
+      const teacher = await this.staff.findByIdScoped(schoolId, note.teacherId);
+      if (!teacher?.userId) return;
+
+      void this.notifications.notifyUser(schoolId, teacher.userId, {
+        category: 'SYSTEM',
+        title: status === 'APPROVED' ? 'Lesson note approved' : 'Lesson note returned for changes',
+        body:
+          status === 'APPROVED'
+            ? `Your lesson note for ${label} has been approved.`
+            : reviewComment
+              ? `Your lesson note for ${label} was returned: ${reviewComment}`
+              : `Your lesson note for ${label} was returned for changes.`,
+        actionUrl: `/lesson-notes/${note.id}`,
+        severity: status === 'APPROVED' ? 'SUCCESS' : 'WARNING',
+        entityType: 'LessonNote',
+        entityId: note.id,
+        exceptUserId: context.user.id,
+      });
+    }
   }
 
   async removeLessonNote(context: RequestContext, id: string): Promise<void> {
