@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authorise } from '../../../shared/middleware/authorise.middleware';
+import { authorise, authoriseAll } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import {
   changeStatusSchema,
@@ -22,13 +22,16 @@ import { StudentRelationsController } from '../controllers/studentRelations.cont
 const router = Router();
 
 /**
- * `student.read` is the gate; which pupils the caller then sees is narrowed
- * per row by `StudentAccessService` — a parent holds this permission and must
- * still only ever see their own children.
+ * This is the whole-school roster, filterable by class, level and session —
+ * not the one-child read a parent holds `student.read` for. It also needs
+ * `academics.read` for those filters, which is exactly the permission a
+ * parent lacks, so `authoriseAll` keeps them on `/family/:studentId` (which
+ * reuses the same scoped services) instead of a roster screen whose filters
+ * would 403 the moment they loaded.
  */
 router.get(
   '/students',
-  authorise('student.read'),
+  authoriseAll('student.read', 'academics.read'),
   validate(fetchStudentsSchema),
   StudentsController.fetchAll,
 );

@@ -100,4 +100,50 @@ describe('navigation', () => {
   it('still falls through to a not-found page for an unknown address', () => {
     expect(resolves('/definitely-not-a-page')).toBe(false);
   });
+
+  it('gates whole-school finance screens behind analytics.read, not the parent-held finance.read', () => {
+    // `finance.read` is what a parent holds to see their own children's
+    // invoices, payments and ledger at `/family/finance` — every one of those
+    // reads is narrowed server-side to their own family. The overview and
+    // debtors screens are unscoped, whole-school aggregates that must not
+    // reuse that same permission, or a parent reaches the bursar's view of
+    // every family at the school.
+    const finance = NAV_SECTIONS.find((section) => section.id === 'finance')!;
+    for (const label of ['Overview', 'Debtors']) {
+      const item = finance.items.find((entry) => entry.label === label)!;
+      expect(item.require, `${label} nav item`).toBe('analytics.read');
+    }
+  });
+
+  it('keeps a parent off whole-roster and whole-class screens their own read permissions would otherwise unlock', () => {
+    // Each of these is a bare read permission a parent holds for their own
+    // child (student.read, result.read, reportcard.read) — but the screen
+    // behind it browses or filters the whole school by class/level/session,
+    // which needs `academics.read` too. A parent lacks that, so requiring it
+    // here keeps them on their own scoped `/family` pages instead of a staff
+    // roster or broadsheet whose filters would 403 the moment they loaded.
+    const cases: [sectionId: string, label: string][] = [
+      ['people', 'Students'],
+      ['assessment', 'Results'],
+      ['assessment', 'Report cards'],
+    ];
+    for (const [sectionId, label] of cases) {
+      const section = NAV_SECTIONS.find((entry) => entry.id === sectionId)!;
+      const item = section.items.find((entry) => entry.label === label)!;
+      expect(item.require, `${label} nav item`).toHaveProperty('allOf');
+      expect((item.require as { allOf: string[] }).allOf, `${label} nav item`).toContain(
+        'academics.read',
+      );
+    }
+  });
+
+  it('gates the attendance register behind attendance.manage, not the parent-held attendance.read', () => {
+    // A parent and a pupil hold `attendance.read` to see their own history
+    // through the portal — never a whole class's, per the note on the
+    // server's `/attendance/register` route. The register screen itself
+    // (taking it, or reviewing a past day class by class) is staff-only.
+    const teaching = NAV_SECTIONS.find((section) => section.id === 'teaching')!;
+    const item = teaching.items.find((entry) => entry.label === 'Attendance')!;
+    expect(item.require).toBe('attendance.manage');
+  });
 });

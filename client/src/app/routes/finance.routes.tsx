@@ -64,10 +64,17 @@ export const financeRoutes: RouteObject[] = [
     ],
   },
   {
-    element: guarded('finance.read'),
+    // Bursar-level oversight, not a per-family view — see the matching note on
+    // the server routes. A parent's own figures live at `/family/finance`.
+    element: guarded('analytics.read'),
     children: [
       { path: 'finance', element: <FinanceOverviewPage /> },
       { path: 'finance/debtors', element: <DebtorsPage /> },
+    ],
+  },
+  {
+    element: guarded('finance.read'),
+    children: [
       { path: 'finance/receipts/:paymentId', element: <ReceiptPage /> },
     ],
   },

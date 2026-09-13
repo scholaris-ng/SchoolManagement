@@ -46,7 +46,11 @@ export class GuardiansService {
     // A parent may see themselves and nobody else — not the other parents at
     // the school, and not the other guardian of their own child.
     const visibleIds = context.membership.guardianId ? [context.membership.guardianId] : null;
-    return this.guardians.fetchPaginated(context.schoolId, { ...query, visibleIds });
+    return this.guardians.fetchPaginated(context.schoolId, {
+      ...query,
+      visibleIds,
+      hasPortalAccess: query.hasPortalAccess === undefined ? undefined : query.hasPortalAccess === 'true',
+    });
   }
 
   async fetchGuardian(context: RequestContext, id: string): Promise<GuardianDTO> {

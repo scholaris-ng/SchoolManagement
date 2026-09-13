@@ -29,6 +29,13 @@ import { AnalyticsController } from '../controllers/analytics.controller';
 /** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
 
+/**
+ * Unlike `/finance/overview` below, `result.read` stays in this OR: a teacher
+ * holds it (for their own classes) but not `analytics.read`, and reads this
+ * same whole-school average from the `/results` page's Analytics tab, which
+ * is why that client route additionally requires `academics.read` — the
+ * permission a parent (who also holds bare `result.read`) lacks.
+ */
 router.get(
   '/analytics/results',
   authorise('analytics.read', 'result.read'),
@@ -64,9 +71,17 @@ router.get(
   AnalyticsController.fetchAttendanceTrend,
 );
 
+/**
+ * `finance.read` is deliberately absent here: a parent holds it for their own
+ * children's invoices, payments and ledger (each narrowed by
+ * `visibleStudentIds` in the finance module), but this endpoint is a
+ * whole-school aggregate that cannot be narrowed the same way — there is no
+ * per-family "collection rate". A parent's own figures live at
+ * `/family/finance` instead.
+ */
 router.get(
   '/finance/overview',
-  authorise('analytics.read', 'finance.read'),
+  authorise('analytics.read'),
   validate(financeOverviewSchema),
   AnalyticsController.fetchFinanceOverview,
 );

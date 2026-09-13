@@ -31,6 +31,8 @@ export const fetchGuardiansSchema = z.object({
     search: z.string().trim().max(120).optional(),
     sortBy: z.string().trim().max(40).optional(),
     sortDir: z.enum(['asc', 'desc']).default('asc'),
+    // A query string has no booleans; the portal filter sends the word.
+    hasPortalAccess: z.enum(['true', 'false']).optional(),
   }),
 });
 

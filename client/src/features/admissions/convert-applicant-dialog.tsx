@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
@@ -44,6 +45,16 @@ export function ConvertApplicantDialog({
     resolver: zodResolver(conversionSchema),
     defaultValues: { classId: application.offeredClassId ?? '' },
   });
+
+  // This dialog is mounted once, alongside the whole detail page, and only
+  // hidden until "Enrol as a student" is clicked — so `defaultValues` above
+  // captures whatever the offer was at that first render, typically nothing.
+  // A class offered afterwards (accepting straight from screening sets one in
+  // the same step) arrives here as a fresh prop, but react-hook-form does not
+  // re-read `defaultValues` on its own; only an explicit reset picks it up.
+  useEffect(() => {
+    form.reset({ classId: application.offeredClassId ?? '' });
+  }, [application.offeredClassId, form]);
 
   const applicantName = [application.applicant.firstName, application.applicant.lastName].join(' ');
 

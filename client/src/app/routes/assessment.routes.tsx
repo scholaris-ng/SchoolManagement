@@ -58,15 +58,21 @@ export const assessmentRoutes: RouteObject[] = [
     ],
   },
   {
-    element: guarded('result.read'),
+    // Whole-school analytics and a whole-class broadsheet, not one child's
+    // result — both tabs need `academics.read` for their class/term pickers,
+    // which is exactly what a parent (holding only `result.read`, for their
+    // own child) lacks.
+    element: guarded({ allOf: ['result.read', 'academics.read'] }),
     children: [{ path: 'results', element: <ResultsPage /> }],
   },
   {
+    // Bulk generation for a whole class, same reasoning as `results` above.
+    element: guarded({ allOf: ['reportcard.read', 'academics.read'] }),
+    children: [{ path: 'report-cards', element: <ReportCardsPage /> }],
+  },
+  {
     element: guarded('reportcard.read'),
-    children: [
-      { path: 'report-cards', element: <ReportCardsPage /> },
-      { path: 'report-cards/:studentId/:termId', element: <ReportCardPage /> },
-    ],
+    children: [{ path: 'report-cards/:studentId/:termId', element: <ReportCardPage /> }],
   },
   {
     element: guarded('transcript.read'),

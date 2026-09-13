@@ -57,5 +57,27 @@ export const saveRegisterSchema = z.object({
     ),
 });
 
+/**
+ * `from`/`to` together stand in for a term the caller cannot yet name (an
+ * exported statement, say); `termId` alone is what the portal's own tab
+ * sends. Neither is required — an absent window falls back to the current
+ * term in `AttendanceService`.
+ */
+export const fetchStudentAttendanceSchema = z.object({
+  params: z.object({ studentId: z.string().uuid() }),
+  query: z
+    .object({
+      termId: z.string().uuid().optional(),
+      from: isoDate.optional(),
+      to: isoDate.optional(),
+    })
+    .strict()
+    .refine((value) => Boolean(value.from) === Boolean(value.to), {
+      message: 'Provide both a start and an end date, or neither.',
+      path: ['to'],
+    }),
+});
+
 export type FetchRegisterQuery = z.infer<typeof fetchRegisterSchema>['query'];
 export type SaveRegisterInput = z.infer<typeof saveRegisterSchema>['body'];
+export type FetchStudentAttendanceQuery = z.infer<typeof fetchStudentAttendanceSchema>['query'];

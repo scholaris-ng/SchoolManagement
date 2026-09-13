@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { AttendanceController } from '../controllers/attendance.controller';
-import { fetchRegisterSchema, saveRegisterSchema } from '../validators/attendance.schema';
+import {
+  fetchRegisterSchema,
+  fetchStudentAttendanceSchema,
+  saveRegisterSchema,
+} from '../validators/attendance.schema';
 
 /**
  * The daily register.
@@ -34,6 +38,18 @@ router.post(
   authorise('attendance.manage'),
   validate(saveRegisterSchema),
   AttendanceController.saveRegister,
+);
+
+/**
+ * The one screen `attendance.read` alone is actually for: a pupil's own
+ * history, or a guardian's for their child — narrowed by `canSeeStudent` in
+ * the service, same as the finance module narrows a family's own ledger.
+ */
+router.get(
+  '/students/:studentId/attendance',
+  authorise('attendance.read'),
+  validate(fetchStudentAttendanceSchema),
+  AttendanceController.fetchForStudent,
 );
 
 export default router;

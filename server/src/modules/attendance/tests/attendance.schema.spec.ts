@@ -1,4 +1,8 @@
-import { fetchRegisterSchema, saveRegisterSchema } from '../validators/attendance.schema';
+import {
+  fetchRegisterSchema,
+  fetchStudentAttendanceSchema,
+  saveRegisterSchema,
+} from '../validators/attendance.schema';
 
 const wrap = (part: { body?: unknown; query?: unknown; params?: unknown }) => ({
   body: part.body ?? {},
@@ -9,6 +13,7 @@ const wrap = (part: { body?: unknown; query?: unknown; params?: unknown }) => ({
 const CLASS_ID = '11111111-2222-4333-8444-555555555555';
 const STUDENT_ID = '99999999-8888-4777-8666-555555555555';
 const OTHER_STUDENT_ID = '22222222-3333-4444-8555-666666666666';
+const TERM_ID = '33333333-4444-4555-8666-777777777777';
 
 describe('fetchRegisterSchema', () => {
   it('accepts a class and a day', () => {
@@ -105,5 +110,44 @@ describe('saveRegisterSchema', () => {
 
   it('refuses an empty register', () => {
     expect(saveRegisterSchema.safeParse(wrap({ body: body([]) })).success).toBe(false);
+  });
+});
+
+describe('fetchStudentAttendanceSchema', () => {
+  const params = { studentId: STUDENT_ID };
+
+  it('accepts no window at all, leaving it to default to the current term', () => {
+    expect(fetchStudentAttendanceSchema.safeParse(wrap({ params, query: {} })).success).toBe(true);
+  });
+
+  it('accepts a termId alone', () => {
+    expect(
+      fetchStudentAttendanceSchema.safeParse(wrap({ params, query: { termId: TERM_ID } })).success,
+    ).toBe(true);
+  });
+
+  it('accepts an explicit from/to pair', () => {
+    expect(
+      fetchStudentAttendanceSchema.safeParse(
+        wrap({ params, query: { from: '2026-01-01', to: '2026-04-01' } }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('refuses a from with no matching to, or the reverse', () => {
+    expect(
+      fetchStudentAttendanceSchema.safeParse(wrap({ params, query: { from: '2026-01-01' } }))
+        .success,
+    ).toBe(false);
+    expect(
+      fetchStudentAttendanceSchema.safeParse(wrap({ params, query: { to: '2026-04-01' } })).success,
+    ).toBe(false);
+  });
+
+  it('refuses a student id that is not a uuid', () => {
+    expect(
+      fetchStudentAttendanceSchema.safeParse(wrap({ params: { studentId: 'amara' }, query: {} }))
+        .success,
+    ).toBe(false);
   });
 });

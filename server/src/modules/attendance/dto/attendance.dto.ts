@@ -81,3 +81,23 @@ export interface StaffAttendanceComplianceRow {
   /** Percentage of the days their form classes were open that they marked. */
   compliance: number;
 }
+
+/* -- One pupil's own history, read by themselves or a guardian ------------- */
+
+export interface StudentAttendanceSummaryDTO {
+  studentId: string;
+  from: string;
+  to: string;
+  totalDays: number;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  attendanceRate: number;
+  unexplainedAbsences: number;
+}
+
+export interface StudentAttendanceHistoryDTO {
+  summary: StudentAttendanceSummaryDTO;
+  records: AttendanceRecordDTO[];
+}

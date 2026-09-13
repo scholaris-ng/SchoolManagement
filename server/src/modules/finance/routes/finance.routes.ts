@@ -44,10 +44,12 @@ import {
  * what a family owes and what actually arrived. Nothing in the first half
  * moves money, and nothing in the second is a hypothesis.
  *
- * Every read here is `finance.read`, and every read that touches one family is
- * narrowed further by `visibleStudentIds` in the service: a parent holds
- * `finance.read` for their own children, and the permission alone would show
- * them the school's whole debtors list.
+ * Most reads here are `finance.read`, and every one that touches one family is
+ * narrowed further by `visibleStudentIds` in the service, so a parent holds
+ * `finance.read` for their own children and nothing wider. The debtors list is
+ * the exception: even scoped to one family it is a bursar's screen, not a
+ * parent's, so it needs `analytics.read` instead — the same gate as the
+ * whole-school finance overview it sits alongside on the client.
  */
 /** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
@@ -222,7 +224,7 @@ router.get(
 
 router.get(
   '/debtors',
-  authorise('finance.read'),
+  authorise('analytics.read'),
   validate(fetchDebtorsSchema),
   InvoicesController.debtors,
 );

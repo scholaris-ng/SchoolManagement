@@ -71,11 +71,15 @@ export const peopleRoutes: RouteObject[] = [
     children: [{ path: 'students/:id/edit', element: <StudentFormPage /> }],
   },
   {
+    // The whole-school roster, filterable by class/level/session — not the
+    // one-child read a parent holds `student.read` for. See the matching
+    // note on the server route: a parent's own children live at `/family`.
+    element: guarded({ allOf: ['student.read', 'academics.read'] }),
+    children: [{ path: 'students', element: <StudentsListPage /> }],
+  },
+  {
     element: guarded('student.read'),
-    children: [
-      { path: 'students', element: <StudentsListPage /> },
-      { path: 'students/:id', element: <StudentDetailPage /> },
-    ],
+    children: [{ path: 'students/:id', element: <StudentDetailPage /> }],
   },
   {
     element: guarded('guardian.manage'),

@@ -52,6 +52,7 @@ export interface GuardianFilter {
   sortDir: 'asc' | 'desc';
   /** Null means unrestricted; a parent may only ever see their own record. */
   visibleIds: string[] | null;
+  hasPortalAccess?: boolean;
 }
 
 export class GuardianRepository extends TenantRepository<Guardian> {
@@ -82,6 +83,10 @@ export class GuardianRepository extends TenantRepository<Guardian> {
       where.push(
         `(g.first_name ILIKE $${i} OR g.last_name ILIKE $${i} OR g.email ILIKE $${i} OR g.phone ILIKE $${i})`,
       );
+    }
+    if (filter.hasPortalAccess !== undefined) {
+      params.push(filter.hasPortalAccess);
+      where.push(`g.has_portal_access = $${params.length}`);
     }
 
     const whereSql = where.join(' AND ');

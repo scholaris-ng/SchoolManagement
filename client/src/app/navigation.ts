@@ -98,7 +98,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'people',
     label: 'People',
     items: [
-      { label: 'Students', to: '/students', icon: Users, require: 'student.read' },
+      { label: 'Students', to: '/students', icon: Users, require: { allOf: ['student.read', 'academics.read'] } },
       { label: 'Guardians', to: '/guardians', icon: Heart, require: 'guardian.read' },
       { label: 'Staff', to: '/staff', icon: UserCog, require: 'staff.read' },
       { label: 'Admissions', to: '/admissions', icon: BadgeCheck, require: 'admission.read' },
@@ -109,7 +109,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'teaching',
     label: 'Teaching',
     items: [
-      { label: 'Attendance', to: '/attendance', icon: ClipboardCheck, require: 'attendance.read' },
+      { label: 'Attendance', to: '/attendance', icon: ClipboardCheck, require: 'attendance.manage' },
       { label: 'Timetable', to: '/timetable', icon: AlarmClock, require: 'timetable.read' },
       { label: 'Curriculum', to: '/curriculum', icon: Target, require: 'curriculum.read' },
       { label: 'Schemes of work', to: '/schemes', icon: ListChecks, require: 'scheme.read' },
@@ -122,8 +122,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Assessment',
     items: [
       { label: 'Score entry', to: '/results/entry', icon: Table2, require: 'result.enter' },
-      { label: 'Results', to: '/results', icon: ScrollText, require: 'result.read' },
-      { label: 'Report cards', to: '/report-cards', icon: FileText, require: 'reportcard.read' },
+      { label: 'Results', to: '/results', icon: ScrollText, require: { allOf: ['result.read', 'academics.read'] } },
+      { label: 'Report cards', to: '/report-cards', icon: FileText, require: { allOf: ['reportcard.read', 'academics.read'] } },
       { label: 'Transcripts', to: '/transcripts', icon: GraduationCap, require: 'transcript.read' },
       { label: 'Question bank', to: '/cbt/questions', icon: BookMarked, require: 'question.manage' },
       { label: 'CBT', to: '/cbt', icon: BookOpen, require: { anyOf: ['cbt.read', 'cbt.take'] } },
@@ -133,11 +133,11 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'finance',
     label: 'Finance',
     items: [
-      { label: 'Overview', to: '/finance', icon: Wallet, require: 'finance.read' },
+      { label: 'Overview', to: '/finance', icon: Wallet, require: 'analytics.read' },
       { label: 'Fees', to: '/finance/fees', icon: Coins, require: 'fee.manage' },
       { label: 'Invoices', to: '/finance/invoices', icon: Receipt, require: 'invoice.manage' },
       { label: 'Payments', to: '/finance/payments', icon: CreditCard, require: 'payment.manage' },
-      { label: 'Debtors', to: '/finance/debtors', icon: Landmark, require: 'finance.read' },
+      { label: 'Debtors', to: '/finance/debtors', icon: Landmark, require: 'analytics.read' },
       {
         label: 'Fees & payments',
         to: '/family/finance',

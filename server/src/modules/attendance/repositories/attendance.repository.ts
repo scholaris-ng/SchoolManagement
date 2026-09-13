@@ -10,6 +10,24 @@ import type {
   StaffAttendanceComplianceRow,
 } from '../dto/attendance.dto';
 
+/** One pupil's own marks, joined the same way the register is. */
+const STUDENT_HISTORY_PROJECTION = `
+  a.id                                                                 AS "id",
+  s.school_id                                                         AS "schoolId",
+  s.id                                                                AS "studentId",
+  concat_ws(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name) AS "studentName",
+  s.admission_no                                                      AS "admissionNo",
+  CASE WHEN s.photo_consent THEN s.photo_url END                      AS "photoUrl",
+  a.class_id                                                          AS "classId",
+  to_char(a.date, 'YYYY-MM-DD')                                       AS "date",
+  a.status,
+  a.reason,
+  a.note,
+  a.marked_by_name                                                    AS "markedByName",
+  a.marked_at                                                         AS "markedAt",
+  a.guardian_notified_at                                              AS "guardianNotifiedAt"
+`;
+
 /**
  * What counts as having turned up. A child who arrived late was still taught,
  * so every rate in the app treats `LATE` as present — the same arithmetic the
@@ -368,6 +386,32 @@ export class AttendanceRepository extends TenantRepository<AttendanceRecord> {
       [schoolId, studentId, window.from, window.to],
     );
     return Number(row?.attendanceRate ?? 0);
+  }
+
+  /**
+   * One pupil's own marks over a window, most recent first — the portal's
+   * attendance tab, for the pupil themselves or a guardian.
+   *
+   * Unlike the register, an unmarked day is not invented as `PRESENT` here:
+   * this is a history of what was actually recorded, not a roster to mark
+   * against, so a day nobody took the register on is simply absent from the
+   * list rather than claimed as attended.
+   */
+  async historyForStudent(
+    schoolId: string,
+    studentId: string,
+    window: { from: string; to: string },
+  ): Promise<AttendanceRecordDTO[]> {
+    return this.repo.query(
+      `SELECT ${STUDENT_HISTORY_PROJECTION}
+         FROM attendance_records a
+         JOIN students s ON s.id = a.student_id
+        WHERE a.school_id = $1
+          AND a.student_id = $2
+          AND a.date BETWEEN $3::date AND $4::date
+        ORDER BY a.date DESC`,
+      [schoolId, studentId, window.from, window.to],
+    );
   }
 
   /** Today, across the school: the admin dashboard's headline pair. */

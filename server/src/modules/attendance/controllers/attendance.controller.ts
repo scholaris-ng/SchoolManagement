@@ -2,7 +2,11 @@ import type { NextFunction, Request, Response } from 'express';
 import { ApiResponse } from '../../../shared/response/apiResponse';
 import { contextOf } from '../../../shared/middleware/tenant.middleware';
 import { AttendanceService } from '../services/attendance.service';
-import type { FetchRegisterQuery, SaveRegisterInput } from '../validators/attendance.schema';
+import type {
+  FetchRegisterQuery,
+  FetchStudentAttendanceQuery,
+  SaveRegisterInput,
+} from '../validators/attendance.schema';
 
 const service = () => AttendanceService.Instance;
 
@@ -30,6 +34,20 @@ export class AttendanceController {
         req.validated!.body as SaveRegisterInput,
       );
       res.status(200).json(ApiResponse.ok(result, 'Register saved'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async fetchForStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { studentId } = req.validated!.params as { studentId: string };
+      const history = await service().fetchStudentHistory(
+        contextOf(req),
+        studentId,
+        req.validated!.query as FetchStudentAttendanceQuery,
+      );
+      res.status(200).json(ApiResponse.ok(history));
     } catch (error) {
       next(error);
     }

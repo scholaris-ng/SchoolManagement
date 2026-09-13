@@ -108,6 +108,33 @@ export function FeeStructureDialog({
   const toggleId = (list: string[], id: string) =>
     list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
 
+  const allLevelIds = useMemo(() => (levels.data ?? []).map((level) => level.id), [levels.data]);
+  const allLevelsSelected = allLevelIds.length > 0 && levelIds.length === allLevelIds.length;
+
+  const allClassIds = useMemo(() => (classes.data ?? []).map((schoolClass) => schoolClass.id), [classes.data]);
+  const allClassesSelected = allClassIds.length > 0 && classIds.length === allClassIds.length;
+
+  const allItemsSelected = items.length > 0 && items.every((item) => byId.has(item.id));
+  const toggleAllItems = () => {
+    if (allItemsSelected) {
+      setLines([]);
+      return;
+    }
+    // Keeps a price the bursar already typed in rather than resetting it back
+    // to the fee item's default the moment "Select all" sweeps up the rest.
+    setLines((current) => {
+      const existingIds = new Set(current.map((line) => line.feeItemId));
+      const additions = items
+        .filter((item) => !existingIds.has(item.id))
+        .map((item) => ({
+          feeItemId: item.id,
+          amount: String(item.amount ?? 0),
+          isOptional: item.isOptional ?? false,
+        }));
+      return [...current, ...additions];
+    });
+  };
+
   const valid = Boolean(name.trim() && effectiveSessionId && lines.length > 0);
 
   return (
@@ -177,11 +204,23 @@ export function FeeStructureDialog({
           </div>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              Levels{' '}
-              <span className="font-normal text-muted-foreground">
-                {levelIds.length === 0 ? '· all levels' : `· ${levelIds.length} selected`}
+            <legend className="flex w-full flex-wrap items-center justify-between gap-2 text-sm font-medium">
+              <span>
+                Levels{' '}
+                <span className="font-normal text-muted-foreground">
+                  {levelIds.length === 0 ? '· all levels' : `· ${levelIds.length} selected`}
+                </span>
               </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-cy="structure-levels-toggle-all"
+                disabled={allLevelIds.length === 0}
+                onClick={() => setLevelIds(allLevelsSelected ? [] : allLevelIds)}
+              >
+                {allLevelsSelected ? 'Clear all' : 'Select all'}
+              </Button>
             </legend>
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {(levels.data ?? []).map((level) => (
@@ -200,13 +239,25 @@ export function FeeStructureDialog({
           </fieldset>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              Classes{' '}
-              <span className="font-normal text-muted-foreground">
-                {classIds.length === 0
-                  ? '· every class in those levels'
-                  : `· ${classIds.length} selected`}
+            <legend className="flex w-full flex-wrap items-center justify-between gap-2 text-sm font-medium">
+              <span>
+                Classes{' '}
+                <span className="font-normal text-muted-foreground">
+                  {classIds.length === 0
+                    ? '· every class in those levels'
+                    : `· ${classIds.length} selected`}
+                </span>
               </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-cy="structure-classes-toggle-all"
+                disabled={allClassIds.length === 0}
+                onClick={() => setClassIds(allClassesSelected ? [] : allClassIds)}
+              >
+                {allClassesSelected ? 'Clear all' : 'Select all'}
+              </Button>
             </legend>
             <div className="scrollbar-thin flex max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto">
               {(classes.data ?? []).map((schoolClass) => (
@@ -225,7 +276,19 @@ export function FeeStructureDialog({
           </fieldset>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Charges</legend>
+            <legend className="flex w-full flex-wrap items-center justify-between gap-2 text-sm font-medium">
+              Charges
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-cy="structure-charges-toggle-all"
+                disabled={items.length === 0}
+                onClick={toggleAllItems}
+              >
+                {allItemsSelected ? 'Clear all' : 'Select all'}
+              </Button>
+            </legend>
             <ul className="divide-y divide-border rounded-md border border-border">
               {items.map((item) => {
                 const line = byId.get(item.id);

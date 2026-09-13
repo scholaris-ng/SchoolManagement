@@ -269,12 +269,14 @@ export function CalendarPage() {
         </Card>
       </div>
 
-      <EventDialog
-        key={editing.event?.id ?? 'new'}
-        state={editing}
-        defaultDate={toDateInputValue(selectedDay)}
-        onClose={() => setEditing({ open: false })}
-      />
+      {canManage && (
+        <EventDialog
+          key={editing.event?.id ?? 'new'}
+          state={editing}
+          defaultDate={toDateInputValue(selectedDay)}
+          onClose={() => setEditing({ open: false })}
+        />
+      )}
     </PageContainer>
   );
 }

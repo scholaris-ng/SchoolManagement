@@ -49,7 +49,11 @@ const CalendarPage = lazy(() =>
 
 export const teachingRoutes: RouteObject[] = [
   {
-    element: guarded('attendance.read'),
+    // Taking the register, not reading it — every roster on this page is a
+    // whole class, and `attendance.read` alone is held by parents and pupils
+    // reading their own history through the portal, not this screen. See the
+    // matching note on `attendance.routes.ts` server-side.
+    element: guarded('attendance.manage'),
     children: [{ path: 'attendance', element: <AttendancePage /> }],
   },
   {

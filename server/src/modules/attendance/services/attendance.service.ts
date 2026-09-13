@@ -5,10 +5,20 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { AcademicScopeService } from '../../academics/services/academicScope.service';
+import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { AttendanceRepository, type SavedMarkRow } from '../repositories/attendance.repository';
 import type { SchoolClassDTO, TermDTO } from '../../academics/dto/academics.dto';
-import type { AttendanceRegisterDTO, SaveRegisterResultDTO } from '../dto/attendance.dto';
-import type { FetchRegisterQuery, SaveRegisterInput } from '../validators/attendance.schema';
+import type {
+  AttendanceRecordDTO,
+  AttendanceRegisterDTO,
+  SaveRegisterResultDTO,
+  StudentAttendanceHistoryDTO,
+} from '../dto/attendance.dto';
+import type {
+  FetchRegisterQuery,
+  FetchStudentAttendanceQuery,
+  SaveRegisterInput,
+} from '../validators/attendance.schema';
 
 /**
  * Taking the register (spec section 11).
@@ -27,6 +37,7 @@ export class AttendanceService {
     private readonly classes = ClassRepository.Instance,
     private readonly terms = TermRepository.Instance,
     private readonly scope = AcademicScopeService.Instance,
+    private readonly access = StudentAccessService.Instance,
     private readonly notifications = NotificationsService.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
@@ -133,6 +144,27 @@ export class AttendanceService {
     return { saved: saved.length, notificationsSent };
   }
 
+  /**
+   * One pupil's own attendance — the portal tab, for the pupil themselves or
+   * a guardian. 404 rather than 403 for somebody else's child, same reasoning
+   * as `InvoicesService.fetchInvoice`: that a given child attends this school
+   * at all is not something an unrelated account gets to confirm.
+   */
+  async fetchStudentHistory(
+    context: RequestContext,
+    studentId: string,
+    filter: FetchStudentAttendanceQuery,
+  ): Promise<StudentAttendanceHistoryDTO> {
+    if (!(await this.access.canSeeStudent(context, studentId))) {
+      throw AppError.notFound('Student');
+    }
+
+    const window = await this.resolveHistoryWindow(context.schoolId, filter);
+    const records = await this.attendance.historyForStudent(context.schoolId, studentId, window);
+
+    return { summary: summariseHistory(studentId, window, records), records };
+  }
+
   /* -- Internals ------------------------------------------------------------- */
 
   /**
@@ -155,6 +187,28 @@ export class AttendanceService {
     if (allowed && !allowed.includes(record.id)) throw AppError.notFound('Class');
 
     return record;
+  }
+
+  /**
+   * An explicit `from`/`to` wins outright; otherwise the named term, or the
+   * current one when none is named. A school with no current term (and none
+   * named) has no window to report rather than an invented one.
+   */
+  private async resolveHistoryWindow(
+    schoolId: string,
+    filter: FetchStudentAttendanceQuery,
+  ): Promise<{ from: string; to: string }> {
+    if (filter.from && filter.to) return { from: filter.from, to: filter.to };
+
+    const terms = await this.terms.fetchForSchool(schoolId);
+    const term = filter.termId
+      ? (terms.find((candidate) => candidate.id === filter.termId) ?? null)
+      : currentTerm(terms);
+
+    if (filter.termId && !term) throw AppError.notFound('Term');
+
+    const today = todayIso();
+    return term ? { from: term.startDate, to: term.endDate } : { from: today, to: today };
   }
 
   /**
@@ -251,4 +305,52 @@ function isLocked(date: string, current: TermDTO | null): boolean {
 /** Matching how the rest of the server reads "today" (`studentRelations.service`). */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * `LATE` counts as attended for the rate, the same arithmetic the repository
+ * applies everywhere else — a child marked late was still taught.
+ *
+ * "Unexplained" means a reason was never given, whether that is a genuinely
+ * absent-without-cause day or simply one nobody typed a reason for; the two
+ * are indistinguishable to a parent reading the tab either way.
+ */
+function summariseHistory(
+  studentId: string,
+  window: { from: string; to: string },
+  records: AttendanceRecordDTO[],
+): StudentAttendanceHistoryDTO['summary'] {
+  let present = 0;
+  let late = 0;
+  let absent = 0;
+  let excused = 0;
+  let unexplainedAbsences = 0;
+
+  for (const record of records) {
+    if (record.status === 'PRESENT') present += 1;
+    else if (record.status === 'LATE') late += 1;
+    else if (record.status === 'ABSENT') absent += 1;
+    else if (record.status === 'EXCUSED') excused += 1;
+
+    if (record.status !== 'PRESENT' && record.status !== 'LATE') {
+      if (!record.reason || record.reason === 'UNEXPLAINED') unexplainedAbsences += 1;
+    }
+  }
+
+  const totalDays = records.length;
+  const attendanceRate =
+    totalDays === 0 ? 0 : Math.round((100 * (present + late)) / totalDays);
+
+  return {
+    studentId,
+    from: window.from,
+    to: window.to,
+    totalDays,
+    present,
+    absent,
+    late,
+    excused,
+    attendanceRate,
+    unexplainedAbsences,
+  };
 }
