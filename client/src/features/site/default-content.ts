@@ -666,10 +666,9 @@ export const defaultContent: SiteContent = {
     { name: 'Healthpoint Diagnostics', href: 'https://healthpointdiagnostic.com/', icon: 'flask' },
   ],
 
-  portals: [
-    { name: 'Portal ⇒ High School', href: 'https://app.ajiracad.com/login192' },
-    { name: 'Portal ⇒ Primary School', href: 'https://app.ajiracad.com/login190' },
-  ],
+  // One link to this platform's own sign-in screen (`platformUrl` in
+  // `site-header.tsx`), not the school's old separate per-section logins.
+  portals: [{ name: 'Login', href: '/sign-in' }],
 
   contact: {
     title: 'Get In Touch',

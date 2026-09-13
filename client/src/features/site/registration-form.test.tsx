@@ -37,6 +37,7 @@ vi.mock('@/features/public/api', () => ({
     error: null,
   }),
 }));
+vi.mock('./site-host', () => ({ siteSlugFromHost: () => 'brightfield' }));
 
 const { SiteContentProvider } = await import('./site-context');
 const { RegistrationSection } = await import('./components/registration-form');
@@ -46,7 +47,6 @@ function renderForm() {
     <SiteContentProvider>
       <RegistrationSection />
     </SiteContentProvider>,
-    { route: '/s/brightfield', path: '/s/:slug' },
   );
 }
 

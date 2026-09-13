@@ -1,3 +1,4 @@
+import { platformUrl } from './site-host';
 import type { SiteContent } from './site-content';
 
 /**
@@ -35,9 +36,13 @@ export function buildNav(content: SiteContent): SiteNavItem[] {
         { label: 'High School', href: `schools/${highSchool.slug}` },
         { label: 'Nursery/Primary', href: `schools/${nurseryPrimary.slug}` },
         { label: 'Creche/After School', href: `schools/${nurseryPrimary.slug}` },
+        // `platformUrl`, not the bare href: a portal link lands on the
+        // authenticated app, which on a real tenant subdomain is a different
+        // origin than this menu's own page (`site-header.tsx`'s utility
+        // strip resolves the same link the same way).
         ...content.portals.map((portal) => ({
           label: portal.name,
-          href: portal.href,
+          href: platformUrl(portal.href),
           external: true,
         })),
       ],

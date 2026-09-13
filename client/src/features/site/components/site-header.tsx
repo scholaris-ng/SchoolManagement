@@ -4,6 +4,7 @@ import { ChevronDown, ExternalLink, Mail, MapPin, Menu, Phone, X } from 'lucide-
 import { cn } from '@/lib/utils';
 import { useSite } from '../site-context';
 import { buildNav, type SiteNavChild } from '../site-nav';
+import { platformUrl } from '../site-host';
 import { Container } from './site-ui';
 
 /**
@@ -59,33 +60,33 @@ export function SiteHeader() {
       {/* Utility strip */}
       <div className="hidden bg-[var(--site-brand-dark)] text-white/80 lg:block">
         <Container className="flex h-10 items-center justify-between text-[0.8125rem]">
-          <div className="flex items-center gap-6">
-            <span className="flex items-center gap-2 whitespace-nowrap">
-              <MapPin className="size-3.5 text-[var(--site-gold)]" aria-hidden="true" />
-              Karaole Estate, College Road, Ifako-Ijaiye, Lagos
+          <div className="flex min-w-0 items-center gap-6">
+            <span className="flex min-w-0 items-center gap-2">
+              <MapPin className="size-3.5 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
+              <span className="truncate" title={content.contact.address}>
+                {content.contact.address}
+              </span>
             </span>
             <a
               href={`tel:${content.contact.phones[0]}`}
-              className="flex items-center gap-2 whitespace-nowrap hover:text-white"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap hover:text-white"
             >
               <Phone className="size-3.5 text-[var(--site-gold)]" aria-hidden="true" />
               {content.contact.phones[0]}
             </a>
             <a
               href={`mailto:${content.contact.email}`}
-              className="flex items-center gap-2 whitespace-nowrap hover:text-white"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap hover:text-white"
             >
               <Mail className="size-3.5 text-[var(--site-gold)]" aria-hidden="true" />
               {content.contact.email}
             </a>
           </div>
-          <div className="flex items-center gap-5">
-            {content.portals.map((portal) => (
+          <div className="flex shrink-0 items-center gap-5">
+            {content.portals.map((portal, index) => (
               <a
-                key={portal.href}
-                href={portal.href}
-                target="_blank"
-                rel="noreferrer noopener"
+                key={`${portal.href}-${index}`}
+                href={platformUrl(portal.href)}
                 className="whitespace-nowrap font-medium text-white hover:text-[var(--site-gold)]"
               >
                 {portal.name}

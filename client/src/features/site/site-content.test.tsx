@@ -16,6 +16,7 @@ const usePublicSchool = vi.fn();
 vi.mock('@/features/public/api', () => ({
   usePublicSchool: (...args: unknown[]) => usePublicSchool(...args),
 }));
+vi.mock('./site-host', () => ({ siteSlugFromHost: () => 'ab10' }));
 
 const { SiteContentProvider } = await import('./site-context');
 const { SiteHomePage } = await import('./pages/home-page');
@@ -60,7 +61,6 @@ function renderHome() {
     <SiteContentProvider>
       <SiteHomePage />
     </SiteContentProvider>,
-    { route: '/s/ab10', path: '/s/:slug' },
   );
 }
 
@@ -97,7 +97,7 @@ describe('public site content', () => {
       <SiteContentProvider>
         <SiteProgrammePage />
       </SiteContentProvider>,
-      { route: '/s/ab10/schools/high-school', path: '/s/:slug/schools/:programme' },
+      { route: '/schools/high-school', path: '/schools/:programme' },
     );
 
     expect(

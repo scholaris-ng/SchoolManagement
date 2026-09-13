@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, ExternalLink, Globe, Plus, Save, Trash2 } from 'lucide-react';
-import { env } from '@/lib/env';
 import { isApiError } from '@/lib/api-error';
+import { sitePathUrlForSlug } from '@/features/site/site-host';
 import { useUpdateWebsite, useWebsite } from './api';
 import type { WebsiteContent } from '@/types/engagement';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -147,7 +147,10 @@ export function WebsiteSettingsPage() {
   };
 
   const fieldErrors = isApiError(update.error) ? update.error.fieldErrors() : {};
-  const publicUrl = `${env.appUrl.replace(/\/$/, '')}/s/${draft.slug}`;
+  // The subdomain form (`siteUrlForSlug`) is the eventual address (spec
+  // section 31), but it needs a real domain with wildcard DNS in front of it
+  // that isn't set up yet — this is the one that actually resolves today.
+  const publicUrl = sitePathUrlForSlug(draft.slug);
 
   return (
     <PageContainer>
@@ -160,7 +163,7 @@ export function WebsiteSettingsPage() {
         actions={
           <>
             <Button data-cy="settings-website-settings-preview" variant="outline" asChild>
-              <a href={`/s/${draft.slug}`} target="_blank" rel="noreferrer">
+              <a href={publicUrl} target="_blank" rel="noreferrer">
                 <ExternalLink />
                 Preview
               </a>
@@ -230,7 +233,7 @@ export function WebsiteSettingsPage() {
                 <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                   Live at{' '}
                   <a
-                    href={`/s/${draft.slug}`}
+                    href={publicUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-mono text-foreground underline decoration-dotted underline-offset-2 hover:text-primary"

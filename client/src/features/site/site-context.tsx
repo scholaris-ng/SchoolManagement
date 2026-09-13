@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { usePublicSchool } from '@/features/public/api';
 import type { PublicSchoolPage } from '@/features/public/api';
 import { defaultContent } from './default-content';
+import { siteSlugFromHost } from './site-host';
 import type { SiteContent } from './site-content';
 
 /**
@@ -35,7 +36,11 @@ if (import.meta.hot) {
 
 interface SiteContextValue {
   content: SiteContent;
-  /** Absolute path for a page within this school's site. */
+  /**
+   * Absolute path for a page within this school's site — bare (the tenant
+   * lives in the subdomain) under `siteHostRoute`, or `/s/:slug`-prefixed
+   * under the `sitePathRoute` fallback (`site.routes.tsx`).
+   */
   path: (to: string) => string;
   /** True while the tenant's own content is still in flight. */
   loading: boolean;
@@ -62,16 +67,20 @@ export function useSiteContent(): SiteContent {
 }
 
 export function SiteContentProvider({ children }: { children: React.ReactNode }) {
-  const { slug } = useParams<{ slug: string }>();
+  // The host wins whenever it names a tenant; `:slug` only exists as a route
+  // param under the `sitePathRoute` fallback, where the host names nothing.
+  const { slug: routeSlug } = useParams<{ slug: string }>();
+  const hostSlug = siteSlugFromHost();
+  const slug = hostSlug ?? routeSlug;
   const remote = usePublicSchool(slug);
 
   const path = useCallback(
     (to: string) => {
       const clean = to.replace(/^\/+/, '');
-      const base = `/s/${slug ?? ''}`;
-      return clean ? `${base}/${clean}` : base;
+      const base = hostSlug ? '' : routeSlug ? `/s/${routeSlug}` : '';
+      return clean ? `${base}/${clean}` : base || '/';
     },
-    [slug],
+    [hostSlug, routeSlug],
   );
 
   const value = useMemo<SiteContextValue>(

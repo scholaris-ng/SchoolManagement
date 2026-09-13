@@ -11,7 +11,8 @@ import { behaviourRoutes } from './routes/behaviour.routes';
 import { communicationRoutes } from './routes/communication.routes';
 import { administrationRoutes } from './routes/administration.routes';
 import { portalRoutes } from './routes/portal.routes';
-import { siteRoute } from '@/features/site/site.routes';
+import { siteHostRoute, sitePathRoute } from '@/features/site/site.routes';
+import { siteSlugFromHost } from '@/features/site/site-host';
 
 /**
  * The route tree.
@@ -29,6 +30,17 @@ import { siteRoute } from '@/features/site/site.routes';
  * filtering so a deep-linked or bookmarked URL refuses cleanly instead of
  * rendering a page whose every request then 403s. The API remains the
  * authority (spec section 5).
+ *
+ * A request that lands on a school's own subdomain (`site-host.ts`) gets a
+ * wholly different tree — just the public site, mounted at `/` via
+ * `siteHostRoute` — rather than this one with a site route grafted on.
+ * That's what spec section 31 means by keeping public content separate from
+ * authenticated school data: a visitor on `abschool.scholaris.app` never even
+ * has the sign-in screen or the app shell in the bundle's route table to
+ * stumble onto. Wildcard subdomains need a real domain and DNS, which isn't
+ * set up yet, so `sitePathRoute` (`/s/:slug`) stays in this tree too — the
+ * one address that already works on any host, Vercel's shared
+ * `*.vercel.app` domain included.
  */
 
 /* -- Public ---------------------------------------------------------------- */
@@ -57,38 +69,42 @@ const NotFoundPage = lazy(() =>
   import('@/features/errors/not-found-page').then((m) => ({ default: m.NotFoundPage })),
 );
 
-export const router = createBrowserRouter([
-  { path: '/sign-in', element: <SignInPage /> },
-  { path: '/sign-up', element: <SignUpPage /> },
-  { path: '/verify-email', element: <VerifyEmailPage /> },
-  { path: '/forgot-password', element: <ForgotPasswordPage /> },
-  { path: '/verify/:code', element: <VerifyPage /> },
-  { path: '/offers/:token', element: <OfferPage /> },
-  siteRoute,
-  { path: '/onboarding', element: <OnboardingPage /> },
+export const router = createBrowserRouter(
+  siteSlugFromHost()
+    ? [siteHostRoute]
+    : [
+        { path: '/sign-in', element: <SignInPage /> },
+        { path: '/sign-up', element: <SignUpPage /> },
+        { path: '/verify-email', element: <VerifyEmailPage /> },
+        { path: '/forgot-password', element: <ForgotPasswordPage /> },
+        { path: '/verify/:code', element: <VerifyPage /> },
+        { path: '/offers/:token', element: <OfferPage /> },
+        sitePathRoute,
+        { path: '/onboarding', element: <OnboardingPage /> },
 
-  {
-    path: '/',
-    element: (
-      <RequireAuth>
-        <AppShell />
-      </RequireAuth>
-    ),
-    children: [
-      ...analyticsRoutes,
-      ...peopleRoutes,
-      ...teachingRoutes,
-      ...assessmentRoutes,
-      ...financeRoutes,
-      ...behaviourRoutes,
-      ...communicationRoutes,
-      ...administrationRoutes,
-      ...portalRoutes,
+        {
+          path: '/',
+          element: (
+            <RequireAuth>
+              <AppShell />
+            </RequireAuth>
+          ),
+          children: [
+            ...analyticsRoutes,
+            ...peopleRoutes,
+            ...teachingRoutes,
+            ...assessmentRoutes,
+            ...financeRoutes,
+            ...behaviourRoutes,
+            ...communicationRoutes,
+            ...administrationRoutes,
+            ...portalRoutes,
 
-      { path: 'dashboard', element: <Navigate to="/" replace /> },
-      { path: '*', element: <NotFoundPage /> },
-    ],
-  },
+            { path: 'dashboard', element: <Navigate to="/" replace /> },
+            { path: '*', element: <NotFoundPage /> },
+          ],
+        },
 
-  { path: '*', element: <NotFoundPage /> },
-]);
+        { path: '*', element: <NotFoundPage /> },
+      ],
+);
