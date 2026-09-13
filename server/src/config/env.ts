@@ -116,7 +116,7 @@ if (raw.NODE_ENV === 'production' && raw.DEV_AUTH_ENABLED) {
  * SDK needs them as real line breaks.
  */
 function normalisePrivateKey(key: string | undefined): string | undefined {
-  return key?.replace(/\n/g, '\n').replace(/^"|"$/g, '');
+  return key?.replace(/\\n/g, '\n').replace(/^"|"$/g, '');
 }
 
 export const env = {
