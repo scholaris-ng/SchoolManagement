@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
-import { Country, State } from 'country-state-city';
+import { City, Country, State } from 'country-state-city';
 import { useSchool, useUpdateSchool } from './api';
 import { isApiError } from '@/lib/api-error';
 import type { School } from '@/types/tenant';
@@ -139,6 +139,17 @@ export function SchoolSettingsPage() {
   // has nothing to show.
   const states = draft.settings?.country ? State.getStatesOfCountry(draft.settings.country) : [];
 
+  // Cities belong to a state the same way states belong to a country above —
+  // looked up by the state's ISO code since that's what the dataset indexes
+  // by, not the name the form stores. A state the dataset holds no cities
+  // for falls back to a free text box below rather than trapping the user
+  // with nothing to choose.
+  const selectedState = states.find((entry) => entry.name === draft.state);
+  const cities =
+    draft.settings?.country && selectedState
+      ? City.getCitiesOfState(draft.settings.country, selectedState.isoCode)
+      : [];
+
   return (
     <PageContainer>
       <UnsavedChangesGuard when={dirty && !update.isPending} />
@@ -235,12 +246,29 @@ export function SchoolSettingsPage() {
                 onChange={(event) => set({ addressLine1: event.target.value })}
               />
             </Field>
-            <Field label="City" required error={fieldErrors.city}>
-              <Input
-                data-cy="school-settings-city"
-                value={draft.city ?? ''}
-                onChange={(event) => set({ city: event.target.value })}
-              />
+            <Field
+              label="City"
+              required
+              error={fieldErrors.city}
+              hint={cities.length === 0 && !selectedState ? 'Pick a state to choose from a list.' : undefined}
+            >
+              {cities.length > 0 ? (
+                <Select
+                  data-cy="school-settings-city"
+                  aria-label="City"
+                  invalid={Boolean(fieldErrors.city)}
+                  value={draft.city || undefined}
+                  onValueChange={(city) => set({ city })}
+                  options={cities.map((entry) => ({ value: entry.name, label: entry.name }))}
+                  placeholder="Select a city"
+                />
+              ) : (
+                <Input
+                  data-cy="school-settings-city"
+                  value={draft.city ?? ''}
+                  onChange={(event) => set({ city: event.target.value })}
+                />
+              )}
             </Field>
             <Field
               label="State"
@@ -256,7 +284,9 @@ export function SchoolSettingsPage() {
                 value={states.find((entry) => entry.name === draft.state)?.isoCode}
                 onValueChange={(isoCode) => {
                   const match = states.find((entry) => entry.isoCode === isoCode);
-                  if (match) set({ state: match.name });
+                  // The city box above picks from this state's list; the old
+                  // value is very unlikely to still be one of them.
+                  if (match) set({ state: match.name, city: '' });
                 }}
                 options={states.map((entry) => ({ value: entry.isoCode, label: entry.name }))}
                 placeholder="Select a state"

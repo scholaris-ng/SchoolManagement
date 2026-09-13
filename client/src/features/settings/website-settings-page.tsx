@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, ExternalLink, Globe, Plus, Save, Trash2 } from 'lucide-react';
 import { isApiError } from '@/lib/api-error';
 import { sitePathUrlForSlug } from '@/features/site/site-host';
-import { useUpdateWebsite, useWebsite } from './api';
+import { useSchool, useUpdateWebsite, useWebsite } from './api';
+import { PhoneNumberInput } from '@/components/forms/phone-field';
 import type { WebsiteContent } from '@/types/engagement';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -83,21 +84,35 @@ function CopyButton({ value, label }: { value: string; label: string }) {
  */
 export function WebsiteSettingsPage() {
   const website = useWebsite();
+  const school = useSchool();
   const update = useUpdateWebsite();
 
   const [draft, setDraft] = useState<WebsiteContent | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  // The school's own phone and address (school-settings-page, under
+  // Identity) are the obvious default for the public contact details here —
+  // waiting on both queries before ever seeding `draft` means a website
+  // record created back when the school's address was still blank picks up
+  // the real address the moment it exists, rather than staying stuck at
+  // whatever was empty on first load.
   useEffect(() => {
-    if (website.data) {
-      setDraft(website.data);
+    if (website.data && school.data) {
+      const fallbackAddress = [school.data.addressLine1, school.data.city, school.data.state]
+        .filter(Boolean)
+        .join(', ');
+      setDraft({
+        ...website.data,
+        contactPhone: website.data.contactPhone || school.data.phone || '',
+        address: website.data.address || fallbackAddress,
+      });
       setDirty(false);
     }
-  }, [website.data]);
+  }, [website.data, school.data]);
 
   const headerBreadcrumbs = [{ label: 'Administration' }, { label: 'Website' }];
 
-  if (website.isPending || !draft) {
+  if (website.isPending || school.isPending || !draft) {
     return (
       <PageContainer>
         <PageHeader loading title="" breadcrumbs={headerBreadcrumbs} />
@@ -111,6 +126,15 @@ export function WebsiteSettingsPage() {
       <PageContainer>
         <PageHeader title="Website" breadcrumbs={headerBreadcrumbs} />
         <ErrorState error={website.error} onRetry={() => void website.refetch()} />
+      </PageContainer>
+    );
+  }
+
+  if (school.isError) {
+    return (
+      <PageContainer>
+        <PageHeader title="Website" breadcrumbs={headerBreadcrumbs} />
+        <ErrorState error={school.error} onRetry={() => void school.refetch()} />
       </PageContainer>
     );
   }
@@ -361,12 +385,12 @@ export function WebsiteSettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="site-phone">Phone</Label>
-              <Input
+              <PhoneNumberInput
                 data-cy="site-phone"
                 id="site-phone"
-                type="tel"
                 value={draft.contactPhone}
-                onChange={(event) => set({ contactPhone: event.target.value })}
+                onChange={(phone) => set({ contactPhone: phone })}
+                defaultCountry={school.data?.settings?.country}
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
