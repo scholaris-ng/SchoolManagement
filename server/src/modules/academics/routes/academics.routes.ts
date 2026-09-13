@@ -43,7 +43,18 @@ router.patch('/academics/sessions/:id', manage, validate(updateSessionSchema), S
 router.delete('/academics/sessions/:id', manage, validate(idParamSchema), Structure.removeSession);
 
 // ─── Terms ───────────────────────────────────────────────────────────────────
-router.get('/academics/terms', read, validate(fetchTermsSchema), Structure.terms);
+/**
+ * A parent or pupil holds none of the academic-structure permissions, but
+ * still needs to pick a term when browsing attendance, results or behaviour
+ * history — every screen that reads one of those already scopes further, so
+ * naming which term exists is not itself a privileged thing to know.
+ */
+router.get(
+  '/academics/terms',
+  authorise('academics.read', 'attendance.read', 'result.read', 'behaviour.read'),
+  validate(fetchTermsSchema),
+  Structure.terms,
+);
 router.post('/academics/terms', manage, validate(createTermSchema), Structure.createTerm);
 router.patch('/academics/terms/:id', manage, validate(updateTermSchema), Structure.updateTerm);
 router.post('/academics/terms/:id/set-current', manage, validate(idParamSchema), Structure.setCurrentTerm);

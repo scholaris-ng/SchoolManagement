@@ -290,6 +290,30 @@ export class PaymentRepository extends TenantRepository<Payment> {
     return { count: Number(row?.count ?? 0), amount: Number(row?.amount ?? 0) };
   }
 
+  /** The last few credits across a named set of children — the parent dashboard's list. */
+  async recentForStudents(
+    schoolId: string,
+    studentIds: string[],
+    limit: number,
+  ): Promise<
+    { id: string; studentName: string; amount: number; paidAt: string; receiptNo: string | null }[]
+  > {
+    if (studentIds.length === 0) return [];
+
+    return this.repo.query(
+      `SELECT p.id,
+              COALESCE(s.first_name || ' ' || s.last_name, p.payer_name, '—') AS "studentName",
+              p.amount::float AS amount, p.paid_at AS "paidAt",
+              p.reference AS "receiptNo"
+         FROM payments p
+         LEFT JOIN students s ON s.id = p.student_id
+        WHERE p.school_id = $1 AND p.status = 'SUCCESSFUL' AND p.student_id = ANY($2::uuid[])
+        ORDER BY p.paid_at DESC, p.id ASC
+        LIMIT $3`,
+      [schoolId, studentIds, limit],
+    );
+  }
+
   /** The last few credits, newest first, for the bursar's landing screen. */
   async recentForDashboard(
     schoolId: string,

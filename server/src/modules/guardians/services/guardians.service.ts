@@ -5,6 +5,9 @@ import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { EmailVerificationRepository } from '../../auth/repositories/emailVerification.repository';
+import { UserRepository } from '../../auth/repositories/user.repository';
+import { getIdentityProvider } from '../../../shared/services/identity.service';
+import { generateTemporaryPassword } from '../../../shared/utils/password';
 import { sendGuardianInviteEmail } from '../../../shared/utils/mailer';
 import { env } from '../../../config/env';
 import { StudentRepository } from '../../students/repositories/student.repository';
@@ -28,6 +31,7 @@ export class GuardiansService {
 
   private constructor(
     private readonly guardians = GuardianRepository.Instance,
+    private readonly users = UserRepository.Instance,
     private readonly students = StudentRepository.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
@@ -247,11 +251,16 @@ export class GuardiansService {
    * `StudentAccessService` reads to decide they may see their own children and
    * nobody else's.
    *
-   * Deliberately does NOT create a Firebase credential or set a password. The
-   * guardian proves their own address and chooses their own password through
-   * the normal sign-up flow; a school that could set it would be a school that
-   * could read their child's portal as them. The membership simply waits for
-   * that first sign-in to find it, matched on email.
+   * Does not set a password the guardian will ever type: a school choosing
+   * one would be a school that could read their child's portal as them. A
+   * real Firebase credential is provisioned regardless, behind a password
+   * nobody is told, purely so the address-confirmation code below and the
+   * "set your password" link that follows it (`RegistrationService`,
+   * `sendPasswordResetEmail`) have a credential to act on — the guardian
+   * still proves the address is theirs and chooses their own password before
+   * either does anything. An address that already holds a credential, from a
+   * child at another school on the platform, is adopted rather than
+   * recreated, and signs in with the account they already have.
    */
   async invite(
     context: RequestContext,
@@ -260,56 +269,97 @@ export class GuardiansService {
     const guardian = await this.guardians.findByIdScoped(context.schoolId, guardianId);
     if (!guardian) throw AppError.notFound('Guardian');
 
+    // An `invite:` prefixed uid is this method's own former placeholder, from
+    // before a real credential was provisioned here — never a real Firebase
+    // uid, which is never colon-separated. Treated as no credential at all,
+    // so a guardian invited under the old behaviour is repaired the next time
+    // anyone invites (or resends to) them, rather than staying stuck forever.
+    const existingUser = await this.users.findByEmail(guardian.email);
+    const hasRealCredential = Boolean(
+      existingUser?.firebaseUid && !existingUser.firebaseUid.startsWith('invite:'),
+    );
+    let firebaseUid = hasRealCredential ? existingUser!.firebaseUid : null;
+    let createdIdentity = false;
+
+    if (!firebaseUid) {
+      const identity = getIdentityProvider();
+      const created = await identity.createUser({
+        email: guardian.email,
+        password: generateTemporaryPassword(),
+        displayName: `${guardian.firstName} ${guardian.lastName}`,
+      });
+      firebaseUid = created.uid;
+      createdIdentity = true;
+    }
+
     let invitedUserId: string | null = null;
 
-    await AppDataSource.transaction(async (manager) => {
-      await manager.query(
-        `UPDATE guardians SET has_portal_access = TRUE, invited_at = now(), updated_at = now()
-          WHERE id = $1`,
-        [guardianId],
-      );
+    try {
+      await AppDataSource.transaction(async (manager) => {
+        await manager.query(
+          `UPDATE guardians SET has_portal_access = TRUE, invited_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [guardianId],
+        );
 
-      // Adopt an existing user with this address rather than creating a second
-      // one — a parent who already has a child at another school on the
-      // platform signs in with the account they already have.
-      const [user] = await manager.query(
-        `INSERT INTO users (firebase_uid, email, first_name, last_name, display_name, email_verified)
-         VALUES ($1, $2, $3, $4, $5, FALSE)
-         ON CONFLICT (email) DO UPDATE SET updated_at = now()
-         RETURNING id`,
-        [
-          `invite:${guardian.email}`,
-          guardian.email,
-          guardian.firstName,
-          guardian.lastName,
-          `${guardian.firstName} ${guardian.lastName}`,
-        ],
-      );
+        // Adopt an existing user with this address rather than creating a
+        // second one — a parent who already has a child at another school on
+        // the platform signs in with the account they already have. On that
+        // path `firebaseUid` is theirs already, so the conflict update below
+        // leaves it untouched; it only overwrites `firebase_uid` when this
+        // call is the one that just minted it, which also repairs a row still
+        // carrying the old `invite:` placeholder.
+        const [user] = await manager.query(
+          `INSERT INTO users (firebase_uid, email, first_name, last_name, display_name, email_verified)
+           VALUES ($1, $2, $3, $4, $5, FALSE)
+           ON CONFLICT (email) DO UPDATE SET
+             ${createdIdentity ? 'firebase_uid = EXCLUDED.firebase_uid, ' : ''}updated_at = now()
+           RETURNING id`,
+          [
+            firebaseUid,
+            guardian.email,
+            guardian.firstName,
+            guardian.lastName,
+            `${guardian.firstName} ${guardian.lastName}`,
+          ],
+        );
 
-      const [membership] = await manager.query(
-        `INSERT INTO school_memberships (user_id, school_id, guardian_id, status, invited_at)
-         VALUES ($1, $2, $3, 'ACTIVE', now())
-         ON CONFLICT (user_id, school_id)
-         DO UPDATE SET guardian_id = EXCLUDED.guardian_id, status = 'ACTIVE', updated_at = now()
-         RETURNING id`,
-        [user.id, context.schoolId, guardianId],
-      );
+        const [membership] = await manager.query(
+          `INSERT INTO school_memberships (user_id, school_id, guardian_id, status, invited_at)
+           VALUES ($1, $2, $3, 'ACTIVE', now())
+           ON CONFLICT (user_id, school_id)
+           DO UPDATE SET guardian_id = EXCLUDED.guardian_id, status = 'ACTIVE', updated_at = now()
+           RETURNING id`,
+          [user.id, context.schoolId, guardianId],
+        );
 
-      await manager.query(
-        `INSERT INTO membership_roles (membership_id, role_id)
-         SELECT $1, r.id FROM roles r
-         WHERE r.school_id = $2 AND r.key = 'PARENT' AND r.deleted_at IS NULL
-         ON CONFLICT (membership_id, role_id) DO NOTHING`,
-        [membership.id, context.schoolId],
-      );
+        await manager.query(
+          `INSERT INTO membership_roles (membership_id, role_id)
+           SELECT $1, r.id FROM roles r
+           WHERE r.school_id = $2 AND r.key = 'PARENT' AND r.deleted_at IS NULL
+           ON CONFLICT (membership_id, role_id) DO NOTHING`,
+          [membership.id, context.schoolId],
+        );
 
-      await manager.query(`UPDATE guardians SET user_id = $1 WHERE id = $2`, [
-        user.id,
-        guardianId,
-      ]);
+        await manager.query(`UPDATE guardians SET user_id = $1 WHERE id = $2`, [
+          user.id,
+          guardianId,
+        ]);
 
-      invitedUserId = user.id;
-    });
+        invitedUserId = user.id;
+      });
+    } catch (error) {
+      // The credential now points at nothing on our side. Leaving it behind
+      // would block this email address from ever being invited again.
+      if (createdIdentity) {
+        await getIdentityProvider()
+          .deleteUser(firebaseUid)
+          .catch((cleanupError) => {
+            console.error('[guardian] Orphaned identity could not be removed:', cleanupError);
+          });
+      }
+      throw error;
+    }
 
     // Outside the transaction: the invitation has already been granted, and a
     // mail failure must not roll that back. A resend fixes a lost email.

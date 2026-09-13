@@ -347,6 +347,29 @@ export class AttendanceRepository extends TenantRepository<AttendanceRecord> {
     );
   }
 
+  /**
+   * One pupil's own rate over a window — the parent dashboard's tile.
+   *
+   * Unlike `rateByClass`, a row is always returned rather than omitted when
+   * nothing has been marked: the card this feeds needs a definite number to
+   * show, the same reasoning `fetchDailyRate` already applies school-wide.
+   */
+  async rateForStudent(schoolId: string, studentId: string, window: { from: string; to: string }): Promise<number> {
+    const [row] = await this.repo.query(
+      `SELECT COALESCE(
+                ROUND(
+                  100.0 * COUNT(*) FILTER (WHERE status IN ${PRESENT_STATUSES})
+                  / NULLIF(COUNT(*), 0)
+                ),
+                0
+              )::int AS "attendanceRate"
+         FROM attendance_records
+        WHERE school_id = $1 AND student_id = $2 AND date BETWEEN $3::date AND $4::date`,
+      [schoolId, studentId, window.from, window.to],
+    );
+    return Number(row?.attendanceRate ?? 0);
+  }
+
   /** Today, across the school: the admin dashboard's headline pair. */
   async fetchDailyRate(schoolId: string, date: string): Promise<DailyAttendanceRow> {
     const [row] = await this.repo.query(

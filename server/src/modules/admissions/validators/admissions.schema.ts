@@ -140,11 +140,6 @@ export const transitionAdmissionSchema = z.object({
 export const convertAdmissionSchema = z.object({
   params: admissionIdParamSchema.shape.params,
   body: z.object({
-    admissionNo: z
-      .string()
-      .trim()
-      .min(1, 'Give the new student an admission number')
-      .max(32),
     classId: z.string().uuid('Choose the class they will join'),
   }),
 });

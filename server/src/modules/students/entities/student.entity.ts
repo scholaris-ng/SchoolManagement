@@ -50,6 +50,15 @@ export class Student extends SoftDeletableEntity {
   @Column({ type: 'varchar', name: 'admission_no', length: 32 })
   admissionNo: string;
 
+  /**
+   * The number behind an auto-generated admission number, so the next one is
+   * `MAX + 1` per school. Null for a student admitted before this counter
+   * existed, or created somewhere that doesn't use it (the student form, an
+   * import) — `MAX()` skips those rows rather than treating them as zero.
+   */
+  @Column({ type: 'int', nullable: true })
+  sequence: number | null;
+
   @Column({ type: 'varchar', name: 'first_name', length: 60 })
   firstName: string;
 

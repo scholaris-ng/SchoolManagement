@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { SelectField, TextField } from '@/components/forms/form-field';
+import { SelectField } from '@/components/forms/form-field';
 import { Alert } from '@/components/ui/feedback';
 import { FormError } from '@/components/forms/form-actions';
 
@@ -42,7 +42,7 @@ export function ConvertApplicantDialog({
 
   const form = useForm<ConversionValues>({
     resolver: zodResolver(conversionSchema),
-    defaultValues: { admissionNo: '', classId: application.offeredClassId ?? '' },
+    defaultValues: { classId: application.offeredClassId ?? '' },
   });
 
   const applicantName = [application.applicant.firstName, application.applicant.lastName].join(' ');
@@ -76,14 +76,6 @@ export function ConvertApplicantDialog({
           <DialogBody className="space-y-4">
             <FormError error={convert.error} />
 
-            <TextField
-              control={form.control}
-              name="admissionNo"
-              label="Admission number"
-              required
-              placeholder="e.g. SCH/2026/0142"
-              hint="Must be unique within this school."
-            />
             <SelectField
               control={form.control}
               name="classId"
@@ -101,7 +93,10 @@ export function ConvertApplicantDialog({
 
             <Alert tone="info" title="What happens next">
               <ul className="list-disc space-y-0.5 pl-4">
-                <li>A student record is created and added to the class register.</li>
+                <li>
+                  A student record is created — with an admission number the school assigns
+                  automatically — and added to the class register.
+                </li>
                 <li>
                   The {application.contacts.length} contact
                   {application.contacts.length === 1 ? '' : 's'} on this application become guardian
@@ -109,7 +104,10 @@ export function ConvertApplicantDialog({
                   first point at which they do.
                 </li>
                 <li>An enrolment record is opened for the session applied for.</li>
-                <li>Portal access stays closed until a guardian is invited from their record.</li>
+                <li>
+                  Each guardian without portal access already is emailed an invitation, unless
+                  they already have one from another child.
+                </li>
                 <li>Photo consent starts off, until a guardian gives it.</li>
               </ul>
             </Alert>

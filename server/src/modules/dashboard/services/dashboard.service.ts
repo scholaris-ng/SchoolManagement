@@ -1,6 +1,7 @@
 import type { RequestContext } from '../../../shared/types/context';
 import { AppError } from '../../../shared/errors/AppError';
 import { StudentRepository } from '../../students/repositories/student.repository';
+import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { AuditRepository } from '../../audit/repositories/audit.repository';
@@ -11,9 +12,12 @@ import { AttendanceRepository } from '../../attendance/repositories/attendance.r
 import { AdmissionRepository } from '../../admissions/repositories/admission.repository';
 import { PaymentRepository } from '../../finance/repositories/payment.repository';
 import { LedgerRepository } from '../../finance/repositories/ledger.repository';
+import { NotificationRepository } from '../../notifications/repositories/notification.repository';
 import type {
   AdminDashboardDTO,
   BursarDashboardDTO,
+  ParentChildSummaryDTO,
+  ParentDashboardDTO,
   StatDeltaDTO,
   TeacherDashboardDTO,
 } from '../dto/dashboard.dto';
@@ -60,6 +64,8 @@ export class DashboardService {
     private readonly admissions = AdmissionRepository.Instance,
     private readonly payments = PaymentRepository.Instance,
     private readonly ledger = LedgerRepository.Instance,
+    private readonly notifications = NotificationRepository.Instance,
+    private readonly studentAccess = StudentAccessService.Instance,
   ) {}
 
   async fetchAdmin(context: RequestContext): Promise<AdminDashboardDTO> {
@@ -246,6 +252,96 @@ export class DashboardService {
       unreconciled,
       topDebtors,
       collectionTrend,
+    };
+  }
+
+  /**
+   * A guardian's landing screen: their children, one row each.
+   *
+   * Identity, attendance and outstanding balance are real, read the same way
+   * `fetchAdmin` and `fetchBursar` do. Results, messaging and the calendar
+   * have no table yet and are answered null, zero or empty rather than
+   * fabricated — see `ParentDashboardDTO`.
+   */
+  async fetchParent(context: RequestContext): Promise<ParentDashboardDTO> {
+    const { schoolId } = context;
+
+    const [school, visibleIds] = await Promise.all([
+      this.schools.findById(schoolId),
+      this.studentAccess.visibleStudentIds(context),
+    ]);
+    if (!school) throw AppError.notFound('School');
+
+    const currency = school.settings?.currency ?? 'NGN';
+    const childIds = visibleIds ?? [];
+
+    if (childIds.length === 0) {
+      return {
+        currency,
+        children: [],
+        recentPayments: [],
+        // Calendar module: no events table.
+        upcomingEvents: [],
+        unreadNotifications: await this.notifications.countUnread(schoolId, context.user.id),
+      };
+    }
+
+    // "This term" needs a current term to bound it. A school with none set
+    // yet (a fresh setup) has nothing to measure a rate against, not a rate
+    // of zero — zero would read as a child who has missed every day.
+    const terms = await this.terms.fetchForSchool(schoolId);
+    const currentTerm = terms.find((term) => term.isCurrent);
+
+    const [summaries, attendanceRates, ledgerSummaries, recentPayments, unreadNotifications] =
+      await Promise.all([
+        this.students.parentSummariesFor(schoolId, childIds),
+        currentTerm
+          ? Promise.all(
+              childIds.map((id) =>
+                this.attendance.rateForStudent(schoolId, id, {
+                  from: currentTerm.startDate,
+                  to: currentTerm.endDate,
+                }),
+              ),
+            )
+          : Promise.resolve(childIds.map(() => 0)),
+        Promise.all(childIds.map((id) => this.ledger.summaryFor(schoolId, id))),
+        this.payments.recentForStudents(schoolId, childIds, RECENT_PAYMENTS_LIMIT),
+        this.notifications.countUnread(schoolId, context.user.id),
+      ]);
+
+    const attendanceByStudent = new Map(childIds.map((id, index) => [id, attendanceRates[index]]));
+    const balanceByStudent = new Map(
+      childIds.map((id, index) => [id, ledgerSummaries[index]?.balance ?? 0]),
+    );
+
+    const children: ParentChildSummaryDTO[] = summaries.map((summary) => ({
+      studentId: summary.studentId,
+      fullName: summary.fullName,
+      admissionNo: summary.admissionNo,
+      photoUrl: summary.photoUrl,
+      className: summary.className,
+      attendanceRate: attendanceByStudent.get(summary.studentId) ?? 0,
+      // Assessment module: no score sheet or result table.
+      lastTermAverage: null,
+      currentTermAverage: null,
+      position: null,
+      classSize: null,
+      outstandingBalance: balanceByStudent.get(summary.studentId) ?? 0,
+      // Engagement module: no message table.
+      unreadMessages: 0,
+      housePoints: summary.housePoints,
+      // Assessment module again: nothing has been published to be flagged here.
+      resultPublished: false,
+    }));
+
+    return {
+      currency,
+      children,
+      recentPayments,
+      // Calendar module: no events table.
+      upcomingEvents: [],
+      unreadNotifications,
     };
   }
 }

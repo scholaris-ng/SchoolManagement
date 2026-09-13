@@ -129,7 +129,6 @@ export const admissionFormSchema = z
 export type AdmissionFormValues = z.infer<typeof admissionFormSchema>;
 
 export const conversionSchema = z.object({
-  admissionNo: z.string().trim().min(1, 'Give the new student an admission number').max(32),
   classId: z.string().min(1, 'Choose the class they will join'),
 });
 

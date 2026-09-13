@@ -18,6 +18,7 @@ import { Guardian } from '../../guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../guardians/entities/studentGuardian.entity';
 import { WebsiteRepository } from '../../school/repositories/website.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
+import { GuardiansService } from '../../guardians/services/guardians.service';
 import { AdmissionRepository } from '../repositories/admission.repository';
 import {
   AdmissionApplication,
@@ -83,6 +84,7 @@ export class AdmissionsService {
     private readonly applications = AdmissionRepository.Instance,
     private readonly websites = WebsiteRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
+    private readonly guardians = GuardiansService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
   ) {}
@@ -670,19 +672,25 @@ export class AdmissionsService {
     });
     if (!schoolClass) throw AppError.notFound('Class');
 
-    const clash = await AppDataSource.getRepository(Student).findOne({
-      where: { schoolId: context.schoolId, admissionNo: input.admissionNo },
-      withDeleted: true,
-    });
-    if (clash) throw AppError.conflict('That admission number is already in use.');
+    const school = await this.schools.findById(context.schoolId);
+    if (!school) throw AppError.internal();
 
     const admissionDate = new Date().toISOString().slice(0, 10);
+    const admissionYear = admissionDate.slice(0, 4);
 
-    const student = await AppDataSource.transaction(async (manager) => {
+    const { student, guardianIdsToInvite } = await AppDataSource.transaction(async (manager) => {
+      const { admissionNo, sequence } = await this.nextAdmissionNo(
+        manager,
+        context.schoolId,
+        school.code,
+        admissionYear,
+      );
+
       const pupil = await manager.save(
         manager.create(Student, {
           schoolId: context.schoolId,
-          admissionNo: input.admissionNo,
+          admissionNo,
+          sequence,
           firstName: application.firstName,
           middleName: application.middleName,
           lastName: application.lastName,
@@ -720,7 +728,12 @@ export class AdmissionsService {
 
       await manager.increment(SchoolClass, { id: schoolClass.id }, 'enrolledCount', 1);
 
-      await this.promoteContacts(manager, context.schoolId, pupil.id, application.contacts);
+      const guardianIdsToInvite = await this.promoteContacts(
+        manager,
+        context.schoolId,
+        pupil.id,
+        application.contacts,
+      );
 
       await manager.update(
         AdmissionApplication,
@@ -732,11 +745,23 @@ export class AdmissionsService {
         status: 'ACCEPTED',
         actorUserId: context.user.id,
         actorName: context.user.displayName,
-        note: `Enrolled as ${input.admissionNo} in ${schoolClass.name}.`,
+        note: `Enrolled as ${admissionNo} in ${schoolClass.name}.`,
       });
 
-      return pupil;
+      return { student: pupil, guardianIdsToInvite };
     });
+
+    // Outside the transaction, the same way `GuardiansService.invite` itself
+    // keeps mail out of the transaction that grants access: a parent's inbox
+    // is not something a rollback can undo, and a mail failure here must not
+    // undo an enrolment that has already happened.
+    await Promise.all(
+      guardianIdsToInvite.map((guardianId) =>
+        this.guardians.invite(context, guardianId).catch((error) => {
+          console.error(`[admission.convert] Failed to invite guardian ${guardianId}:`, error);
+        }),
+      ),
+    );
 
     await this.audit.record(context, {
       action: 'admission.converted',
@@ -914,6 +939,37 @@ export class AdmissionsService {
   }
 
   /**
+   * The admission number for a newly enrolled student — the school's own
+   * code, then the year they were admitted, then the count within the
+   * school (`SCH/2026/0142`). Nothing the office types: a registrar reading
+   * one back over the phone still gets a number that means something years
+   * later, without inviting the clash a free-text box would.
+   *
+   * A school moving onto this from hand-assigned numbers may already have a
+   * student sitting on whatever this counter is about to produce — the
+   * counter alone doesn't know that — so this checks the generated number
+   * against the ones actually in use and, on the rare collision, moves to
+   * the next until it finds one that is not. The sequence it lands on is
+   * what gets saved, so future calls start past it.
+   */
+  private async nextAdmissionNo(
+    manager: EntityManager,
+    schoolId: string,
+    schoolCode: string,
+    admissionYear: string,
+  ): Promise<{ admissionNo: string; sequence: number }> {
+    let sequence = await StudentRepository.Instance.nextSequence(manager, schoolId);
+    let admissionNo = admissionNumber(schoolCode, admissionYear, sequence);
+
+    while (await StudentRepository.Instance.findByAdmissionNo(schoolId, admissionNo, manager)) {
+      sequence += 1;
+      admissionNo = admissionNumber(schoolCode, admissionYear, sequence);
+    }
+
+    return { admissionNo, sequence };
+  }
+
+  /**
    * Exactly one primary contact, whatever the form sent.
    *
    * Nobody primary means the school has no address for the decision letter;
@@ -944,17 +1000,24 @@ export class AdmissionsService {
   /**
    * Contacts → guardians, once and only once, inside the conversion.
    *
-   * Portal access is deliberately left closed. Enrolling a child creates the
-   * record; opening the portal to them is a separate, deliberate invitation
-   * from the guardians screen, which is what proves the address belongs to
-   * them before it can read a child's file.
+   * Returns the guardians this enrolment should invite to the portal —
+   * every contact who does not already have access, whether their `Guardian`
+   * row is brand new here or an existing one matched by email. A parent
+   * already using the portal for another child is left alone rather than
+   * re-invited. The invitation itself still goes out through `invite()`
+   * once this transaction has committed: it only grants access and sends the
+   * code that proves the address belongs to them, it never hands out a
+   * password, so an account existing early does not mean anyone can read a
+   * child's file before the parent completes that step.
    */
   private async promoteContacts(
     manager: EntityManager,
     schoolId: string,
     studentId: string,
     contacts: ApplicationContact[],
-  ): Promise<void> {
+  ): Promise<string[]> {
+    const guardianIdsToInvite: string[] = [];
+
     for (const contact of contacts) {
       const existing = await manager.findOne(Guardian, {
         where: { schoolId, email: contact.email },
@@ -980,6 +1043,8 @@ export class AdmissionsService {
           }),
         ));
 
+      if (!guardian.hasPortalAccess) guardianIdsToInvite.push(guardian.id);
+
       await manager.save(
         manager.create(StudentGuardian, {
           schoolId,
@@ -997,6 +1062,8 @@ export class AdmissionsService {
         }),
       );
     }
+
+    return guardianIdsToInvite;
   }
 
   private async requireSession(schoolId: string, sessionId: string): Promise<AcademicSession> {
@@ -1056,6 +1123,11 @@ function applicationNumber(sessionName: string, sequence: number): string {
     .slice(0, 20)
     .toUpperCase();
   return `APP/${session || 'SESSION'}/${String(sequence).padStart(4, '0')}`;
+}
+
+/** `SCH/2026/0142` — the school's code, the year admitted, then the count. */
+function admissionNumber(schoolCode: string, admissionYear: string, sequence: number): string {
+  return `${schoolCode}/${admissionYear}/${String(sequence).padStart(4, '0')}`;
 }
 
 /** A street line, city and state, joined the way a person would write them out. */

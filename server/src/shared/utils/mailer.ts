@@ -258,7 +258,11 @@ export async function sendGuardianInviteEmail(params: {
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
   const children = escapeHtml(childList);
-  const signInUrl = `${env.appUrl}/sign-in`;
+  // Straight to the code box, not `/sign-in` — nobody has a password to sign
+  // in with yet, and this is the page that gets them one. `email` rides in
+  // the query string because this link opens in a fresh tab with no app
+  // state behind it, unlike the in-app links that reach the same page.
+  const verifyUrl = `${env.appUrl}/verify-email?email=${encodeURIComponent(to)}`;
 
   const body = [
     heading(`${school} has invited you to the parent portal`),
@@ -268,8 +272,8 @@ export async function sendGuardianInviteEmail(params: {
     paragraph('Enter this code to confirm your email address and set a password:'),
     codeBox(escapeHtml(code)),
     paragraph(`The code expires in ${expiresInMinutes} minutes.`),
-    button('Open the parent portal', signInUrl),
-    buttonFallback(signInUrl),
+    button('Confirm your email', verifyUrl),
+    buttonFallback(verifyUrl),
     footnote(
       `If you were not expecting this, please contact ${school} directly — no account can be used until this code is entered.`,
     ),
@@ -285,7 +289,7 @@ export async function sendGuardianInviteEmail(params: {
       `${schoolName} has invited you to the Scholaris parent portal for ${childList}.`,
       '',
       `Your code is ${code}. It expires in ${expiresInMinutes} minutes.`,
-      `Open ${signInUrl} to confirm your address and set a password.`,
+      `Open ${verifyUrl} to confirm your address and set a password.`,
       '',
       `If you were not expecting this, please contact ${schoolName} directly.`,
     ].join('\n'),

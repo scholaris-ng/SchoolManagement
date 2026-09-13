@@ -254,13 +254,15 @@ export function AdmissionDetailPage() {
             {record.status === 'ACCEPTED' &&
               !record.convertedStudentId &&
               can({ allOf: ['student.create', 'guardian.manage'] }) && (
-                <Button
-                  data-cy="admissions-admission-detail-enrol-as-a-student"
-                  onClick={() => setConvertOpen(true)}
-                >
-                  <UserPlus />
-                  Enrol as a student
-                </Button>
+                <Tooltip content="Enrolling creates the pupil's record and the guardian's portal account — confirm the guardian has paid their deposit before doing this.">
+                  <Button
+                    data-cy="admissions-admission-detail-enrol-as-a-student"
+                    onClick={() => setConvertOpen(true)}
+                  >
+                    <UserPlus />
+                    Enrol as a student
+                  </Button>
+                </Tooltip>
               )}
             {record.convertedStudentId && (
               <Button data-cy="admissions-admission-detail-open-student-record" variant="outline" asChild>

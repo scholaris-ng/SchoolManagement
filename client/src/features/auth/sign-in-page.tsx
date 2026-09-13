@@ -26,7 +26,11 @@ export function SignInPage() {
 
   // Set by the verification page on its way here, so somebody who has just
   // finished registering is told it worked rather than facing a bare form.
-  const arrivedVerified = (location.state as { verified?: boolean } | null)?.verified === true;
+  const verifyState = location.state as { verified?: boolean; passwordLinkSent?: boolean } | null;
+  const arrivedVerified = verifyState?.verified === true;
+  // An invited guardian has no password yet — the verification page sent
+  // them one to set instead of signing them in directly.
+  const passwordLinkSent = verifyState?.passwordLinkSent === true;
 
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
@@ -110,7 +114,9 @@ export function SignInPage() {
 
           {arrivedVerified && !error && (
             <Alert tone="success" data-cy="sign-in-verified">
-              Your email is confirmed. Sign in to open your school.
+              {passwordLinkSent
+                ? 'Your email is confirmed. Check your inbox for a link to set your password, then sign in here.'
+                : 'Your email is confirmed. Sign in to open your school.'}
             </Alert>
           )}
 

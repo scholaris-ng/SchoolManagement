@@ -29,4 +29,12 @@ export class DashboardController {
       next(error);
     }
   }
+
+  static async fetchParent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(ApiResponse.ok(await service().fetchParent(contextOf(req))));
+    } catch (error) {
+      next(error);
+    }
+  }
 }

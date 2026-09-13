@@ -175,3 +175,47 @@ export interface BursarDashboardDTO {
   topDebtors: BursarTopDebtorDTO[];
   collectionTrend: BursarCollectionTrendPointDTO[];
 }
+
+export interface ParentChildSummaryDTO {
+  studentId: string;
+  fullName: string;
+  admissionNo: string;
+  photoUrl: string | null;
+  className: string | null;
+  attendanceRate: number;
+  lastTermAverage: number | null;
+  currentTermAverage: number | null;
+  position: number | null;
+  classSize: number | null;
+  outstandingBalance: number;
+  unreadMessages: number;
+  housePoints: number;
+  resultPublished: boolean;
+}
+
+export interface ParentRecentPaymentDTO {
+  id: string;
+  amount: number;
+  paidAt: string;
+  receiptNo: string | null;
+  studentName: string;
+}
+
+/**
+ * A guardian's landing screen, mirroring `ParentDashboard` in
+ * `client/src/types/analytics.ts` exactly.
+ *
+ * Each child's identity, attendance and outstanding balance are real, read
+ * from the students, attendance and finance modules respectively. Results
+ * (`lastTermAverage`, `currentTermAverage`, `position`, `classSize`,
+ * `resultPublished`), messaging (`unreadMessages`) and the calendar
+ * (`upcomingEvents`) have no table yet and are answered null, zero or empty —
+ * the same honest-absence choice `AdminDashboardDTO` makes.
+ */
+export interface ParentDashboardDTO {
+  currency: string;
+  children: ParentChildSummaryDTO[];
+  recentPayments: ParentRecentPaymentDTO[];
+  upcomingEvents: UpcomingEventDTO[];
+  unreadNotifications: number;
+}

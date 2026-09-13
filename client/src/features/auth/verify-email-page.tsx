@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,6 +34,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { signIn } = useAuth();
   const state = (location.state ?? null) as
     | { email?: string; schoolName?: string; password?: string }
@@ -43,7 +44,9 @@ export function VerifyEmailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
-  const email = useRef(state?.email ?? '').current;
+  // A guardian arrives here fresh from an emailed link, with no in-app state
+  // behind it — only a query string carries the address across that jump.
+  const email = useRef(state?.email ?? searchParams.get('email') ?? '').current;
   // Carried in memory only (never persisted) from sign-up or a sign-in
   // attempt that already proved it against Firebase — see those pages.
   const password = useRef(state?.password ?? '').current;
@@ -101,11 +104,21 @@ export function VerifyEmailPage() {
           // Fall through — the code was still valid, only the auto sign-in
           // didn't take.
         }
+      } else {
+        // Arriving with no password in hand means this code came from an
+        // invitation, not a sign-up — nobody has chosen one yet. The address
+        // is proven now, so a reset link can go out the same way it does for
+        // "forgot your password", and this is the one moment that link is
+        // guaranteed to reach a real inbox.
+        await AuthEndpoints.forgotPassword(email).catch(() => {
+          // Best-effort — the email is still confirmed either way, and the
+          // guardian can always ask for another link from "forgot password".
+        });
       }
 
       navigate('/sign-in', {
         replace: true,
-        state: { verified: true, email },
+        state: { verified: true, email, passwordLinkSent: !password },
       });
     } catch (cause) {
       setError(errorMessage(cause, 'That code could not be checked. Please try again.'));

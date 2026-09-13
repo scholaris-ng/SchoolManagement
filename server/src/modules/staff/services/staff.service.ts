@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import { In } from 'typeorm';
 import type { DeepPartial, EntityManager } from 'typeorm';
 import type { RequestContext } from '../../../shared/types/context';
@@ -6,6 +5,7 @@ import { AppError } from '../../../shared/errors/AppError';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { getIdentityProvider } from '../../../shared/services/identity.service';
+import { generateTemporaryPassword } from '../../../shared/utils/password';
 import { sendStaffAccountEmail } from '../../../shared/utils/mailer';
 import { AuditService } from '../../audit/services/audit.service';
 import { UserRepository } from '../../auth/repositories/user.repository';
@@ -26,35 +26,6 @@ import type { CreateStaffInput, FetchStaffQuery, UpdateStaffInput } from '../val
 function nullIfBlank<T extends string | null | undefined>(value: T): string | null {
   const trimmed = typeof value === 'string' ? value.trim() : value;
   return trimmed ? trimmed : null;
-}
-
-/**
- * A password nobody chose and nobody but the admin creating the account ever
- * sees — it is returned once, in the create response, and the school hands it
- * to the new employee to change at first sign-in. One of each character class
- * is forced in so it clears a typical strength check outright rather than
- * merely by chance.
- */
-function generateTemporaryPassword(): string {
-  const classes = [
-    'ABCDEFGHJKLMNPQRSTUVWXYZ',
-    'abcdefghijkmnpqrstuvwxyz',
-    '23456789',
-    '!@#$%^&*-_',
-  ];
-  const all = classes.join('');
-  const pick = (charset: string) => charset[randomInt(charset.length)];
-
-  const required = classes.map(pick);
-  const rest = Array.from({ length: 8 }, () => pick(all));
-  const chars = [...required, ...rest];
-
-  // Fisher-Yates, so the forced characters are not always the first four.
-  for (let i = chars.length - 1; i > 0; i -= 1) {
-    const j = randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
 }
 
 export interface CreateStaffResult {

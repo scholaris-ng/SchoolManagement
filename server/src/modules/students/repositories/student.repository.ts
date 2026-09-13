@@ -202,6 +202,28 @@ export class StudentRepository extends TenantRepository<Student> {
     );
   }
 
+  /* -- Numbering -------------------------------------------------------------- */
+
+  /**
+   * The next admission sequence number for a school, under an advisory lock
+   * held to the end of the transaction — the same approach `AdmissionRepository`
+   * and `InvoiceRepository` take: `MAX + 1` without one hands two students
+   * enrolled at once the same number, and the unique index then fails the
+   * second one's whole enrolment.
+   *
+   * Scoped to the school only, not a session — unlike an application or an
+   * invoice, an admission number is meant to last the student's whole time at
+   * the school, so the count never resets.
+   */
+  async nextSequence(manager: EntityManager, schoolId: string): Promise<number> {
+    await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`student-admission:${schoolId}`]);
+    const [row] = await manager.query(
+      `SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM students WHERE school_id = $1`,
+      [schoolId],
+    );
+    return Number(row?.next ?? 1);
+  }
+
   async create(data: DeepPartial<Student>, manager?: EntityManager): Promise<Student> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));
@@ -224,6 +246,37 @@ export class StudentRepository extends TenantRepository<Student> {
       .where('id = :id AND version = :expectedVersion', { id, expectedVersion })
       .execute();
     return (result.affected ?? 0) > 0;
+  }
+
+  /** The card-sized shape the parent dashboard shows per child, batched for however many it is asking about. */
+  async parentSummariesFor(
+    schoolId: string,
+    studentIds: string[],
+  ): Promise<
+    {
+      studentId: string;
+      fullName: string;
+      admissionNo: string;
+      photoUrl: string | null;
+      className: string | null;
+      housePoints: number;
+    }[]
+  > {
+    if (studentIds.length === 0) return [];
+
+    return this.repo.query(
+      `SELECT s.id AS "studentId",
+              concat_ws(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name) AS "fullName",
+              s.admission_no AS "admissionNo",
+              s.photo_url AS "photoUrl",
+              c.name AS "className",
+              COALESCE(h.points, 0)::int AS "housePoints"
+         FROM students s
+         LEFT JOIN school_classes c ON c.id = s.current_class_id AND c.deleted_at IS NULL
+         LEFT JOIN houses h         ON h.id = s.house_id         AND h.deleted_at IS NULL
+        WHERE s.school_id = $1 AND s.id = ANY($2::uuid[]) AND s.deleted_at IS NULL`,
+      [schoolId, studentIds],
+    );
   }
 
   /** Ids of the children a guardian is linked to — the parent portal's whole scope. */
