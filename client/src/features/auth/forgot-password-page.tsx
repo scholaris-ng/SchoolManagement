@@ -56,6 +56,10 @@ export function ForgotPasswordPage() {
                 If an account exists for {form.getValues('email')}, we have sent a link to reset
                 the password. It expires in one hour.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Don't see it? Check your spam or junk folder — and mark it as "Not spam" so future
+                emails land in your inbox.
+              </p>
             </div>
             <Button data-cy="auth-forgot-password-return-to-sign-in" variant="outline" block asChild>
               <Link to="/sign-in">Return to sign in</Link>

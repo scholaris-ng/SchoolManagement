@@ -96,7 +96,9 @@ export function ProfilePage() {
     try {
       await AuthEndpoints.forgotPassword(email);
       setResetSent(true);
-      toast.success('Check your inbox', { description: `We sent a reset link to ${email}.` });
+      toast.success('Check your inbox', {
+        description: `We sent a reset link to ${email}. Don't see it? Check spam or junk too.`,
+      });
     } catch (error) {
       toast.error('We could not send that email', {
         description: error instanceof Error ? error.message : undefined,

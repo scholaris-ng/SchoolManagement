@@ -160,6 +160,10 @@ export function VerifyEmailPage() {
             We sent a six-digit code to <span className="font-medium text-foreground">{email}</span>
             {state?.schoolName ? ` to finish setting up ${state.schoolName}.` : '.'}
           </p>
+          <p className="text-xs text-muted-foreground">
+            Don't see it? Check your spam or junk folder — and mark it as "Not spam" so future
+            emails land in your inbox.
+          </p>
         </div>
       </div>
 

@@ -115,7 +115,7 @@ export function SignInPage() {
           {arrivedVerified && !error && (
             <Alert tone="success" data-cy="sign-in-verified">
               {passwordLinkSent
-                ? 'Your email is confirmed. Check your inbox for a link to set your password, then sign in here.'
+                ? "Your email is confirmed. Check your inbox for a link to set your password, then sign in here. Don't see it? Check spam or junk too, and mark it as \"Not spam\"."
                 : 'Your email is confirmed. Sign in to open your school.'}
             </Alert>
           )}
