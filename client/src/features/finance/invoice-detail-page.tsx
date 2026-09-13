@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
-import { CreditCard, Printer, User } from 'lucide-react';
+import { CreditCard, MessageCircle, Printer, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { toast } from '@/lib/toast-bus';
 import { useInvoice } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/primitives';
@@ -79,6 +80,18 @@ export function InvoiceDetailPage() {
               <Button data-cy="finance-invoice-detail-print" variant="outline" onClick={() => window.print()}>
                 <Printer />
                 Print
+              </Button>
+              <Button
+                data-cy="finance-invoice-detail-whatsapp"
+                variant="outline"
+                onClick={() =>
+                  toast.info('Coming soon', {
+                    description: "Sending invoices straight to a guardian's WhatsApp is on the way.",
+                  })
+                }
+              >
+                <MessageCircle />
+                Send to WhatsApp
               </Button>
             </>
           }

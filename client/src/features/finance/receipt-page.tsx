@@ -1,8 +1,9 @@
 import { useParams } from 'react-router-dom';
-import { Printer } from 'lucide-react';
+import { MessageCircle, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
+import { toast } from '@/lib/toast-bus';
 import { useReceipt } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
@@ -59,10 +60,24 @@ export function ReceiptPage() {
           description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
           breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
           actions={
-            <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
-              <Printer />
-              Print
-            </Button>
+            <>
+              <Button
+                data-cy="finance-receipt-whatsapp"
+                variant="outline"
+                onClick={() =>
+                  toast.info('Coming soon', {
+                    description: "Sending receipts straight to a guardian's WhatsApp is on the way.",
+                  })
+                }
+              >
+                <MessageCircle />
+                Send to WhatsApp
+              </Button>
+              <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
+                <Printer />
+                Print
+              </Button>
+            </>
           }
         />
       </div>

@@ -84,13 +84,16 @@ export function ErrorState({
         ? 'You do not have access to this'
         : 'We could not load this');
 
-  const description = offline
-    ? 'Check your connection. We will try again automatically when it returns.'
-    : forbidden
-      ? 'Ask a school administrator if you believe you should be able to see it.'
-      : isApiError(error)
-        ? error.message
-        : 'An unexpected error occurred.';
+  const description =
+    offline
+      ? 'Check your connection. We will try again automatically when it returns.'
+      : !isApiError(error)
+        ? 'An unexpected error occurred.'
+        : forbidden
+          ? // The server names the exact permission missing — pass it through so
+            // whoever reads this knows what to ask a school administrator to grant.
+            `${error.message} Ask a school administrator to grant it.`
+          : error.message;
 
   return (
     <EmptyState

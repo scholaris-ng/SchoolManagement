@@ -61,7 +61,9 @@ function describeError(error: unknown): string {
     return error instanceof Error ? error.message : 'Something went wrong.';
   }
   const apiError = error as ApiError;
-  if (apiError.isForbidden) return 'You do not have permission to do that.';
+  // The server already names the exact reason (e.g. which permission is
+  // missing) — surface it instead of a generic string that hides it.
+  if (apiError.isForbidden) return apiError.message;
   if (apiError.isOffline) return 'You are offline. We will retry when the connection returns.';
   if (apiError.status >= 500) return 'The server had a problem. Please try again shortly.';
   return apiError.message;
