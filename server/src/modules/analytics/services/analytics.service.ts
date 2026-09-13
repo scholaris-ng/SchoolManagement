@@ -11,6 +11,7 @@ import { AttendanceRepository } from '../../attendance/repositories/attendance.r
 import { AdmissionsService } from '../../admissions/services/admissions.service';
 import { LedgerRepository } from '../../finance/repositories/ledger.repository';
 import { PaymentRepository } from '../../finance/repositories/payment.repository';
+import { AssessmentService } from '../../assessment/services/assessment.service';
 import type {
   AdmissionFunnelDTO,
   AttendanceTrendPointDTO,
@@ -25,16 +26,12 @@ import type {
  * The management analytics screen.
  *
  * Read-only aggregation. Attendance reads the register, admissions reads the
- * applications table, and finance now reads the ledger. Assessment is the last
- * one still an honest nothing — the same gap the admin dashboard reports as
- * zero. Its panel is still served rather than left to 404, because a screen
- * that renders "no data yet" tells the truth about an unbuilt module, while a
- * wall of failed requests only looks broken.
+ * applications table, finance reads the ledger, and assessment reads the
+ * approved and published score sheets.
  *
- * The methods still waiting on a module return real rows for the dimensions
- * that do exist (classes, staff, terms, sessions) and zero for the measures
- * that do not, so when a module lands only the measure has to change, not the
- * shape.
+ * Staff performance still returns real rows for the dimensions that exist and
+ * zero for the measures that have no source yet, so when one lands only the
+ * measure has to change, not the shape.
  */
 export class AnalyticsService {
   static Instance = new AnalyticsService();
@@ -48,6 +45,7 @@ export class AnalyticsService {
     private readonly scope = AcademicScopeService.Instance,
     private readonly ledger = LedgerRepository.Instance,
     private readonly payments = PaymentRepository.Instance,
+    private readonly assessment = AssessmentService.Instance,
   ) {}
 
   /* -- Academic ----------------------------------------------------------- */
@@ -57,20 +55,19 @@ export class AnalyticsService {
     termId?: string,
   ): Promise<ResultAnalyticsDTO> {
     const term = await this.resolveTerm(context.schoolId, termId);
-
-    return {
-      termName: term ? `${term.name}, ${term.sessionName}` : 'Current term',
-
-      // Assessment module: no assessment, score or grading-scheme tables exist,
-      // so nothing has been marked and there is no average to report. The
-      // subject, grade and class breakdowns are all projections of the same
-      // missing scores.
-      overallAverage: 0,
-      passRate: 0,
-      subjects: [],
-      gradeDistribution: [],
-      classComparison: [],
-    };
+    if (!term) {
+      // Nothing is marked outside a term, so with no current one there is no
+      // average to report — and saying so beats inventing a term.
+      return {
+        termName: 'Current term',
+        overallAverage: 0,
+        passRate: 0,
+        subjects: [],
+        gradeDistribution: [],
+        classComparison: [],
+      };
+    }
+    return this.assessment.resultAnalytics(context.schoolId, term);
   }
 
   /* -- Attendance --------------------------------------------------------- */

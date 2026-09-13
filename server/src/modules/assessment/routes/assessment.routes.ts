@@ -1,61 +1,81 @@
 import { Router } from 'express';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
+import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/unbuiltModule';
+import { AssessmentController } from '../controllers/assessment.controller';
 import {
-  emptyArray,
-  emptyPage,
-  placeholderListSchema,
-} from '../../../shared/placeholder/unbuiltModule';
+  broadsheetSchema,
+  createCommentTemplateSchema,
+  createGradingSchemeSchema,
+  fetchScoreSheetsSchema,
+  reportCardParamSchema,
+  saveReportCardCommentsSchema,
+  saveScoresSchema,
+  scoreSheetParamSchema,
+  studentResultsSchema,
+  transcriptParamSchema,
+  transitionScoreSheetSchema,
+  updateGradingSchemeSchema,
+} from '../validators/assessment.schema';
 
 /**
- * Assessment: computer-based tests, the question bank, and the score sheets
- * that feed a report card. None of it is modelled yet.
+ * Results (spec sections 19–22).
  *
- * This is the same absence `/analytics/results` already reports as a zero
- * average — no assessment exists, so nothing has been marked. Serving the lists
- * empty lets the screens draw their own empty states.
+ * Reading a sheet, card, broadsheet or transcript is `result.read` or
+ * `reportcard.read`/`transcript.read`; each is narrowed in the service to the
+ * pairs a teacher takes or the children a parent has. Entering marks is
+ * `result.enter`; the workflow's three steps are `result.enter`,
+ * `result.approve` and `result.publish` in turn, checked in the service so
+ * the error can say which step was missing.
  *
- * Nothing that writes is routed, and neither is anything under `/attempts`:
- * sitting a test, answering a question and submitting a paper are all writes
- * against a candidate's record, and a stub there would report a paper as taken.
+ * Computer-based tests are still lists with nothing behind them — see
+ * `cbt.routes.ts` when that lands.
+ *
+ * `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts.
  */
-/** `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts. */
 const router = Router();
 
+/* -- Grading schemes ------------------------------------------------------- */
+
+router.get('/grading-schemes', authorise('result.read', 'grading.manage'), AssessmentController.gradingSchemes);
+router.post('/grading-schemes', authorise('grading.manage'), validate(createGradingSchemeSchema), AssessmentController.createGradingScheme);
+router.patch('/grading-schemes/:id', authorise('grading.manage'), validate(updateGradingSchemeSchema), AssessmentController.updateGradingScheme);
+
+/* -- Score sheets ---------------------------------------------------------- */
+
+router.get('/score-sheets', authorise('result.read', 'result.enter'), validate(fetchScoreSheetsSchema), AssessmentController.scoreSheets);
+router.get('/score-sheets/:id', authorise('result.read', 'result.enter'), validate(scoreSheetParamSchema), AssessmentController.scoreSheet);
+router.patch('/score-sheets/:id/scores', authorise('result.enter', 'result.amend'), validate(saveScoresSchema), AssessmentController.saveScores);
+router.post(
+  '/score-sheets/:id/transition',
+  authorise('result.enter', 'result.approve', 'result.publish'),
+  validate(transitionScoreSheetSchema),
+  AssessmentController.transition,
+);
+
+/* -- Report cards, broadsheet, comments ------------------------------------ */
+
+router.get('/report-cards/:studentId/:termId', authorise('reportcard.read'), validate(reportCardParamSchema), AssessmentController.reportCard);
+router.patch(
+  '/report-cards/:studentId/:termId',
+  authorise('reportcard.generate'),
+  validate(saveReportCardCommentsSchema),
+  AssessmentController.saveReportCardComments,
+);
+/** The portal's results tab — a report card by another name. */
+router.get('/students/:studentId/results', authorise('result.read', 'reportcard.read'), validate(studentResultsSchema), AssessmentController.studentResults);
+router.get('/broadsheet', authorise('result.read'), validate(broadsheetSchema), AssessmentController.broadsheet);
+router.get('/comment-templates', authorise('result.read', 'reportcard.read'), AssessmentController.commentTemplates);
+router.post('/comment-templates', authorise('reportcard.generate'), validate(createCommentTemplateSchema), AssessmentController.createCommentTemplate);
+
+/* -- Transcripts ----------------------------------------------------------- */
+
+router.get('/transcripts/:studentId', authorise('transcript.read'), validate(transcriptParamSchema), AssessmentController.transcript);
+router.post('/transcripts/:studentId/issue', authorise('transcript.issue'), validate(transcriptParamSchema), AssessmentController.issueTranscript);
+
+/* -- Computer-based tests: lists only, nothing behind them yet ------------- */
+
 router.get('/assessments', authorise('cbt.read'), validate(placeholderListSchema), emptyPage);
-
-router.get(
-  '/questions',
-  authorise('cbt.read', 'question.manage'),
-  validate(placeholderListSchema),
-  emptyPage,
-);
-
-router.get(
-  '/score-sheets',
-  authorise('result.read', 'result.enter'),
-  validate(placeholderListSchema),
-  emptyPage,
-);
-
-/**
- * Grading schemes decide what a mark is worth. The client types them as a bare
- * array, and they are read by anyone who may see a result, not only by whoever
- * may edit the scheme.
- */
-router.get(
-  '/grading-schemes',
-  authorise('result.read', 'grading.manage'),
-  validate(placeholderListSchema),
-  emptyArray,
-);
-
-/** Stock remarks for report cards — read alongside the sheets they annotate. */
-router.get(
-  '/comment-templates',
-  authorise('result.read', 'reportcard.read'),
-  validate(placeholderListSchema),
-  emptyArray,
-);
+router.get('/questions', authorise('cbt.read', 'question.manage'), validate(placeholderListSchema), emptyPage);
 
 export default router;

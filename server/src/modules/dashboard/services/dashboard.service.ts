@@ -13,6 +13,7 @@ import { AdmissionRepository } from '../../admissions/repositories/admission.rep
 import { PaymentRepository } from '../../finance/repositories/payment.repository';
 import { LedgerRepository } from '../../finance/repositories/ledger.repository';
 import { NotificationRepository } from '../../notifications/repositories/notification.repository';
+import { AssessmentService } from '../../assessment/services/assessment.service';
 import type {
   AdminDashboardDTO,
   BursarDashboardDTO,

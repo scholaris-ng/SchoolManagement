@@ -24,6 +24,22 @@ import { Room } from '../../modules/academics/entities/room.entity';
 import { House } from '../../modules/academics/entities/house.entity';
 import { TimetablePeriod } from '../../modules/academics/entities/timetablePeriod.entity';
 import { AttendanceRecord } from '../../modules/attendance/entities/attendanceRecord.entity';
+import { TimetableEntry } from '../../modules/timetable/entities/timetableEntry.entity';
+import { Curriculum } from '../../modules/curriculum/entities/curriculum.entity';
+import { CurriculumTopic } from '../../modules/curriculum/entities/curriculumTopic.entity';
+import { LearningObjective } from '../../modules/curriculum/entities/learningObjective.entity';
+import { SchemeOfWork } from '../../modules/curriculum/entities/schemeOfWork.entity';
+import { SchemeWeek } from '../../modules/curriculum/entities/schemeWeek.entity';
+import { LessonNote } from '../../modules/curriculum/entities/lessonNote.entity';
+import { AssessmentComponent, GradeBand, GradingScheme } from '../../modules/assessment/entities/gradingScheme.entity';
+import { ScoreEntry, ScoreSheet } from '../../modules/assessment/entities/scoreSheet.entity';
+import { CommentTemplate, ReportCardRecord, TranscriptIssue } from '../../modules/assessment/entities/reportCard.entity';
+import { BehaviourScale } from '../../modules/behaviour/entities/behaviourScale.entity';
+import { BehaviourTrait } from '../../modules/behaviour/entities/behaviourTrait.entity';
+import { BehaviourObservation } from '../../modules/behaviour/entities/behaviourObservation.entity';
+import { HousePointAward } from '../../modules/behaviour/entities/housePointAward.entity';
+import { PickupPerson } from '../../modules/collection/entities/pickupPerson.entity';
+import { CollectionEvent } from '../../modules/collection/entities/collectionEvent.entity';
 import { Staff } from '../../modules/staff/entities/staff.entity';
 import { Student } from '../../modules/students/entities/student.entity';
 import { StudentEnrollment } from '../../modules/students/entities/studentEnrollment.entity';
@@ -78,6 +94,27 @@ export const entities = [
   StudentEnrollment,
   StudentDocument,
   AttendanceRecord,
+  TimetableEntry,
+  Curriculum,
+  CurriculumTopic,
+  LearningObjective,
+  SchemeOfWork,
+  SchemeWeek,
+  LessonNote,
+  GradingScheme,
+  AssessmentComponent,
+  GradeBand,
+  ScoreSheet,
+  ScoreEntry,
+  ReportCardRecord,
+  CommentTemplate,
+  TranscriptIssue,
+  BehaviourScale,
+  BehaviourTrait,
+  BehaviourObservation,
+  HousePointAward,
+  PickupPerson,
+  CollectionEvent,
   Guardian,
   StudentGuardian,
   AdmissionApplication,

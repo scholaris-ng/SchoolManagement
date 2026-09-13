@@ -33,8 +33,10 @@ import curriculumRoutes from './modules/curriculum/routes/curriculum.routes';
 import calendarRoutes from './modules/calendar/routes/calendar.routes';
 import financeRoutes from './modules/finance/routes/finance.routes';
 import publicPaymentsRoutes from './modules/finance/routes/publicPayments.routes';
+import publicVerifyRoutes from './modules/assessment/routes/publicVerify.routes';
 import assessmentRoutes from './modules/assessment/routes/assessment.routes';
 import behaviourRoutes from './modules/behaviour/routes/behaviour.routes';
+import collectionRoutes from './modules/collection/routes/collection.routes';
 import disciplineRoutes from './modules/discipline/routes/discipline.routes';
 import engagementRoutes from './modules/engagement/routes/engagement.routes';
 import timetableRoutes from './modules/timetable/routes/timetable.routes';
@@ -86,6 +88,7 @@ export function createApp(): Express {
   // tenant from.
   app.use(env.apiPrefix, publicAdmissionsRoutes);
   app.use(env.apiPrefix, publicPaymentsRoutes);
+  app.use(env.apiPrefix, publicVerifyRoutes);
   app.use(env.apiPrefix, authMiddleware, tenantMiddleware);
 
   const api = [
@@ -106,6 +109,7 @@ export function createApp(): Express {
     financeRoutes,
     assessmentRoutes,
     behaviourRoutes,
+    collectionRoutes,
     disciplineRoutes,
     engagementRoutes,
     timetableRoutes,
