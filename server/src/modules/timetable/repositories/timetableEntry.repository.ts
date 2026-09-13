@@ -109,6 +109,30 @@ export class TimetableEntryRepository extends TenantRepository<TimetableEntry> {
     );
   }
 
+  /**
+   * One teacher's lessons on one weekday, in period order — the teacher
+   * dashboard's "today". `attendanceTaken` is the register for that class on
+   * that date, which is what the tile is actually asking about.
+   */
+  async dayForTeacher(
+    schoolId: string,
+    teacherId: string,
+    day: Weekday,
+    date: string,
+  ): Promise<(TimetableEntryDTO & { attendanceTaken: boolean })[]> {
+    return this.repo.query(
+      `SELECT ${PROJECTION},
+              EXISTS (
+                SELECT 1 FROM attendance_records a
+                 WHERE a.school_id = e.school_id AND a.class_id = e.class_id AND a.date = $4::date
+              ) AS "attendanceTaken"
+         ${FROM}
+        WHERE e.school_id = $1 AND e.teacher_id = $2 AND e.day = $3
+        ORDER BY p.sequence ASC`,
+      [schoolId, teacherId, day, date],
+    );
+  }
+
   async findOneDTO(schoolId: string, id: string): Promise<TimetableEntryDTO | null> {
     const rows: TimetableEntryDTO[] = await this.repo.query(
       `SELECT ${PROJECTION} ${FROM} WHERE e.school_id = $1 AND e.id = $2`,

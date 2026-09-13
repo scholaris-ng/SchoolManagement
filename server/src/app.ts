@@ -35,6 +35,7 @@ import financeRoutes from './modules/finance/routes/finance.routes';
 import publicPaymentsRoutes from './modules/finance/routes/publicPayments.routes';
 import publicVerifyRoutes from './modules/assessment/routes/publicVerify.routes';
 import assessmentRoutes from './modules/assessment/routes/assessment.routes';
+import cbtRoutes from './modules/cbt/routes/cbt.routes';
 import behaviourRoutes from './modules/behaviour/routes/behaviour.routes';
 import collectionRoutes from './modules/collection/routes/collection.routes';
 import disciplineRoutes from './modules/discipline/routes/discipline.routes';
@@ -108,6 +109,7 @@ export function createApp(): Express {
     calendarRoutes,
     financeRoutes,
     assessmentRoutes,
+    cbtRoutes,
     behaviourRoutes,
     collectionRoutes,
     disciplineRoutes,

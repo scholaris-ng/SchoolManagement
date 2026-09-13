@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
+import { singleFileUpload } from '../../../shared/middleware/upload.middleware';
 import { FeeItemsController } from '../controllers/feeItems.controller';
 import { FeeStructuresController } from '../controllers/feeStructures.controller';
 import { DiscountsController } from '../controllers/discounts.controller';
 import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
+import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
 import {
   createFeeItemSchema,
   fetchFeeItemsSchema,
@@ -34,6 +36,14 @@ import {
   recordPaymentSchema,
   studentIdParamSchema,
 } from '../validators/payments.schema';
+import {
+  approvePaymentReceiptSchema,
+  fetchPaymentReceiptsSchema,
+  rejectPaymentReceiptSchema,
+  RECEIPT_FILE_MAX_BYTES,
+  RECEIPT_FILE_MIME_TYPES,
+  submitPaymentReceiptSchema,
+} from '../validators/paymentReceipts.schema';
 
 /**
  * The finance screens, end to end.
@@ -212,6 +222,50 @@ router.get(
   authorise('finance.read', 'payment.manage'),
   validate(studentIdParamSchema),
   PaymentsController.accountsForStudent,
+);
+
+/**
+ * A family's own photograph of a bank slip, submitted for the office to
+ * judge — see `PaymentReceiptsService`. `finance.read` is enough to submit
+ * one: a parent already holds it for their own children, scoped by
+ * `StudentAccessService` inside the service the same way `fetchPayments` is.
+ * Reviewing one, in contrast, is `payment.manage` — only the office turns a
+ * claim into a ledgered payment.
+ */
+router.post(
+  '/payment-receipts',
+  authorise('finance.read'),
+  singleFileUpload('file', RECEIPT_FILE_MIME_TYPES, RECEIPT_FILE_MAX_BYTES),
+  validate(submitPaymentReceiptSchema),
+  PaymentReceiptsController.submit,
+);
+
+router.get(
+  '/payment-receipts',
+  authorise('payment.manage'),
+  validate(fetchPaymentReceiptsSchema),
+  PaymentReceiptsController.fetchAll,
+);
+
+router.post(
+  '/payment-receipts/:id/approve',
+  authorise('payment.manage'),
+  validate(approvePaymentReceiptSchema),
+  PaymentReceiptsController.approve,
+);
+
+router.post(
+  '/payment-receipts/:id/reject',
+  authorise('payment.manage'),
+  validate(rejectPaymentReceiptSchema),
+  PaymentReceiptsController.reject,
+);
+
+router.get(
+  '/students/:id/payment-receipts',
+  authorise('finance.read'),
+  validate(studentIdParamSchema),
+  PaymentReceiptsController.fetchForStudent,
 );
 
 /** One family's statement. A parent may read their own children's and no others'. */

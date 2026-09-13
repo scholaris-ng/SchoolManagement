@@ -7,6 +7,7 @@ import { AttendanceRepository } from '../../attendance/repositories/attendance.r
 import { LedgerRepository } from '../../finance/repositories/ledger.repository';
 import { PaymentRepository } from '../../finance/repositories/payment.repository';
 import { NotificationRepository } from '../../notifications/repositories/notification.repository';
+import { AssessmentService } from '../../assessment/services/assessment.service';
 import type { RequestContext } from '../../../shared/types/context';
 import type { TermDTO } from '../../academics/dto/academics.dto';
 import type { School } from '../../school/entities/school.entity';
@@ -29,6 +30,17 @@ const currentTermCovering = (from: string, to: string) =>
 describe('DashboardService.fetchParent', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  // Results are the assessment module's to answer; these specs are about the rest.
+  beforeEach(() => {
+    jest.spyOn(AssessmentService.Instance, 'childResultSummary').mockResolvedValue({
+      currentTermAverage: null,
+      lastTermAverage: null,
+      position: null,
+      classSize: null,
+      resultPublished: false,
+    });
   });
 
   it('sends an empty screen, but a real notification count, for a guardian with no linked children', async () => {

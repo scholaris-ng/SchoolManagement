@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
-import { PaymentAccountsCard } from './payment-accounts-card';
+// Raven's collection-account flow (`PaymentAccountsCard`) is disabled — see
+// the note above its commented-out usage below.
+// import { PaymentAccountsCard } from './payment-accounts-card';
 import { Field, Row } from './invoice-detail-page-parts';
 
 export function InvoiceDetailPage() {
@@ -180,12 +182,13 @@ export function InvoiceDetailPage() {
       </Card>
 
       {/*
-        Only while something is still owed, and never on the printed copy: a
-        family holding a paid receipt does not need somewhere to pay, and the
-        account number belongs to this bill specifically — a credit landing on
-        it settles this invoice rather than sitting on account.
+        Disabled: Raven's collection-account issuing is not working end to
+        end yet. Re-enable by uncommenting this and the import above once it
+        is (was: only while something is still owed, and never on the printed
+        copy — a paid invoice does not need somewhere to pay, and the account
+        number belongs to this bill specifically).
       */}
-      {record.balance > 0 && (
+      {/* {record.balance > 0 && (
         <PermissionGate require="payment.manage">
           <div className="no-print">
             <PaymentAccountsCard
@@ -196,7 +199,7 @@ export function InvoiceDetailPage() {
             />
           </div>
         </PermissionGate>
-      )}
+      )} */}
     </PageContainer>
   );
 }

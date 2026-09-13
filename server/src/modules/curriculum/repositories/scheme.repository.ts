@@ -274,6 +274,66 @@ export class SchemeRepository extends TenantRepository<SchemeOfWork> {
     return rows[0] ?? null;
   }
 
+  /**
+   * Weeks of an approved scheme this teacher has no note for yet — the
+   * dashboard's "lesson notes due". Only weeks already begun count; next
+   * month's is not late.
+   */
+  async weeksAwaitingNotes(
+    schoolId: string,
+    teacherId: string,
+    today: string,
+  ): Promise<{ id: string; className: string; subjectName: string; weekNumber: number }[]> {
+    return this.repo.query(
+      `SELECT w.id, c.name AS "className", sub.name AS "subjectName", w.week_number AS "weekNumber"
+         FROM scheme_weeks w
+         JOIN schemes_of_work s ON s.id = w.scheme_id
+         JOIN school_classes c ON c.id = s.class_id
+         JOIN subjects sub ON sub.id = s.subject_id
+         JOIN terms t ON t.id = s.term_id AND t.is_current = TRUE
+        WHERE w.school_id = $1
+          AND s.status = 'APPROVED'
+          AND NOT w.is_break
+          AND w.start_date <= $3::date
+          AND EXISTS (
+            SELECT 1 FROM teaching_assignments ta
+             WHERE ta.staff_id = $2 AND ta.class_id = s.class_id AND ta.subject_id = s.subject_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM lesson_notes n WHERE n.scheme_week_id = w.id AND n.teacher_id = $2
+          )
+        ORDER BY w.start_date ASC
+        LIMIT 10`,
+      [schoolId, teacherId, today],
+    );
+  }
+
+  /** Coverage per plan for one teacher — the same taught/total the report uses. */
+  async coverageForTeacher(
+    schoolId: string,
+    teacherId: string,
+  ): Promise<{ subjectName: string; className: string; coverageRate: number }[]> {
+    const rows: { subjectName: string; className: string; coverageRate: string }[] = await this.repo.query(
+      `SELECT sub.name AS "subjectName", c.name AS "className",
+              COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE o.taught_at IS NOT NULL) / NULLIF(COUNT(o.id), 0)), 0) AS "coverageRate"
+         FROM curricula cur
+         JOIN subjects sub ON sub.id = cur.subject_id
+         JOIN school_classes c ON c.id = cur.class_id
+         JOIN academic_sessions ses ON ses.id = cur.session_id AND ses.is_current = TRUE
+         LEFT JOIN curriculum_topics t ON t.curriculum_id = cur.id
+         LEFT JOIN learning_objectives o ON o.topic_id = t.id
+        WHERE cur.school_id = $1
+          AND EXISTS (
+            SELECT 1 FROM teaching_assignments ta
+             WHERE ta.staff_id = $2 AND ta.class_id = cur.class_id AND ta.subject_id = cur.subject_id
+          )
+        GROUP BY sub.name, c.name
+        ORDER BY "coverageRate" ASC`,
+      [schoolId, teacherId],
+    );
+    return rows.map((row) => ({ ...row, coverageRate: Number(row.coverageRate) }));
+  }
+
   async createNote(data: DeepPartial<LessonNote>): Promise<LessonNote> {
     const repo = this.repo.manager.getRepository(LessonNote);
     return repo.save(repo.create(data));

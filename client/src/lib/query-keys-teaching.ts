@@ -36,6 +36,12 @@ export const teachingKeys = {
       scoped(schoolId, 'payment-accounts', studentId),
     receipt: (schoolId: Scope, paymentId: string) => scoped(schoolId, 'receipts', paymentId),
     debtors: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'debtors', query ?? {}),
+    /** One student's own submitted claims — the family's view and the office's, on one student. */
+    paymentReceipts: (schoolId: Scope, studentId: string) =>
+      scoped(schoolId, 'payment-receipts', studentId),
+    /** The office's whole review queue, across every student. */
+    allPaymentReceipts: (schoolId: Scope, query?: ListQuery) =>
+      scoped(schoolId, 'payment-receipts', query ?? {}),
   },
 
   curriculum: {

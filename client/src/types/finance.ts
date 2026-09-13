@@ -219,6 +219,40 @@ export interface FinanceOverview {
   byCategory: { category: string; billed: number; collected: number }[];
 }
 
+export type PaymentReceiptStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/**
+ * A family's own evidence of a payment made outside the system — a photo of
+ * a bank slip or transfer alert — submitted for the office to check. Not a
+ * `Payment`: it only becomes one once a member of staff approves it, at
+ * which point `paymentId` points at the row it turned into.
+ */
+export interface PaymentReceiptSubmission {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  invoiceId?: string | null;
+  invoiceNo?: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  reference?: string | null;
+  note?: string | null;
+  /** A short-lived link to the uploaded slip — re-fetch the record if it expires. */
+  fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: PaymentReceiptStatus;
+  submittedByName: string;
+  submittedAt: string;
+  reviewedByName?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  paymentId?: string | null;
+}
+
 export interface Receipt {
   id: string;
   receiptNo: string;

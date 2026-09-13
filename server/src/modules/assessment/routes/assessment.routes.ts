@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { authorise } from '../../../shared/middleware/authorise.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
-import { emptyPage, placeholderListSchema } from '../../../shared/placeholder/unbuiltModule';
 import { AssessmentController } from '../controllers/assessment.controller';
 import {
   broadsheetSchema,
@@ -28,8 +27,7 @@ import {
  * `result.approve` and `result.publish` in turn, checked in the service so
  * the error can say which step was missing.
  *
- * Computer-based tests are still lists with nothing behind them — see
- * `cbt.routes.ts` when that lands.
+ * Computer-based tests live in their own module (`cbt.routes.ts`).
  *
  * `authMiddleware` and `tenantMiddleware` run once, globally, in app.ts.
  */
@@ -72,10 +70,5 @@ router.post('/comment-templates', authorise('reportcard.generate'), validate(cre
 
 router.get('/transcripts/:studentId', authorise('transcript.read'), validate(transcriptParamSchema), AssessmentController.transcript);
 router.post('/transcripts/:studentId/issue', authorise('transcript.issue'), validate(transcriptParamSchema), AssessmentController.issueTranscript);
-
-/* -- Computer-based tests: lists only, nothing behind them yet ------------- */
-
-router.get('/assessments', authorise('cbt.read'), validate(placeholderListSchema), emptyPage);
-router.get('/questions', authorise('cbt.read', 'question.manage'), validate(placeholderListSchema), emptyPage);
 
 export default router;

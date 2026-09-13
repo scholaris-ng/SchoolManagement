@@ -14,6 +14,9 @@ import { PaymentRepository } from '../../finance/repositories/payment.repository
 import { LedgerRepository } from '../../finance/repositories/ledger.repository';
 import { NotificationRepository } from '../../notifications/repositories/notification.repository';
 import { AssessmentService } from '../../assessment/services/assessment.service';
+import { TimetableEntryRepository } from '../../timetable/repositories/timetableEntry.repository';
+import { SchemeRepository } from '../../curriculum/repositories/scheme.repository';
+import { CbtRepository } from '../../cbt/repositories/cbt.repository';
 import type {
   AdminDashboardDTO,
   BursarDashboardDTO,
@@ -32,6 +35,9 @@ const ATTENDANCE_TREND_DAYS = 14;
 /** The client slices the activity feed to six; sending more would be wasted rows. */
 const ACTIVITY_LIMIT = 6;
 
+/** Sunday is index 0 and carries no timetable; the grid runs Monday to Saturday. */
+const WEEKDAYS = [null, 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
+
 /** What the bursar's two lists show without scrolling. */
 const RECENT_PAYMENTS_LIMIT = 8;
 const TOP_DEBTORS_LIMIT = 8;
@@ -43,12 +49,10 @@ const TOP_DEBTORS_LIMIT = 8;
  * rows and counting them in Node — totals for three thousand students must
  * never mean three thousand rows crossing the wire (spec section 43).
  *
- * Parts of this payload are still zero. Finance and the calendar have no
- * tables yet, and inventing plausible numbers for them would make an unbuilt
- * module look like a working one. Each is marked below with what will fill
- * it. Attendance and admissions are no longer among them: they read the
- * register the attendance module keeps, and the applications the admissions
- * module tracks, respectively.
+ * One part of this payload is still empty: the calendar has no events table
+ * yet, and inventing plausible entries for it would make an unbuilt module
+ * look like a working one. Everything else reads a real table — the register,
+ * the applications, the ledger, and now the score sheets.
  */
 export class DashboardService {
   static Instance = new DashboardService();
@@ -67,6 +71,10 @@ export class DashboardService {
     private readonly ledger = LedgerRepository.Instance,
     private readonly notifications = NotificationRepository.Instance,
     private readonly studentAccess = StudentAccessService.Instance,
+    private readonly assessment = AssessmentService.Instance,
+    private readonly timetable = TimetableEntryRepository.Instance,
+    private readonly schemes = SchemeRepository.Instance,
+    private readonly cbt = CbtRepository.Instance,
   ) {}
 
   async fetchAdmin(context: RequestContext): Promise<AdminDashboardDTO> {
@@ -173,28 +181,60 @@ export class DashboardService {
   /**
    * A teacher's personal to-do list.
    *
-   * The registers they owe today are real. Everything else is sourced from a
-   * module with no table yet: timetable entries (so no lesson has a slot),
-   * score sheets, lesson notes, assessments, and messaging. Each of those is
-   * answered empty or zero — the same honest-absence choice `fetchAdmin` makes
-   * above — rather than fabricating a lesson or a class this teacher's own
-   * assignment cannot back.
+   * Every tile is drawn from this teacher's own assignments — their lessons
+   * today, the registers they owe, the sheets still short of marks, the
+   * scheme weeks with no note yet, the papers they have set, and how much of
+   * each plan they have covered. Messaging has no table yet and is the one
+   * honest zero left.
    */
   async fetchTeacher(context: RequestContext): Promise<TeacherDashboardDTO> {
+    const staffId = context.membership.staffId;
+    // Nobody else has a timetable, a register or a sheet; skip every lookup.
+    if (!staffId) {
+      return {
+        todayClasses: [],
+        pendingAttendance: [],
+        pendingScoreEntry: [],
+        lessonNotesDue: [],
+        upcomingAssessments: [],
+        unreadMessages: 0,
+        curriculumCoverage: [],
+      };
+    }
+
+    const { schoolId } = context;
+    const today = new Date();
+    const date = today.toISOString().slice(0, 10);
+    const weekday = WEEKDAYS[today.getUTCDay()];
+    const currentTerm = (await this.terms.fetchForSchool(schoolId)).find((term) => term.isCurrent);
+
+    const [todayEntries, pendingAttendance, pendingScoreEntry, lessonNotesDue, upcoming, coverage] =
+      await Promise.all([
+        weekday ? this.timetable.dayForTeacher(schoolId, staffId, weekday, date) : Promise.resolve([]),
+        this.pendingRegisters(context),
+        this.assessment.pendingScoreEntry(context, currentTerm),
+        this.schemes.weeksAwaitingNotes(schoolId, staffId, date),
+        this.cbt.upcomingForTeacher(schoolId, staffId, 5),
+        this.schemes.coverageForTeacher(schoolId, staffId),
+      ]);
+
     return {
-      // Timetable module: no entry table, so nothing has a slot today.
-      todayClasses: [],
-      pendingAttendance: await this.pendingRegisters(context),
-      // Assessment module: no score sheet table.
-      pendingScoreEntry: [],
-      // Curriculum module: no lesson note table.
-      lessonNotesDue: [],
-      // Assessment module again: no assessment table.
-      upcomingAssessments: [],
+      todayClasses: todayEntries.map((entry) => ({
+        id: entry.id,
+        className: entry.className,
+        subjectName: entry.subjectName,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        roomName: entry.roomName,
+        attendanceTaken: entry.attendanceTaken,
+      })),
+      pendingAttendance,
+      pendingScoreEntry,
+      lessonNotesDue,
+      upcomingAssessments: upcoming,
       // Engagement module: no message table.
       unreadMessages: 0,
-      // Curriculum module again: no coverage data to report.
-      curriculumCoverage: [],
+      curriculumCoverage: coverage,
     };
   }
 
@@ -293,7 +333,7 @@ export class DashboardService {
     const terms = await this.terms.fetchForSchool(schoolId);
     const currentTerm = terms.find((term) => term.isCurrent);
 
-    const [summaries, attendanceRates, ledgerSummaries, recentPayments, unreadNotifications] =
+    const [summaries, attendanceRates, ledgerSummaries, recentPayments, unreadNotifications, results] =
       await Promise.all([
         this.students.parentSummariesFor(schoolId, childIds),
         currentTerm
@@ -309,7 +349,11 @@ export class DashboardService {
         Promise.all(childIds.map((id) => this.ledger.summaryFor(schoolId, id))),
         this.payments.recentForStudents(schoolId, childIds, RECENT_PAYMENTS_LIMIT),
         this.notifications.countUnread(schoolId, context.user.id),
+        Promise.all(
+          childIds.map((id) => this.assessment.childResultSummary(schoolId, id, currentTerm, terms)),
+        ),
       ]);
+    const resultByStudent = new Map(childIds.map((id, index) => [id, results[index]]));
 
     const attendanceByStudent = new Map(childIds.map((id, index) => [id, attendanceRates[index]]));
     const balanceByStudent = new Map(
@@ -323,17 +367,15 @@ export class DashboardService {
       photoUrl: summary.photoUrl,
       className: summary.className,
       attendanceRate: attendanceByStudent.get(summary.studentId) ?? 0,
-      // Assessment module: no score sheet or result table.
-      lastTermAverage: null,
-      currentTermAverage: null,
-      position: null,
-      classSize: null,
+      lastTermAverage: resultByStudent.get(summary.studentId)?.lastTermAverage ?? null,
+      currentTermAverage: resultByStudent.get(summary.studentId)?.currentTermAverage ?? null,
+      position: resultByStudent.get(summary.studentId)?.position ?? null,
+      classSize: resultByStudent.get(summary.studentId)?.classSize ?? null,
       outstandingBalance: balanceByStudent.get(summary.studentId) ?? 0,
       // Engagement module: no message table.
       unreadMessages: 0,
       housePoints: summary.housePoints,
-      // Assessment module again: nothing has been published to be flagged here.
-      resultPublished: false,
+      resultPublished: resultByStudent.get(summary.studentId)?.resultPublished ?? false,
     }));
 
     return {

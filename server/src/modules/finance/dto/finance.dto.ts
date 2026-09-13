@@ -2,6 +2,7 @@ import type { FeeCategory } from '../entities/feeItem.entity';
 import type { DiscountMode, DiscountType } from '../entities/discount.entity';
 import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentAccount.entity';
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
+import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
 
 /**
  * The status the *client* knows about. `OVERDUE` is not a stored state — see
@@ -228,4 +229,31 @@ export interface PaymentDTO {
   isReconciled: boolean;
   receiptNo: string | null;
   note: string | null;
+}
+
+/** Mirrors `PaymentReceiptSubmission` in `client/src/types/finance.ts`. */
+export interface PaymentReceiptDTO {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  invoiceId: string | null;
+  invoiceNo: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  reference: string | null;
+  note: string | null;
+  /** Minted fresh on every read — see `signedDownloadUrl`. Never stored. */
+  fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: PaymentReceiptStatus;
+  submittedByName: string;
+  submittedAt: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  paymentId: string | null;
 }

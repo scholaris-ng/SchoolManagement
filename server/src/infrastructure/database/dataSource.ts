@@ -34,6 +34,8 @@ import { LessonNote } from '../../modules/curriculum/entities/lessonNote.entity'
 import { AssessmentComponent, GradeBand, GradingScheme } from '../../modules/assessment/entities/gradingScheme.entity';
 import { ScoreEntry, ScoreSheet } from '../../modules/assessment/entities/scoreSheet.entity';
 import { CommentTemplate, ReportCardRecord, TranscriptIssue } from '../../modules/assessment/entities/reportCard.entity';
+import { Question } from '../../modules/cbt/entities/question.entity';
+import { CbtAssessment, CbtAttempt } from '../../modules/cbt/entities/cbtAssessment.entity';
 import { BehaviourScale } from '../../modules/behaviour/entities/behaviourScale.entity';
 import { BehaviourTrait } from '../../modules/behaviour/entities/behaviourTrait.entity';
 import { BehaviourObservation } from '../../modules/behaviour/entities/behaviourObservation.entity';
@@ -58,6 +60,7 @@ import { InvoiceLine } from '../../modules/finance/entities/invoiceLine.entity';
 import { PaymentAccount } from '../../modules/finance/entities/paymentAccount.entity';
 import { Payment } from '../../modules/finance/entities/payment.entity';
 import { PaymentAllocation } from '../../modules/finance/entities/paymentAllocation.entity';
+import { PaymentReceipt } from '../../modules/finance/entities/paymentReceipt.entity';
 import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
 import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
@@ -109,6 +112,9 @@ export const entities = [
   ReportCardRecord,
   CommentTemplate,
   TranscriptIssue,
+  Question,
+  CbtAssessment,
+  CbtAttempt,
   BehaviourScale,
   BehaviourTrait,
   BehaviourObservation,
@@ -128,6 +134,7 @@ export const entities = [
   PaymentAccount,
   Payment,
   PaymentAllocation,
+  PaymentReceipt,
   ImportJob,
   Notification,
   NotificationPreference,

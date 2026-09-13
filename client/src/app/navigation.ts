@@ -24,6 +24,7 @@ import {
   Megaphone,
   Newspaper,
   NotebookPen,
+  Paperclip,
   Receipt,
   ScrollText,
   Settings,
@@ -137,6 +138,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Fees', to: '/finance/fees', icon: Coins, require: 'fee.manage' },
       { label: 'Invoices', to: '/finance/invoices', icon: Receipt, require: 'invoice.manage' },
       { label: 'Payments', to: '/finance/payments', icon: CreditCard, require: 'payment.manage' },
+      {
+        label: 'Payment receipts',
+        to: '/finance/payment-receipts',
+        icon: Paperclip,
+        require: 'payment.manage',
+      },
       { label: 'Debtors', to: '/finance/debtors', icon: Landmark, require: 'analytics.read' },
       {
         label: 'Fees & payments',

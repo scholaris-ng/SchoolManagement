@@ -1,6 +1,10 @@
 import { DashboardService } from '../services/dashboard.service';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { AttendanceRepository } from '../../attendance/repositories/attendance.repository';
+import { AssessmentService } from '../../assessment/services/assessment.service';
+import { TimetableEntryRepository } from '../../timetable/repositories/timetableEntry.repository';
+import { SchemeRepository } from '../../curriculum/repositories/scheme.repository';
+import { CbtRepository } from '../../cbt/repositories/cbt.repository';
 import type { RequestContext } from '../../../shared/types/context';
 import type { TermDTO } from '../../academics/dto/academics.dto';
 
@@ -29,6 +33,15 @@ const currentTermCovering = (date: string) =>
 describe('DashboardService.fetchTeacher', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  // Results are the assessment module's to answer; these specs are about the rest.
+  beforeEach(() => {
+    jest.spyOn(AssessmentService.Instance, 'pendingScoreEntry').mockResolvedValue([]);
+    jest.spyOn(TimetableEntryRepository.Instance, 'dayForTeacher').mockResolvedValue([]);
+    jest.spyOn(SchemeRepository.Instance, 'weeksAwaitingNotes').mockResolvedValue([]);
+    jest.spyOn(SchemeRepository.Instance, 'coverageForTeacher').mockResolvedValue([]);
+    jest.spyOn(CbtRepository.Instance, 'upcomingForTeacher').mockResolvedValue([]);
   });
 
   it('lists the form registers still unmarked today', async () => {

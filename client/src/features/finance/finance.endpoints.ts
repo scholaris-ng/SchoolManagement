@@ -10,6 +10,7 @@ import type {
   Payment,
   PaymentAccount,
   PaymentMethod,
+  PaymentReceiptSubmission,
   Receipt,
   StudentFinanceSummary,
 } from '@/types/finance';
@@ -43,6 +44,17 @@ export interface CreatePaymentAccountInput {
   note?: string;
   /** Ties the account to one bill, so the credit settles it automatically. */
   invoiceId?: string;
+}
+
+export interface SubmitPaymentReceiptInput {
+  studentId: string;
+  invoiceId?: string;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  reference?: string;
+  note?: string;
+  file: File;
 }
 
 /**
@@ -148,4 +160,36 @@ export const FinanceEndpoints = {
 
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),
+
+  /* -- Payment receipts (parent evidence, office sign-off) ------------------- */
+
+  /**
+   * A family's own photograph of a bank slip. Sent as `multipart/form-data`
+   * — `http`'s `raw` option skips the usual JSON encoding so the browser sets
+   * its own boundary header.
+   */
+  submitPaymentReceipt: (input: SubmitPaymentReceiptInput) => {
+    const form = new FormData();
+    form.set('studentId', input.studentId);
+    if (input.invoiceId) form.set('invoiceId', input.invoiceId);
+    form.set('amount', String(input.amount));
+    form.set('method', input.method);
+    form.set('paidAt', input.paidAt);
+    if (input.reference) form.set('reference', input.reference);
+    if (input.note) form.set('note', input.note);
+    form.set('file', input.file);
+    return http.post<PaymentReceiptSubmission>('/payment-receipts', form, { raw: true });
+  },
+
+  fetchPaymentReceipts: (query: ListQuery & { studentId?: string; status?: string }) =>
+    http.get<Paginated<PaymentReceiptSubmission>>('/payment-receipts', { query }),
+
+  fetchStudentPaymentReceipts: (studentId: string) =>
+    http.get<PaymentReceiptSubmission[]>(`/students/${studentId}/payment-receipts`),
+
+  approvePaymentReceipt: (id: string, note?: string) =>
+    http.post<PaymentReceiptSubmission>(`/payment-receipts/${id}/approve`, { note }),
+
+  rejectPaymentReceipt: (id: string, note: string) =>
+    http.post<PaymentReceiptSubmission>(`/payment-receipts/${id}/reject`, { note }),
 };

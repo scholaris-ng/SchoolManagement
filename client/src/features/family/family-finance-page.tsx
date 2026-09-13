@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useParentDashboard } from '@/features/dashboard/api';
 import { useInvoices, usePayments } from '@/features/finance/api';
+import { PaymentReceiptsCard } from '@/features/finance/payment-receipts-card';
 import { useStudentLedger } from '@/features/students/api';
 import { useActiveChild } from './use-active-child';
 import { ChildSwitcher } from './child-switcher';
@@ -315,6 +316,8 @@ export function FamilyFinancePage() {
           a payment plan.
         </Alert>
       )}
+
+      {studentId && <PaymentReceiptsCard studentId={studentId} currency={currency} />}
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">

@@ -11,8 +11,10 @@ export type {
   FinanceOverviewQuery,
   GenerateInvoicesInput,
   RecordPaymentInput,
+  SubmitPaymentReceiptInput,
 } from './finance.endpoints';
 export { FinanceEndpoints } from './finance.endpoints';
 export * from './use-fees';
 export * from './use-invoices';
 export * from './use-payments';
+export * from './use-payment-receipts';

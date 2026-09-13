@@ -34,6 +34,11 @@ const PaymentsPage = lazy(() =>
 const PaymentFormPage = lazy(() =>
   import('@/features/finance/payment-form-page').then((m) => ({ default: m.PaymentFormPage })),
 );
+const PaymentReceiptsPage = lazy(() =>
+  import('@/features/finance/payment-receipts-page').then((m) => ({
+    default: m.PaymentReceiptsPage,
+  })),
+);
 const ReceiptPage = lazy(() =>
   import('@/features/finance/receipt-page').then((m) => ({ default: m.ReceiptPage })),
 );
@@ -61,6 +66,7 @@ export const financeRoutes: RouteObject[] = [
     children: [
       { path: 'finance/payments/new', element: <PaymentFormPage /> },
       { path: 'finance/payments', element: <PaymentsPage /> },
+      { path: 'finance/payment-receipts', element: <PaymentReceiptsPage /> },
     ],
   },
   {

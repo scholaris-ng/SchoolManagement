@@ -16,7 +16,7 @@ import { InvoiceRepository, type InvoiceBrief } from '../repositories/invoice.re
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { PaymentRepository } from '../repositories/payment.repository';
 import { RavenClient, type RavenCollection } from './raven.client';
-import { Payment } from '../entities/payment.entity';
+import { Payment, type PaymentMethod } from '../entities/payment.entity';
 import { PaymentAccount } from '../entities/paymentAccount.entity';
 import type { PaymentAccountDTO, PaymentDTO, ReceiptDTO } from '../dto/finance.dto';
 import type {
@@ -350,6 +350,88 @@ export class PaymentsService {
         );
       }
     }
+  }
+
+  /**
+   * Turns an approved payment-receipt claim into a real payment.
+   *
+   * Called only by `PaymentReceiptsService` once a member of staff has
+   * checked the family's slip against the bank statement — this method
+   * trusts the amount, date and invoice it is given exactly the way
+   * `recordManualPayment` trusts the desk, because by this point a human
+   * already did the checking `recordManualPayment` itself would defer to.
+   */
+  async recordApprovedReceipt(
+    context: RequestContext,
+    input: {
+      studentId: string;
+      invoiceId: string | null;
+      amount: number;
+      method: PaymentMethod;
+      paidAt: Date;
+      reference: string | null;
+      note: string | null;
+    },
+  ): Promise<PaymentDTO> {
+    return AppDataSource.transaction(async (manager) => {
+      let invoice: InvoiceBrief | null = null;
+      if (input.invoiceId) {
+        const [locked] = await this.invoices.lockForAllocation(manager, context.schoolId, [
+          input.invoiceId,
+        ]);
+        if (!locked) throw AppError.notFound('Invoice');
+        if (locked.studentId !== input.studentId) {
+          throw AppError.validation('That invoice belongs to a different student.');
+        }
+        invoice = locked;
+      }
+
+      const created = await this.payments.create(
+        {
+          schoolId: context.schoolId,
+          studentId: input.studentId,
+          paymentAccountId: null,
+          reference: paymentReference(),
+          provider: 'MANUAL',
+          providerReference: null,
+          externalReference: input.reference,
+          verificationCode: verificationCode(),
+          method: input.method,
+          amount: input.amount.toFixed(2),
+          fee: '0.00',
+          currency: 'NGN',
+          status: 'SUCCESSFUL',
+          paidAt: input.paidAt,
+          payerName: null,
+          isReconciled: false,
+          note: input.note,
+          recordedByUserId: context.user.id,
+          providerPayload: null,
+        },
+        manager,
+      );
+
+      // Capped at what is actually outstanding, the same as a Raven credit
+      // landing on a tied account: an over-payment stays unallocated rather
+      // than being forced onto a bill that did not ask for it.
+      if (invoice && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID') {
+        const outstandingKobo = Math.round((invoice.total - invoice.paid) * MONEY_SCALE);
+        const applyKobo = Math.min(Math.round(input.amount * MONEY_SCALE), outstandingKobo);
+        if (applyKobo > 0) {
+          await this.applyAllocations(
+            manager,
+            context.schoolId,
+            created.id,
+            [{ invoiceId: invoice.id, amount: applyKobo / MONEY_SCALE }],
+            context.user.id,
+          );
+        }
+      }
+
+      const dto = await this.payments.findOneDTO(context.schoolId, created.id);
+      if (!dto) throw AppError.internal();
+      return dto;
+    });
   }
 
   /* -- Asking Raven for an account number ------------------------------------ */

@@ -12,7 +12,7 @@ const PAYMENT_STATUSES = ['PENDING', 'SUCCESSFUL', 'FAILED', 'REVERSED'] as cons
  * asked to confirm it, so letting the office key one in by hand would create
  * a payment with nothing behind it (spec section 27).
  */
-const MANUAL_METHODS = ['CASH', 'BANK_TRANSFER', 'POS', 'CHEQUE'] as const;
+export const MANUAL_METHODS = ['CASH', 'BANK_TRANSFER', 'POS', 'CHEQUE'] as const;
 
 export const fetchPaymentsSchema = z.object({
   query: z.object({

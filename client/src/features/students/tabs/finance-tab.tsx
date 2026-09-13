@@ -5,7 +5,9 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useStudentLedger } from '../api';
-import { PaymentAccountsCard } from '@/features/finance/payment-accounts-card';
+// Raven's collection-account flow (`PaymentAccountsCard`) is disabled — see
+// the note above each commented-out usage below.
+// import { PaymentAccountsCard } from '@/features/finance/payment-accounts-card';
 import { StatCard } from '@/components/data/stat-card';
 import { Card } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/data/data-table';
@@ -90,7 +92,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
   if (ledger.isPending) {
     return (
       <div className="space-y-6">
-        <PaymentAccountsCard studentId={studentId} currency={currency} />
+        {/* <PaymentAccountsCard studentId={studentId} currency={currency} /> */}
         <LoadingState label="Loading fee history…" />
       </div>
     );
@@ -98,7 +100,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
   if (ledger.isError) {
     return (
       <div className="space-y-6">
-        <PaymentAccountsCard studentId={studentId} currency={currency} />
+        {/* <PaymentAccountsCard studentId={studentId} currency={currency} /> */}
         <ErrorState error={ledger.error} onRetry={() => void ledger.refetch()} />
       </div>
     );
@@ -109,7 +111,11 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
 
   return (
     <div className="space-y-6">
-      <PaymentAccountsCard studentId={studentId} currency={currency} />
+      {/*
+        Disabled: Raven's collection-account issuing is not working end to end
+        yet. Re-enable by uncommenting this and the import above once it is.
+      */}
+      {/* <PaymentAccountsCard studentId={studentId} currency={currency} /> */}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total billed" value={formatCurrency(summary?.totalBilled ?? 0, currency)} />
