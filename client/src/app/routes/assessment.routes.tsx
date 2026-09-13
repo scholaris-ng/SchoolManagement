@@ -38,6 +38,9 @@ const QuestionBankPage = lazy(() =>
 const AssessmentsPage = lazy(() =>
   import('@/features/cbt/assessments-page').then((m) => ({ default: m.AssessmentsPage })),
 );
+const AssessmentFormPage = lazy(() =>
+  import('@/features/cbt/assessment-form-page').then((m) => ({ default: m.AssessmentFormPage })),
+);
 const AssessmentDetailPage = lazy(() =>
   import('@/features/cbt/assessment-detail-page').then((m) => ({
     default: m.AssessmentDetailPage,
@@ -84,6 +87,13 @@ export const assessmentRoutes: RouteObject[] = [
   {
     element: guarded('question.manage'),
     children: [{ path: 'cbt/questions', element: <QuestionBankPage /> }],
+  },
+  {
+    element: guarded('cbt.manage'),
+    children: [
+      { path: 'cbt/new', element: <AssessmentFormPage /> },
+      { path: 'cbt/:id/edit', element: <AssessmentFormPage /> },
+    ],
   },
   {
     element: guarded({ anyOf: ['cbt.read', 'cbt.take'] }),

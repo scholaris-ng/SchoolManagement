@@ -16,6 +16,15 @@ export type ApplicationStatus =
   | 'REJECTED'
   | 'WITHDRAWN';
 
+/**
+ * Pass/fail on the interview itself, distinct from `status`.
+ *
+ * A school still decides separately what happens next — a failed interview
+ * doesn't auto-reject, and a pass doesn't auto-shortlist — so this is recorded
+ * information, not another state machine. Null means no outcome yet.
+ */
+export type InterviewOutcome = 'PASSED' | 'FAILED';
+
 /** Who filled the form in — a parent for their child, or the student themselves. */
 export type ApplicantType = 'GUARDIAN' | 'SELF';
 
@@ -200,6 +209,13 @@ export class AdmissionApplication extends SoftDeletableEntity {
 
   @Column({ name: 'interview_date', type: 'timestamptz', nullable: true })
   interviewDate: Date | null;
+
+  /** A room name, or a video-call link — whichever the school actually uses. */
+  @Column({ type: 'varchar', name: 'interview_venue', length: 200, nullable: true })
+  interviewVenue: string | null;
+
+  @Column({ type: 'varchar', name: 'interview_outcome', length: 16, nullable: true })
+  interviewOutcome: InterviewOutcome | null;
 
   @Column({ type: 'text', name: 'interview_note', nullable: true })
   interviewNote: string | null;

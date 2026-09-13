@@ -7,7 +7,11 @@ import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { env } from '../../../config/env';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
-import { sendApplicationReceivedEmail, sendApplicationStatusEmail } from '../../../shared/utils/mailer';
+import {
+  sendApplicationReceivedEmail,
+  sendApplicationStatusEmail,
+  sendInterviewScheduledEmail,
+} from '../../../shared/utils/mailer';
 import { AcademicSession } from '../../academics/entities/academicSession.entity';
 import { SchoolClass } from '../../academics/entities/schoolClass.entity';
 import { Student } from '../../students/entities/student.entity';
@@ -39,6 +43,7 @@ import type {
   FetchAdmissionsQuery,
   PublicApplicationInput,
   RespondToOfferInput,
+  ScheduleInterviewInput,
   TransitionAdmissionInput,
 } from '../validators/admissions.schema';
 
@@ -46,6 +51,31 @@ import type {
 function nullIfBlank(value: string | null | undefined): string | null {
   const trimmed = typeof value === 'string' ? value.trim() : value;
   return trimmed ? trimmed : null;
+}
+
+/**
+ * A readable line for the timeline — what actually changed, not a diff of
+ * columns nobody but a developer would recognise.
+ */
+function describeInterviewUpdate(input: ScheduleInterviewInput): string {
+  const parts: string[] = [];
+  if (input.interviewDate !== undefined) {
+    parts.push(input.interviewDate ? 'Interview scheduled.' : 'Interview date cleared.');
+  }
+  if (input.interviewVenue !== undefined) {
+    const venue = nullIfBlank(input.interviewVenue);
+    parts.push(venue ? `Venue: ${venue}.` : 'Venue cleared.');
+  }
+  if (input.interviewOutcome !== undefined) {
+    parts.push(
+      input.interviewOutcome
+        ? `Interview outcome recorded: ${input.interviewOutcome === 'PASSED' ? 'passed' : 'failed'}.`
+        : 'Interview outcome cleared.',
+    );
+  }
+  const note = nullIfBlank(input.interviewNote);
+  if (note) parts.push(note);
+  return parts.length > 0 ? parts.join(' ') : 'Interview details updated.';
 }
 
 /**
@@ -628,6 +658,80 @@ export class AdmissionsService {
         note: nullIfBlank(input.note),
         contactEmail: school?.email ?? primary.email,
       });
+    }
+
+    return dto;
+  }
+
+  /**
+   * Scheduling an interview, and later recording how it went — kept apart
+   * from `transition` because neither ever changes `status` by itself. A date
+   * and venue can be set the moment an application is `SUBMITTED`, well before
+   * anyone marks it `SCREENING`, and a pass/fail on the interview doesn't
+   * decide anything on its own — the office still moves the application along
+   * itself, informed by the outcome, rather than this doing it for them.
+   */
+  async scheduleInterview(
+    context: RequestContext,
+    id: string,
+    input: ScheduleInterviewInput,
+  ): Promise<AdmissionApplicationDTO> {
+    const application = await this.applications.findByIdScoped(context.schoolId, id);
+    if (!application) throw AppError.notFound('Application');
+
+    if (application.convertedStudentId) {
+      throw AppError.conflict(
+        'This applicant has already been enrolled, so the application can no longer be changed.',
+      );
+    }
+
+    const columns: Record<string, unknown> = {};
+    if (input.interviewDate !== undefined) {
+      columns.interviewDate = input.interviewDate ? new Date(input.interviewDate) : null;
+    }
+    if (input.interviewVenue !== undefined) columns.interviewVenue = nullIfBlank(input.interviewVenue);
+    if (input.interviewOutcome !== undefined) columns.interviewOutcome = input.interviewOutcome;
+    if (input.interviewNote !== undefined) columns.interviewNote = nullIfBlank(input.interviewNote);
+
+    await AppDataSource.transaction(async (manager) => {
+      await manager.update(AdmissionApplication, { id: application.id }, columns);
+      await this.appendStageEvent(manager, application, {
+        status: application.status,
+        actorUserId: context.user.id,
+        actorName: context.user.displayName,
+        note: describeInterviewUpdate(input),
+      });
+    });
+
+    await this.audit.record(context, {
+      action: 'admission.interview.updated',
+      entityType: 'AdmissionApplication',
+      entityId: application.id,
+      entityLabel: application.applicationNo,
+      after: columns,
+    });
+
+    const dto = await this.requireDTO(context.schoolId, application.id);
+
+    // Only a fresh date and time is news the family is waiting on — recording
+    // an outcome, or fixing a typo in the venue afterwards, is an internal
+    // note with nothing for them to act on.
+    if (input.interviewDate) {
+      const primary = application.contacts.find((c) => c.isPrimaryContact) ?? application.contacts[0];
+      if (primary) {
+        const school = await this.schools.findById(context.schoolId);
+        void sendInterviewScheduledEmail({
+          to: primary.email,
+          firstName: primary.firstName,
+          schoolName: school?.name ?? '',
+          applicantName: `${application.firstName} ${application.lastName}`,
+          applicationNo: application.applicationNo,
+          interviewDate: input.interviewDate,
+          interviewVenue: dto.interviewVenue,
+          note: nullIfBlank(input.interviewNote),
+          contactEmail: school?.email ?? primary.email,
+        });
+      }
     }
 
     return dto;

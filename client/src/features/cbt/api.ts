@@ -70,8 +70,18 @@ export function useSaveAssessment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, values }: { id?: string; values: Partial<CbtAssessment> }) =>
-      id ? CbtEndpoints.updateAssessment(id, values) : CbtEndpoints.createAssessment(values),
+    mutationFn: ({
+      id,
+      values,
+      version,
+    }: {
+      id?: string;
+      values: Partial<CbtAssessment>;
+      version?: number;
+    }) =>
+      id
+        ? CbtEndpoints.updateAssessment(id, values, version)
+        : CbtEndpoints.createAssessment(values),
     onSuccess: (assessment) => {
       queryClient.setQueryData(queryKeys.cbt.assessment(schoolId, assessment.id), assessment);
       void queryClient.invalidateQueries({ queryKey: queryKeys.cbt.assessments(schoolId) });

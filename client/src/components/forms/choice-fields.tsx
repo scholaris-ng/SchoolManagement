@@ -176,6 +176,44 @@ export function RadioCardField<T extends FieldValues>({
   );
 }
 
+/** Reads and writes in the viewer's own clock — see `toDateTimeInputValue`. */
+export function DateTimeField<T extends FieldValues>(
+  props: BaseFieldProps<T> & { min?: string; max?: string },
+) {
+  const { min, max, ...rest } = props;
+  return (
+    <Controller
+      control={rest.control}
+      name={rest.name}
+      render={({ field, fieldState }) => (
+        <FieldShell
+          label={rest.label}
+          required={rest.required}
+          description={rest.description}
+          hint={rest.hint}
+          error={fieldState.error?.message}
+          className={rest.className}
+        >
+          {({ id, describedBy, invalid }) => (
+            <Input
+              id={id}
+              type="datetime-local"
+              data-cy={fieldCy(rest.name, rest['data-cy'])}
+              min={min}
+              max={max}
+              aria-describedby={describedBy}
+              invalid={invalid}
+              disabled={rest.disabled}
+              {...field}
+              value={(field.value as string | undefined) ?? ''}
+            />
+          )}
+        </FieldShell>
+      )}
+    />
+  );
+}
+
 export function DateField<T extends FieldValues>(
   props: BaseFieldProps<T> & { min?: string; max?: string },
 ) {

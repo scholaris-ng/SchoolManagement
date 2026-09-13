@@ -1,6 +1,11 @@
 import { http } from '@/lib/http';
 import type { ListQuery, Paginated } from '@/types/api';
-import type { AdmissionApplication, AdmissionFunnel, ApplicationStatus } from '@/types/admissions';
+import type {
+  AdmissionApplication,
+  AdmissionFunnel,
+  ApplicationStatus,
+  InterviewOutcome,
+} from '@/types/admissions';
 import type { Student } from '@/types/people';
 import type { AdmissionFormValues, ConversionValues } from './schema';
 
@@ -10,6 +15,14 @@ export interface TransitionInput {
   screeningScore?: number;
   offeredClassId?: string;
   offerExpiresOn?: string;
+}
+
+/** Any field left out is left alone; send `null` to clear one that was set. */
+export interface ScheduleInterviewInput {
+  interviewDate?: string | null;
+  interviewVenue?: string | null;
+  interviewOutcome?: InterviewOutcome | null;
+  interviewNote?: string | null;
 }
 
 export interface ConversionResult {
@@ -38,6 +51,9 @@ export const AdmissionEndpoints = {
 
   transition: (id: string, input: TransitionInput) =>
     http.post<AdmissionApplication>(`/admissions/${id}/transition`, input),
+
+  scheduleInterview: (id: string, input: ScheduleInterviewInput) =>
+    http.patch<AdmissionApplication>(`/admissions/${id}/interview`, input),
 
   /**
    * Turns an accepted applicant into an enrolled student in one transaction —

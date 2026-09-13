@@ -31,8 +31,8 @@ export const CbtEndpoints = {
   createAssessment: (values: Partial<CbtAssessment>) =>
     http.post<CbtAssessment>('/assessments', values),
 
-  updateAssessment: (id: string, values: Partial<CbtAssessment>) =>
-    http.patch<CbtAssessment>(`/assessments/${id}`, values),
+  updateAssessment: (id: string, values: Partial<CbtAssessment>, version?: number) =>
+    http.patch<CbtAssessment>(`/assessments/${id}`, values, { version }),
 
   /** Starting an attempt returns the paper with correct answers stripped out. */
   startAttempt: (assessmentId: string) =>

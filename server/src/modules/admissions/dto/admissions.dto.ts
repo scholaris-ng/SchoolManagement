@@ -3,6 +3,7 @@ import type {
   ApplicationContact,
   ApplicationSource,
   ApplicationStatus,
+  InterviewOutcome,
 } from '../entities/admissionApplication.entity';
 
 /**
@@ -71,6 +72,8 @@ export interface AdmissionApplicationDTO {
   status: ApplicationStatus;
   screeningScore: number | null;
   interviewDate: string | null;
+  interviewVenue: string | null;
+  interviewOutcome: InterviewOutcome | null;
   interviewNote: string | null;
   decisionNote: string | null;
   offeredClassId: string | null;

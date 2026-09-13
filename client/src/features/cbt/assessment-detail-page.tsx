@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { BookOpen, Clock, Play, Shuffle, Target } from 'lucide-react';
+import { BookOpen, Clock, Pencil, Play, Shuffle, Target } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { PermissionGate } from '@/components/guards/permission-gate';
 
 /**
  * The cover sheet before a paper starts.
@@ -74,6 +75,18 @@ export function AssessmentDetailPage() {
               {humanizeEnum(paper.mode)}
             </Badge>
           </>
+        }
+        actions={
+          <PermissionGate require="cbt.manage">
+            <Button
+              data-cy="cbt-assessment-detail-edit"
+              variant="outline"
+              onClick={() => navigate(`/cbt/${paper.id}/edit`)}
+            >
+              <Pencil />
+              Edit
+            </Button>
+          </PermissionGate>
         }
       />
 

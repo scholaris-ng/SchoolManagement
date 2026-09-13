@@ -6,6 +6,7 @@ import {
   convertAdmissionSchema,
   createAdmissionSchema,
   fetchAdmissionsSchema,
+  scheduleInterviewSchema,
   transitionAdmissionSchema,
 } from '../validators/admissions.schema';
 import { AdmissionsController } from '../controllers/admissions.controller';
@@ -54,6 +55,19 @@ router.post(
   authorise('admission.manage', 'admission.decide'),
   validate(transitionAdmissionSchema),
   AdmissionsController.transition,
+);
+
+/**
+ * Setting up, or recording the result of, an interview — kept separate from
+ * `transition` because it never moves `status` by itself. `admission.manage`
+ * alone is enough: a school telling a family when to come in, or writing down
+ * how the interview went, is not the same act as deciding the place.
+ */
+router.patch(
+  '/admissions/:id/interview',
+  authorise('admission.manage'),
+  validate(scheduleInterviewSchema),
+  AdmissionsController.scheduleInterview,
 );
 
 /**

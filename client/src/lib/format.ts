@@ -38,6 +38,12 @@ export function toDateInputValue(value?: string | Date | null): string {
   return date ? format(date, 'yyyy-MM-dd') : '';
 }
 
+/** For a `datetime-local` input, which reads and writes in the viewer's own clock. */
+export function toDateTimeInputValue(value?: string | Date | null): string {
+  const date = toDate(value);
+  return date ? format(date, "yyyy-MM-dd'T'HH:mm") : '';
+}
+
 /**
  * Currency is a per-school setting; the code is passed in rather than assumed,
  * so the same component serves a Nigerian and a Ghanaian school.

@@ -621,6 +621,81 @@ export async function sendApplicationStatusEmail(params: {
   });
 }
 
+/** `Africa/Lagos` matches the timezone every school defaults to (see `RegistrationService`). */
+function formatInterviewDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-NG', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Africa/Lagos',
+  }).format(new Date(iso));
+}
+
+/**
+ * Recipient: the primary contact on an application. Trigger: staff setting or
+ * changing an interview's date and time from the admissions screen. Tone:
+ * transactional — no emoji.
+ *
+ * Sent only when a date is actually being set — recording pass/fail, or fixing
+ * a typo in the venue after the fact, is an internal note the family has no
+ * reason to be emailed about, unlike a date and time they need to show up for.
+ */
+export async function sendInterviewScheduledEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  applicantName: string;
+  applicationNo: string;
+  interviewDate: string;
+  interviewVenue?: string | null;
+  note?: string | null;
+  contactEmail: string;
+}): Promise<void> {
+  const { to, firstName, schoolName, applicantName, applicationNo, interviewVenue, note, contactEmail } =
+    params;
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+  const applicant = escapeHtml(applicantName);
+  const when = formatInterviewDate(params.interviewDate);
+
+  const rows: [string, string][] = [
+    ['Applicant', applicant],
+    ['Reference', escapeHtml(applicationNo)],
+    ['Date and time', escapeHtml(when)],
+  ];
+  if (interviewVenue) rows.push(['Venue', escapeHtml(interviewVenue)]);
+
+  const body = [
+    heading('Interview scheduled'),
+    paragraph(`Hello ${name}, <strong>${school}</strong> has scheduled an interview for ${applicant}.`),
+    infoBox(rows),
+    note ? paragraph(`<strong>A note from the school:</strong> ${escapeHtml(note)}`) : '',
+    footnote(`Questions? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    subject: `Interview scheduled — ${schoolName} — Scholaris`,
+    html: emailLayout(body, `${applicantName}'s interview is scheduled for ${when}.`),
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `${schoolName} has scheduled an interview for ${applicantName}.`,
+      '',
+      `Applicant: ${applicantName}`,
+      `Reference: ${applicationNo}`,
+      `Date and time: ${when}`,
+      ...(interviewVenue ? [`Venue: ${interviewVenue}`] : []),
+      ...(note ? ['', `A note from the school: ${note}`] : []),
+      '',
+      `Questions? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}
+
 /** The one instruction an offer email exists to deliver, in its several variants. */
 function offerAction(offerExpiresOn: string | null | undefined, hasLink: boolean): string {
   const byDate = offerExpiresOn ? ` by <strong>${escapeHtml(offerExpiresOn)}</strong>` : '';

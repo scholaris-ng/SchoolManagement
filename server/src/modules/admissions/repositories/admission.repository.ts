@@ -42,7 +42,8 @@ const PROJECTION = `
   '[]'::json AS documents,
   a.status,
   a.screening_score::float AS "screeningScore",
-  a.interview_date AS "interviewDate", a.interview_note AS "interviewNote",
+  a.interview_date AS "interviewDate", a.interview_venue AS "interviewVenue",
+  a.interview_outcome AS "interviewOutcome", a.interview_note AS "interviewNote",
   a.decision_note AS "decisionNote",
   a.offered_class_id AS "offeredClassId", c.name AS "offeredClassName",
   -- Cast explicitly: a bare "date" column comes back from the pg driver as a

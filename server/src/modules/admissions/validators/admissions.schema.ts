@@ -137,6 +137,29 @@ export const transitionAdmissionSchema = z.object({
   }),
 });
 
+/**
+ * Scheduling an interview and recording how it went — separate from
+ * `transition` because it never changes `status` on its own. A school can set
+ * a date and venue while an applicant is merely `SUBMITTED`, and record an
+ * outcome without that alone deciding anything; the office still moves the
+ * status along itself once it knows what it wants to do about it.
+ */
+export const scheduleInterviewSchema = z.object({
+  params: admissionIdParamSchema.shape.params,
+  body: z
+    .object({
+      /** `null` clears a date that turned out to be wrong; omit to leave it alone. */
+      interviewDate: z.string().datetime({ offset: true }).or(z.string().datetime()).nullable().optional(),
+      interviewVenue: optionalText(200).nullable(),
+      interviewOutcome: z.enum(['PASSED', 'FAILED']).nullable().optional(),
+      interviewNote: optionalText(2000).nullable(),
+    })
+    .refine(
+      (body) => Object.values(body).some((value) => value !== undefined),
+      'Provide at least one detail to update',
+    ),
+});
+
 export const convertAdmissionSchema = z.object({
   params: admissionIdParamSchema.shape.params,
   body: z.object({
@@ -201,6 +224,7 @@ export const respondToOfferSchema = z.object({
 export type FetchAdmissionsQuery = z.infer<typeof fetchAdmissionsSchema>['query'];
 export type CreateAdmissionInput = z.infer<typeof createAdmissionSchema>['body'];
 export type TransitionAdmissionInput = z.infer<typeof transitionAdmissionSchema>['body'];
+export type ScheduleInterviewInput = z.infer<typeof scheduleInterviewSchema>['body'];
 export type ConvertAdmissionInput = z.infer<typeof convertAdmissionSchema>['body'];
 export type PublicApplicationInput = z.infer<typeof publicApplicationSchema>['body'];
 export type RespondToOfferInput = z.infer<typeof respondToOfferSchema>['body'];

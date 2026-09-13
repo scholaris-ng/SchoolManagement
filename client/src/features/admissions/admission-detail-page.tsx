@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  CalendarClock,
   CalendarDays,
   Check,
   Download,
@@ -12,13 +13,19 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { formatDate, formatDateTime, formatFileSize, toDateInputValue } from '@/lib/format';
+import {
+  formatDate,
+  formatDateTime,
+  formatFileSize,
+  toDateInputValue,
+  toDateTimeInputValue,
+} from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClassOptions } from '@/features/academics/api';
-import { useAdmission, useTransitionAdmission } from './api';
+import { useAdmission, useScheduleInterview, useTransitionAdmission } from './api';
 import { ConvertApplicantDialog } from './convert-applicant-dialog';
-import type { ApplicationStatus } from '@/types/admissions';
+import type { ApplicationStatus, InterviewOutcome } from '@/types/admissions';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -112,6 +119,7 @@ export function AdmissionDetailPage() {
   const { can } = useAuth();
   const application = useAdmission(id);
   const transition = useTransitionAdmission(id ?? '');
+  const scheduleInterview = useScheduleInterview(id ?? '');
   const classOptions = useClassOptions();
 
   const [pendingStatus, setPendingStatus] = useState<ApplicationStatus | null>(null);
@@ -120,6 +128,12 @@ export function AdmissionDetailPage() {
   const [offeredClassId, setOfferedClassId] = useState('');
   const [offerExpiresOn, setOfferExpiresOn] = useState('');
   const [convertOpen, setConvertOpen] = useState(false);
+
+  const [interviewOpen, setInterviewOpen] = useState(false);
+  const [interviewDate, setInterviewDate] = useState('');
+  const [interviewVenue, setInterviewVenue] = useState('');
+  const [interviewOutcome, setInterviewOutcome] = useState<InterviewOutcome | ''>('');
+  const [interviewNote, setInterviewNote] = useState('');
 
   if (application.isPending) {
     return (
@@ -179,6 +193,24 @@ export function AdmissionDetailPage() {
       offerExpiresOn: pendingStatus === 'OFFERED' ? offerExpiresOn || undefined : undefined,
     });
     setPendingStatus(null);
+  };
+
+  const openInterview = () => {
+    setInterviewDate(toDateTimeInputValue(record.interviewDate));
+    setInterviewVenue(record.interviewVenue ?? '');
+    setInterviewOutcome(record.interviewOutcome ?? '');
+    setInterviewNote('');
+    setInterviewOpen(true);
+  };
+
+  const submitInterview = async () => {
+    await scheduleInterview.mutateAsync({
+      interviewDate: interviewDate ? new Date(interviewDate).toISOString() : null,
+      interviewVenue: interviewVenue.trim() || null,
+      interviewOutcome: interviewOutcome || null,
+      interviewNote: interviewNote.trim() || undefined,
+    });
+    setInterviewOpen(false);
   };
 
   const canManage = can('admission.manage');
@@ -248,6 +280,16 @@ export function AdmissionDetailPage() {
                   </Button>
                 </Tooltip>
               ))}
+            {canManage && !record.convertedStudentId && (
+              <Button
+                data-cy="admissions-admission-detail-schedule-interview"
+                variant="outline"
+                onClick={openInterview}
+              >
+                <CalendarClock />
+                {record.interviewDate ? 'Edit interview' : 'Schedule interview'}
+              </Button>
+            )}
             {/* Enrolling creates the pupil and, with them, the guardian records
                 for everyone on the application — so it takes both permissions,
                 and the server enforces the same pair. */}
@@ -436,6 +478,17 @@ export function AdmissionDetailPage() {
                 label="Interview"
                 value={record.interviewDate ? formatDateTime(record.interviewDate) : 'Not scheduled'}
               />
+              {record.interviewVenue && <Field label="Interview venue" value={record.interviewVenue} />}
+              {record.interviewOutcome && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Interview outcome
+                  </p>
+                  <Badge tone={record.interviewOutcome === 'PASSED' ? 'success' : 'danger'}>
+                    {humanizeEnum(record.interviewOutcome)}
+                  </Badge>
+                </div>
+              )}
               <Field label="Offered class" value={record.offeredClassName ?? '—'} />
               <Field
                 label="Offer expires"
@@ -571,6 +624,93 @@ export function AdmissionDetailPage() {
               disabled={needsClassChoice(pendingStatus) && !offeredClassId}
             >
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={interviewOpen} onOpenChange={setInterviewOpen}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>{record.interviewDate ? 'Edit interview' : 'Schedule interview'}</DialogTitle>
+            <DialogDescription>
+              Setting a date and time emails the family the details automatically. Recording an
+              outcome does not — it's just a note here, and never changes the application's
+              status. Use the status buttons above for the actual decision.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogBody className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="interview-date">Date and time</Label>
+              <Input
+                data-cy="interview-date"
+                id="interview-date"
+                type="datetime-local"
+                value={interviewDate}
+                onChange={(event) => setInterviewDate(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="interview-venue">Venue</Label>
+              <Input
+                data-cy="interview-venue"
+                id="interview-venue"
+                value={interviewVenue}
+                onChange={(event) => setInterviewVenue(event.target.value)}
+                placeholder="A room at the school, or a video-call link"
+                maxLength={200}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="interview-outcome">Outcome</Label>
+              <NativeSelect
+                data-cy="interview-outcome"
+                id="interview-outcome"
+                value={interviewOutcome}
+                onChange={(event) => setInterviewOutcome(event.target.value as InterviewOutcome | '')}
+              >
+                <option value="">Not yet held</option>
+                <option value="PASSED">Passed</option>
+                <option value="FAILED">Failed</option>
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">
+                Whether the child did well in the interview itself. It's only a record — passing
+                doesn't shortlist them and failing doesn't reject them, since a school may still
+                have other reasons for its decision either way.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="interview-note">Note</Label>
+              <Textarea
+                data-cy="interview-note"
+                id="interview-note"
+                rows={3}
+                value={interviewNote}
+                onChange={(event) => setInterviewNote(event.target.value)}
+                placeholder="Optional — added to this application's history"
+              />
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            <Button
+              data-cy="admissions-admission-detail-interview-cancel"
+              type="button"
+              variant="outline"
+              onClick={() => setInterviewOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-cy="admissions-admission-detail-interview-save"
+              onClick={() => void submitInterview()}
+              loading={scheduleInterview.isPending}
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

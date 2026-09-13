@@ -8,6 +8,7 @@ import type {
   FetchAdmissionsQuery,
   PublicApplicationInput,
   RespondToOfferInput,
+  ScheduleInterviewInput,
   TransitionAdmissionInput,
 } from '../validators/admissions.schema';
 
@@ -56,6 +57,20 @@ export class AdmissionsController {
         req.validated!.body as TransitionAdmissionInput,
       );
       res.status(200).json(ApiResponse.ok(application, 'Application updated'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async scheduleInterview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const application = await service().scheduleInterview(
+        contextOf(req),
+        id,
+        req.validated!.body as ScheduleInterviewInput,
+      );
+      res.status(200).json(ApiResponse.ok(application, 'Interview details saved'));
     } catch (error) {
       next(error);
     }

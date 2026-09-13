@@ -5,9 +5,9 @@ import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import type { AdmissionFormValues, ConversionValues } from './schema';
 import { AdmissionEndpoints } from './admissions.endpoints';
-import type { TransitionInput, ConversionResult } from './admissions.endpoints';
+import type { TransitionInput, ConversionResult, ScheduleInterviewInput } from './admissions.endpoints';
 
-export type { TransitionInput, ConversionResult };
+export type { TransitionInput, ConversionResult, ScheduleInterviewInput };
 
 export function useAdmissions(query: ListQuery) {
   const schoolId = useSchoolId();
@@ -63,6 +63,20 @@ export function useTransitionAdmission(id: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.list(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.funnel(schoolId) });
       toast.success('Application updated');
+    },
+  });
+}
+
+/** Sets up, or records the result of, an interview — never touches `status`. */
+export function useScheduleInterview(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ScheduleInterviewInput) => AdmissionEndpoints.scheduleInterview(id, input),
+    onSuccess: (application) => {
+      queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
+      toast.success('Interview details saved');
     },
   });
 }

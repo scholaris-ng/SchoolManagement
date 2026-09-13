@@ -20,6 +20,9 @@ export type ApplicantType = 'GUARDIAN' | 'SELF';
 
 export type ApplicationSource = 'OFFICE' | 'WEBSITE' | 'IMPORT';
 
+/** Pass/fail on the interview itself, distinct from the application's status. */
+export type InterviewOutcome = 'PASSED' | 'FAILED';
+
 export interface AdmissionApplicant {
   firstName: string;
   middleName?: string | null;
@@ -100,6 +103,8 @@ export interface AdmissionApplication {
   status: ApplicationStatus;
   screeningScore?: number | null;
   interviewDate?: string | null;
+  interviewVenue?: string | null;
+  interviewOutcome?: InterviewOutcome | null;
   interviewNote?: string | null;
   decisionNote?: string | null;
   offeredClassId?: string | null;
