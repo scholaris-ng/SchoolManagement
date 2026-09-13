@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: scholaris-api
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    rootDir: .
+    buildCommand: npm ci
+    startCommand: npm run start -w @school/api
+    healthCheckPath: /api/health/live
+    envVars:
+      # --- Core -----------------------------------------------------------
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: /api/v1
+      # Public URL of the deployed client, and the origins it's allowed to
+      # call this API from. CORS is an explicit allowlist — see app.ts.
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+      # --- Database ---------------------------------------------------------
+      # Full connection string for your existing PostgreSQL instance, e.g.
+      # postgresql://user:password@host:5432/scholaris?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Most managed providers (Neon, Aiven, Cloud SQL) require TLS. Set to
+      # "false" only if connecting to a database that doesn't use TLS.
+      - key: DB_SSL
+        value: "true"
+
+      # --- Auth -------------------------------------------------------------
+      # Must stay false in production — the app refuses to start otherwise.
+      - key: DEV_AUTH_ENABLED
+        value: "false"
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+
+      # --- Outbound mail (optional — leave unset to log codes to console) ---
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+
+      # --- Payments (optional) ----------------------------------------------
+      - key: RAVEN_SECRET_KEY
+        sync: false
+      - key: RAVEN_WEBHOOK_SECRET
+        sync: false
