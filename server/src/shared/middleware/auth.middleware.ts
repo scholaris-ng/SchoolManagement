@@ -42,7 +42,11 @@ async function resolveIdentity(token: string): Promise<AuthIdentity> {
   let decoded;
   try {
     decoded = await getFirebaseAuth().verifyIdToken(token, true);
-  } catch {
+  } catch (error) {
+    // The client only ever sees "session expired" — this is the only place
+    // the actual cause (bad credential, wrong project, revoked token, IAM
+    // permission) is visible at all.
+    console.error('[auth] verifyIdToken failed:', error);
     throw AppError.unauthenticated('Your session has expired. Please sign in again.');
   }
 
