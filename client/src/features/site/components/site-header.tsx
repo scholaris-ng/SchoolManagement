@@ -104,19 +104,26 @@ export function SiteHeader() {
         )}
       >
         <Container className="flex h-[72px] items-center gap-4">
-          <Link to={path('')} className="flex shrink-0 items-center gap-3">
+          <Link to={path('')} className="flex min-w-0 shrink-0 items-center gap-3">
             <img
               src={content.brand.crestUrl}
               alt=""
-              className="size-11 object-contain"
+              className="size-11 shrink-0 object-contain"
               width={44}
               height={44}
             />
-            <span className="leading-tight">
-              <span className="site-display block text-[1.0625rem] font-semibold text-[var(--site-ink)]">
+            {/* The motto is free text from the school's own profile, so it has
+                no length limit on its side — capped and truncated here rather
+                than left to push the nav out of the bar or wrap the header
+                taller. */}
+            <span className="min-w-0 max-w-[220px] leading-tight sm:max-w-xs xl:max-w-sm">
+              <span className="site-display block truncate text-[1.0625rem] font-semibold text-[var(--site-ink)]">
                 {content.brand.name}
               </span>
-              <span className="block text-[0.6875rem] uppercase tracking-[0.16em] text-[var(--site-muted)]">
+              <span
+                className="block truncate text-[0.6875rem] uppercase tracking-[0.16em] text-[var(--site-muted)]"
+                title={content.brand.motto}
+              >
                 {content.brand.motto}
               </span>
             </span>
