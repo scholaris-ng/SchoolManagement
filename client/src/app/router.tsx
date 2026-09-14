@@ -1,6 +1,7 @@
 import { lazy } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
 import { AppShell } from './layouts/app-shell';
+import { AppErrorBoundary } from '@/features/errors/app-error-boundary';
 import { RequireAuth } from '@/components/guards/permission-gate';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { peopleRoutes } from './routes/people.routes';
@@ -69,10 +70,20 @@ const NotFoundPage = lazy(() =>
   import('@/features/errors/not-found-page').then((m) => ({ default: m.NotFoundPage })),
 );
 
+/**
+ * A pathless wrapper carrying the one `errorElement` every route in the tree
+ * falls back to. Without it, an error thrown below — a stale chunk after a
+ * new deploy, most commonly — reaches React Router's own generic fallback
+ * page instead of `AppErrorBoundary`'s reload-and-recover behaviour.
+ */
+function withRootErrorBoundary(children: RouteObject[]): RouteObject[] {
+  return [{ element: <Outlet />, errorElement: <AppErrorBoundary />, children }];
+}
+
 export const router = createBrowserRouter(
   siteSlugFromHost()
-    ? [siteHostRoute]
-    : [
+    ? withRootErrorBoundary([siteHostRoute])
+    : withRootErrorBoundary([
         { path: '/sign-in', element: <SignInPage /> },
         { path: '/sign-up', element: <SignUpPage /> },
         { path: '/verify-email', element: <VerifyEmailPage /> },
@@ -106,5 +117,5 @@ export const router = createBrowserRouter(
         },
 
         { path: '*', element: <NotFoundPage /> },
-      ],
+      ]),
 );
