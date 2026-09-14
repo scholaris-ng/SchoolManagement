@@ -16,6 +16,17 @@ const feeItemBody = z.object({
   isOptional: z.boolean().default(false),
   isRecurring: z.boolean().default(true),
   isActive: z.boolean().default(true),
+  /**
+   * Where families pay this particular charge into. All three are meant to
+   * travel together — the client's form only ever sends them as a set — but
+   * left unenforced here so a PATCH naming just one (a corrected account
+   * number, say) is not rejected for leaving the other two out of the body.
+   * A row with only some of the three filled simply shows nothing until it
+   * has all of them (`invoice-detail-page.tsx`).
+   */
+  bankName: z.string().trim().max(80).nullable().optional(),
+  accountNumber: z.string().trim().max(20).nullable().optional(),
+  accountName: z.string().trim().max(160).nullable().optional(),
 });
 
 export const fetchFeeItemsSchema = z.object({

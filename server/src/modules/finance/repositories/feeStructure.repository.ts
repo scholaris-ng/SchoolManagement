@@ -76,6 +76,9 @@ export interface FeeStructureLineDefinition {
   amount: number;
   isOptional: boolean;
   sortOrder: number;
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
 }
 
 /** A pupil a bulk run is about to bill. */
@@ -148,7 +151,9 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
     return runner.query(
       `SELECT fsl.fee_item_id AS "feeItemId", fi.name, fi.category,
               fsl.amount::float AS amount, fsl.is_optional AS "isOptional",
-              fsl.sort_order AS "sortOrder"
+              fsl.sort_order AS "sortOrder",
+              fi.bank_name AS "bankName", fi.account_number AS "accountNumber",
+              fi.account_name AS "accountName"
          FROM fee_structure_lines fsl
          JOIN fee_items fi ON fi.id = fsl.fee_item_id
         WHERE fsl.school_id = $1 AND fsl.fee_structure_id = $2

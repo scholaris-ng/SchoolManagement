@@ -24,6 +24,10 @@ export interface FeeItemDTO {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
+  /** Where families pay this charge into. All three or none. */
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
 }
 
 /** Mirrors `Discount` in `client/src/types/finance.ts`. */
@@ -86,6 +90,10 @@ export interface InvoiceLineDTO {
   discountAmount: number;
   lineTotal: number;
   isOptional: boolean;
+  /** Where to pay this charge, snapshotted from the fee item when it was billed. */
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
 }
 
 /**

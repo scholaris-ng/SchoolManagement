@@ -184,7 +184,10 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
               'unitAmount', il.unit_amount::float,
               'discountAmount', il.discount_amount::float,
               'lineTotal', il.line_total::float,
-              'isOptional', il.is_optional
+              'isOptional', il.is_optional,
+              'bankName', il.bank_name,
+              'accountNumber', il.account_number,
+              'accountName', il.account_name
             ) ORDER BY il.sort_order, il.description
           )
           FROM invoice_lines il WHERE il.invoice_id = i.id

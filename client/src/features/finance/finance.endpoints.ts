@@ -78,6 +78,8 @@ export interface FeeStructureInput {
 export interface GenerateInvoicesInput {
   dueDate: string;
   termId?: string;
+  /** Printed bold on every invoice the run creates — a due-date warning, typically. */
+  note?: string;
 }
 
 /**

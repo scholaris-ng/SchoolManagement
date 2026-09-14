@@ -132,6 +132,12 @@ export function InvoiceDetailPage() {
                       {line.isOptional && (
                         <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
                       )}
+                      {line.bankName && line.accountNumber && (
+                        <span className="block text-xs text-muted-foreground">
+                          Pay into {line.bankName} · {line.accountNumber}
+                          {line.accountName ? ` · ${line.accountName}` : ''}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums">{line.quantity}</td>
                     <td className="px-2 py-2 text-right tabular-nums">
@@ -187,7 +193,7 @@ export function InvoiceDetailPage() {
           </dl>
 
           {record.note && (
-            <p className="border-t border-border pt-3 text-sm text-muted-foreground">
+            <p className="border-t border-border pt-3 text-sm font-bold text-foreground">
               {record.note}
             </p>
           )}

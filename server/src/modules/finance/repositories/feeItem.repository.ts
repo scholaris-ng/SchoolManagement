@@ -20,6 +20,9 @@ function toDTO(row: FeeItem): FeeItemDTO {
     isOptional: row.isOptional,
     isRecurring: row.isRecurring,
     isActive: row.isActive,
+    bankName: row.bankName,
+    accountNumber: row.accountNumber,
+    accountName: row.accountName,
   };
 }
 

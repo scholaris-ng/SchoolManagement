@@ -302,12 +302,22 @@ export function FeeStructureDialog({
                         checked={Boolean(line)}
                         onChange={(event) => toggleItem(item.id, event.target.checked)}
                       />
-                      <span className="min-w-0 truncate">
-                        {item.name}
-                        <span className="text-muted-foreground">
-                          {' '}
-                          · {humanizeEnum(item.category)}
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {item.name}
+                          <span className="text-muted-foreground">
+                            {' '}
+                            · {humanizeEnum(item.category)}
+                          </span>
                         </span>
+                        {/* Set once on the fee item itself (`fee-item-dialog.tsx`),
+                            not per structure — shown here only so a bursar
+                            composing this sheet can see where each charge routes. */}
+                        {item.bankName && item.accountNumber && (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            Pay into {item.bankName} · {item.accountNumber}
+                          </span>
+                        )}
                       </span>
                     </label>
                     {line && (

@@ -16,17 +16,9 @@ export function SiteFooter() {
     <footer className="bg-[var(--site-brand-dark)] text-white/70">
       <Container className="grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
         <div>
-          <div className="flex items-center gap-3">
-            <img src={content.brand.crestUrl} alt="" className="size-12 object-contain" />
-            <span className="leading-tight">
-              <span className="site-display block text-lg font-semibold text-white">
-                {content.brand.name}
-              </span>
-              <span className="block text-[0.6875rem] uppercase tracking-[0.16em] text-[var(--site-gold)]">
-                {content.brand.motto}
-              </span>
-            </span>
-          </div>
+          {/* Name and motto already open the page, in the header right above
+              this; the footer's own brand mark is just the crest. */}
+          <img src={content.brand.crestUrl} alt={content.brand.name} className="size-12 object-contain" />
           <p className="mt-5 text-sm leading-relaxed">{content.offers}</p>
           <a
             href={contact.facebook.url}

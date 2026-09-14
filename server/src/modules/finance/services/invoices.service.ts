@@ -32,6 +32,10 @@ export interface IssueLine {
   unitAmount: number;
   discountAmount: number;
   isOptional: boolean;
+  /** Where this charge is paid into, snapshotted from the fee item. */
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
 }
 
 /** Everything one invoice needs that the caller already knows. */
@@ -170,6 +174,9 @@ export class InvoicesService {
         unitAmount: item.amount,
         discountAmount: line.discountAmount,
         isOptional: item.isOptional,
+        bankName: item.bankName,
+        accountNumber: item.accountNumber,
+        accountName: item.accountName,
       };
     });
 
@@ -295,6 +302,9 @@ export class InvoicesService {
         ),
         isOptional: line.isOptional,
         sortOrder: index,
+        bankName: line.bankName,
+        accountNumber: line.accountNumber,
+        accountName: line.accountName,
       })),
       manager,
     );

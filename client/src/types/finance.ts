@@ -10,6 +10,10 @@ export interface FeeItem {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
+  /** Where families pay this charge into. All three are set together, or none. */
+  bankName?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
 }
 
 export interface FeeStructureLine {
@@ -90,6 +94,10 @@ export interface InvoiceLine {
   discountAmount: number;
   lineTotal: number;
   isOptional: boolean;
+  /** Where to pay this charge, as it stood when the invoice was raised. */
+  bankName?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
 }
 
 export interface Invoice {

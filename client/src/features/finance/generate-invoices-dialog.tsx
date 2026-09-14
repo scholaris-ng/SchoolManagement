@@ -5,7 +5,7 @@ import type { FeeStructure } from '@/types/finance';
 import type { GenerateInvoicesInput } from './finance.endpoints';
 import { Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Alert } from '@/components/ui/feedback';
 import {
   Dialog,
@@ -50,6 +50,7 @@ export function GenerateInvoicesDialog({
     toDateInputValue(new Date(Date.now() + DEFAULT_DUE_DAYS * 86_400_000)),
   );
   const [termId, setTermId] = useState('');
+  const [note, setNote] = useState('');
 
   const needsTerm = Boolean(structure && !structure.termId);
   const valid = Boolean(dueDate) && (!needsTerm || Boolean(termId));
@@ -104,6 +105,21 @@ export function GenerateInvoicesDialog({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="generate-note">Note to print on the invoice</Label>
+            <Textarea
+              data-cy="generate-note"
+              id="generate-note"
+              rows={2}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="e.g. Please note that all payments should be made by the 3rd week, or your child will not sit the exam."
+            />
+            <p className="text-xs text-muted-foreground">
+              Shown in bold on every invoice this run creates.
+            </p>
+          </div>
+
           <Alert tone="info">
             Any balance a family still owes from an earlier term is carried onto the new invoice,
             and the older bill is closed against it.
@@ -118,7 +134,9 @@ export function GenerateInvoicesDialog({
             data-cy="generate-confirm"
             loading={saving}
             disabled={!valid}
-            onClick={() => void onConfirm({ dueDate, termId: termId || undefined })}
+            onClick={() =>
+              void onConfirm({ dueDate, termId: termId || undefined, note: note.trim() || undefined })
+            }
           >
             Generate invoices
           </Button>

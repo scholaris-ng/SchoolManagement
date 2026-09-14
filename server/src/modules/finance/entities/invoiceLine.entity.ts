@@ -67,4 +67,19 @@ export class InvoiceLine extends BaseEntity {
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
+
+  /**
+   * Where to pay this particular charge, copied from `FeeItem` at the moment
+   * this line is raised — same reasoning as `description` and `unitAmount`
+   * above: the school changing its bank account next term must not rewrite
+   * where a bill already sent says the money goes.
+   */
+  @Column({ name: 'bank_name', type: 'varchar', length: 80, nullable: true })
+  bankName: string | null;
+
+  @Column({ name: 'account_number', type: 'varchar', length: 20, nullable: true })
+  accountNumber: string | null;
+
+  @Column({ name: 'account_name', type: 'varchar', length: 160, nullable: true })
+  accountName: string | null;
 }

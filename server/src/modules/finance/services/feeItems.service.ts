@@ -50,6 +50,9 @@ export class FeeItemsService {
       isOptional: input.isOptional,
       isRecurring: input.isRecurring,
       isActive: input.isActive,
+      bankName: input.bankName ?? null,
+      accountNumber: input.accountNumber ?? null,
+      accountName: input.accountName ?? null,
     });
 
     await this.audit.record(context, {

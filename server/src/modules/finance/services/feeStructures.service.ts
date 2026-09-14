@@ -251,7 +251,7 @@ export class FeeStructuresService {
           issueDate: todayIso(),
           dueDate: input.dueDate,
           sequence: first + invoiceIds.length,
-          note: null,
+          note: input.note ? input.note : null,
           lines,
           createdByUserId: context.user.id,
         });
@@ -360,6 +360,9 @@ function linesFor(
     amount: number;
     isOptional: boolean;
     sortOrder: number;
+    bankName: string | null;
+    accountNumber: string | null;
+    accountName: string | null;
   }[],
   boardingStatus: 'DAY' | 'BOARDING',
 ): IssueLine[] {
@@ -373,6 +376,9 @@ function linesFor(
       unitAmount: line.amount,
       discountAmount: 0,
       isOptional: line.isOptional,
+      bankName: line.bankName,
+      accountNumber: line.accountNumber,
+      accountName: line.accountName,
     }));
 }
 

@@ -69,6 +69,8 @@ export const generateInvoicesSchema = z.object({
     .object({
       dueDate: isoDate,
       termId: z.string().uuid().optional(),
+      /** Printed bold on every invoice the run creates — a due-date warning, typically. */
+      note: z.string().trim().max(500).optional().or(z.literal('')),
     })
     .strict(),
 });
