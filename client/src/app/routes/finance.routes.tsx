@@ -19,6 +19,11 @@ const FinanceOverviewPage = lazy(() =>
 const FeesPage = lazy(() =>
   import('@/features/finance/fees-page').then((m) => ({ default: m.FeesPage })),
 );
+const FeeStructurePrintPage = lazy(() =>
+  import('@/features/finance/fee-structure-print-page').then((m) => ({
+    default: m.FeeStructurePrintPage,
+  })),
+);
 const InvoicesPage = lazy(() =>
   import('@/features/finance/invoices-page').then((m) => ({ default: m.InvoicesPage })),
 );
@@ -82,6 +87,7 @@ export const financeRoutes: RouteObject[] = [
     element: guarded('finance.read'),
     children: [
       { path: 'finance/receipts/:paymentId', element: <ReceiptPage /> },
+      { path: 'finance/fee-structures/:id/print', element: <FeeStructurePrintPage /> },
     ],
   },
 ];

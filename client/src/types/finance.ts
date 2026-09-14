@@ -22,6 +22,10 @@ export interface FeeStructureLine {
   feeItemName: string;
   amount: number;
   isOptional: boolean;
+  /** The fee item's own payment account, for the printable schedule. */
+  bankName?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
 }
 
 export interface FeeStructure {
@@ -40,6 +44,11 @@ export interface FeeStructure {
   optionalTotal: number;
   isActive: boolean;
   version: number;
+  /** Letterhead details for the printable fee schedule — set only by `fetchFeeStructure`. */
+  schoolName?: string;
+  schoolLogoUrl?: string | null;
+  schoolPhone?: string;
+  schoolEmail?: string;
 }
 
 /**
@@ -126,6 +135,12 @@ export interface Invoice {
   note?: string | null;
   createdAt: string;
   version: number;
+  /** The school's own letterhead details, for the printed copy. */
+  schoolName: string;
+  schoolLogoUrl: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
 }
 
 /**

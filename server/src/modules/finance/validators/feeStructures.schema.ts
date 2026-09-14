@@ -50,6 +50,8 @@ export const fetchFeeStructuresSchema = z.object({
     .strict(),
 });
 
+export const feeStructureParamSchema = z.object({ params: z.object({ id: z.string().uuid() }) });
+
 export const createFeeStructureSchema = z.object({ body: structureBody.strict() });
 
 export const updateFeeStructureSchema = z.object({

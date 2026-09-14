@@ -33,11 +33,30 @@ export class FeeStructuresController {
     }
   }
 
+  static async fetchOne(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      res.status(200).json(ApiResponse.ok(await service().fetchOne(contextOf(req), id)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.validated!.params as { id: string };
       const body = req.validated!.body as UpdateFeeStructureInput;
       res.status(200).json(ApiResponse.ok(await service().update(contextOf(req), id, body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      await service().remove(contextOf(req), id);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

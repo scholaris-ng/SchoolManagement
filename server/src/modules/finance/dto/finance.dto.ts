@@ -50,6 +50,10 @@ export interface FeeStructureLineDTO {
   feeItemName: string;
   amount: number;
   isOptional: boolean;
+  /** The fee item's own payment account (`FeeItemDTO`), for the printable schedule. */
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
 }
 
 /** Mirrors `FeeStructure` in `client/src/types/finance.ts`. */
@@ -70,6 +74,11 @@ export interface FeeStructureDTO {
   optionalTotal: number;
   isActive: boolean;
   version: number;
+  /** Letterhead details for the printable fee schedule — set only by `fetchOne`. */
+  schoolName?: string;
+  schoolLogoUrl?: string | null;
+  schoolPhone?: string;
+  schoolEmail?: string;
 }
 
 /** What one bulk-billing run did. Mirrors `GenerateInvoicesResult` on the client. */
@@ -128,6 +137,17 @@ export interface InvoiceDTO {
   note: string | null;
   createdAt: string;
   version: number;
+  /**
+   * The school's own letterhead details, for a printed invoice — assembled
+   * the same way `fetchReceipt` builds `ReceiptDTO`'s equivalent fields, from
+   * the school record rather than a join, since only the single detail read
+   * needs them.
+   */
+  schoolName: string;
+  schoolLogoUrl: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
 }
 
 /** Mirrors `PaymentAllocation` in `client/src/types/finance.ts`. */

@@ -15,6 +15,7 @@ import {
 } from '../validators/feeItems.schema';
 import {
   createFeeStructureSchema,
+  feeStructureParamSchema,
   fetchFeeStructuresSchema,
   generateInvoicesSchema,
   updateFeeStructureSchema,
@@ -101,11 +102,27 @@ router.post(
   FeeStructuresController.create,
 );
 
+/** One structure — the printable fee schedule reads this directly by id. */
+router.get(
+  '/fee-structures/:id',
+  authorise('finance.read', 'fee.manage'),
+  validate(feeStructureParamSchema),
+  FeeStructuresController.fetchOne,
+);
+
 router.patch(
   '/fee-structures/:id',
   authorise('fee.manage'),
   validate(updateFeeStructureSchema),
   FeeStructuresController.update,
+);
+
+/** Refused once the structure has actually billed anyone — see the service. */
+router.delete(
+  '/fee-structures/:id',
+  authorise('fee.manage'),
+  validate(feeStructureParamSchema),
+  FeeStructuresController.remove,
 );
 
 /**

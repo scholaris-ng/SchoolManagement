@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Coins, Percent, Plus, ReceiptText } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Coins, Copy, Percent, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import {
+  useDeleteFeeStructure,
   useDiscounts,
   useFeeItems,
   useFeeStructures,
@@ -24,6 +26,7 @@ import {
   CardTitle,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState, LoadingState } from '@/components/ui/feedback';
 import {
   FeeItemDialog,
@@ -55,6 +58,7 @@ export function FeesPage() {
   const saveFeeItem = useSaveFeeItem();
   const saveDiscount = useSaveDiscount();
   const saveStructure = useSaveFeeStructure();
+  const deleteStructure = useDeleteFeeStructure();
   const generateInvoices = useGenerateInvoices();
 
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: FeeItem }>({ open: false });
@@ -64,11 +68,13 @@ export function FeesPage() {
   const [structureDialog, setStructureDialog] = useState<{
     open: boolean;
     structure?: FeeStructure;
+    mode?: 'edit' | 'duplicate';
   }>({ open: false });
   const [generateDialog, setGenerateDialog] = useState<{
     open: boolean;
     structure?: FeeStructure;
   }>({ open: false });
+  const [pendingDelete, setPendingDelete] = useState<FeeStructure | null>(null);
 
   const currency = 'NGN';
   const canManage = can('fee.manage');
@@ -233,15 +239,52 @@ export function FeesPage() {
                         )}
                       </div>
                       {!structure.isActive && <Badge tone="warning">Inactive</Badge>}
+                      <Button
+                        data-cy="finance-structure-print"
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                      >
+                        <Link to={`/finance/fee-structures/${structure.id}/print`}>
+                          <Printer />
+                          Print
+                        </Link>
+                      </Button>
                       {canManage && (
-                        <Button
-                          data-cy="finance-structure-edit"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setStructureDialog({ open: true, structure })}
-                        >
-                          Edit
-                        </Button>
+                        <>
+                          <Button
+                            data-cy="finance-structure-duplicate"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setStructureDialog({
+                                open: true,
+                                structure: { ...structure, name: `Copy of ${structure.name}` },
+                                mode: 'duplicate',
+                              })
+                            }
+                          >
+                            <Copy />
+                            Duplicate
+                          </Button>
+                          <Button
+                            data-cy="finance-structure-edit"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setStructureDialog({ open: true, structure, mode: 'edit' })}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            data-cy="finance-structure-delete"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPendingDelete(structure)}
+                          >
+                            <Trash2 />
+                            Delete
+                          </Button>
+                        </>
                       )}
                       {canBill && structure.isActive && (
                         <Button
@@ -333,15 +376,37 @@ export function FeesPage() {
       />
 
       <FeeStructureDialog
-        key={structureDialog.structure?.id ?? 'new-structure'}
+        key={
+          structureDialog.mode === 'duplicate'
+            ? `duplicate-${structureDialog.structure?.id}`
+            : (structureDialog.structure?.id ?? 'new-structure')
+        }
         state={structureDialog}
         onOpenChange={(open) => setStructureDialog({ open })}
         onSave={(values) =>
           saveStructure
-            .mutateAsync({ id: structureDialog.structure?.id, values })
+            .mutateAsync({
+              // A duplicate always creates, whatever id it was prefilled from.
+              id: structureDialog.mode === 'duplicate' ? undefined : structureDialog.structure?.id,
+              values,
+            })
             .then(() => setStructureDialog({ open: false }))
         }
         saving={saveStructure.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete this fee structure?"
+        description={`"${pendingDelete?.name}" will be permanently removed. This is refused if it has already been used to generate any invoices — turn it off instead of deleting one of those.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteStructure.isPending}
+        onConfirm={async () => {
+          if (pendingDelete) await deleteStructure.mutateAsync(pendingDelete.id);
+          setPendingDelete(null);
+        }}
       />
 
       <GenerateInvoicesDialog

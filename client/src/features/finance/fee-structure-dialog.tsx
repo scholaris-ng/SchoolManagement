@@ -45,12 +45,18 @@ export function FeeStructureDialog({
   onSave,
   saving,
 }: {
-  state: { open: boolean; structure?: FeeStructure };
+  /**
+   * `mode: 'duplicate'` prefills every field from `structure` exactly like
+   * editing does, but the dialog reads as making a new one — `fees-page.tsx`
+   * is what actually sends it to `create` rather than `update`.
+   */
+  state: { open: boolean; structure?: FeeStructure; mode?: 'edit' | 'duplicate' };
   onOpenChange: (open: boolean) => void;
   onSave: (values: FeeStructureInput) => Promise<unknown>;
   saving: boolean;
 }) {
   const existing = state.structure;
+  const isDuplicate = state.mode === 'duplicate';
 
   const sessions = useAcademicSessions();
   const levels = useLevels();
@@ -141,10 +147,13 @@ export function FeeStructureDialog({
     <Dialog open={state.open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>{existing ? 'Edit fee structure' : 'New fee structure'}</DialogTitle>
+          <DialogTitle>
+            {isDuplicate ? 'Duplicate fee structure' : existing ? 'Edit fee structure' : 'New fee structure'}
+          </DialogTitle>
           <DialogDescription>
-            What a term costs, for one group of pupils. Invoices generated from this copy the
-            amounts, so editing it later never changes a bill already sent.
+            {isDuplicate
+              ? 'A copy of an existing structure, ready to adjust — the term or levels, say — before saving it as a new one. The original is untouched.'
+              : 'What a term costs, for one group of pupils. Invoices generated from this copy the amounts, so editing it later never changes a bill already sent.'}
           </DialogDescription>
         </DialogHeader>
 

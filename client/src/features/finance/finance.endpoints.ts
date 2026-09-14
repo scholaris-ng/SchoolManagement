@@ -110,11 +110,16 @@ export const FinanceEndpoints = {
   fetchFeeStructures: (query: ListQuery) =>
     http.get<Paginated<FeeStructure>>('/fee-structures', { query }),
 
+  fetchFeeStructure: (id: string) => http.get<FeeStructure>(`/fee-structures/${id}`),
+
   createFeeStructure: (values: Partial<FeeStructureInput>) =>
     http.post<FeeStructure>('/fee-structures', values),
 
   updateFeeStructure: (id: string, values: Partial<FeeStructureInput>) =>
     http.patch<FeeStructure>(`/fee-structures/${id}`, values),
+
+  /** Refused server-side once the structure has actually billed anyone. */
+  deleteFeeStructure: (id: string) => http.delete<void>(`/fee-structures/${id}`),
 
   /**
    * Bills every pupil the structure covers who has not already been billed for

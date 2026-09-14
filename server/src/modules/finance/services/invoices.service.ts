@@ -7,6 +7,8 @@ import { AuditService } from '../../audit/services/audit.service';
 import { TermRepository } from '../../academics/repositories/term.repository';
 import { StudentRepository } from '../../students/repositories/student.repository';
 import { StudentAccessService } from '../../students/services/studentAccess.service';
+import { SchoolRepository } from '../../school/repositories/school.repository';
+import { WebsiteService } from '../../school/services/website.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
@@ -89,6 +91,8 @@ export class InvoicesService {
     private readonly students = StudentRepository.Instance,
     private readonly feeItems = FeeItemRepository.Instance,
     private readonly terms = TermRepository.Instance,
+    private readonly schools = SchoolRepository.Instance,
+    private readonly websites = WebsiteService.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
@@ -115,7 +119,39 @@ export class InvoicesService {
     if (!(await this.access.canSeeStudent(context, invoice.studentId))) {
       throw AppError.notFound('Invoice');
     }
-    return invoice;
+
+    // Letterhead details for the printed copy — assembled here rather than
+    // joined in the repository, the same way `PaymentsService.fetchReceipt`
+    // builds its receipt's equivalent fields: only this single-invoice read
+    // needs them, never the list.
+    //
+    // The phone and email prefer the school's own website settings —
+    // `contactEmail`/`contactPhone`, wherever an administrator has published
+    // a different point of contact for enquiries — but `WebsiteService`
+    // seeds those from the school's registration email/phone only once, when
+    // its row is first created; a school whose website row predates that, or
+    // that never touched the field, is left with a permanently blank column
+    // rather than the value it set on the School settings screen. Falling
+    // back to `school.phone`/`school.email` here, on every read, is what
+    // actually keeps that promise.
+    const [school, website] = await Promise.all([
+      this.schools.findById(context.schoolId),
+      this.websites.getForSchool(context.schoolId),
+    ]);
+    if (!school) throw AppError.internal();
+
+    return {
+      ...invoice,
+      schoolName: school.name,
+      schoolLogoUrl: school.branding?.logoUrl ?? null,
+      schoolAddress:
+        website.address ||
+        [school.addressLine1, school.addressLine2, school.city, school.state]
+          .filter(Boolean)
+          .join(', '),
+      schoolPhone: website.contactPhone || school.phone,
+      schoolEmail: website.contactEmail || school.email,
+    };
   }
 
   async fetchLedger(context: RequestContext, studentId: string): Promise<StudentLedgerResultDTO> {

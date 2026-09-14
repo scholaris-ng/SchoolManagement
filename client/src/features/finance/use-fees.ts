@@ -62,6 +62,15 @@ export function useFeeStructures(query: ListQuery = { page: 1, pageSize: 50 }) {
   });
 }
 
+export function useFeeStructure(id: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.finance.structure(schoolId, id ?? ''),
+    queryFn: () => FinanceEndpoints.fetchFeeStructure(id ?? ''),
+    enabled: Boolean(schoolId && id),
+  });
+}
+
 export function useSaveFeeStructure() {
   const schoolId = useSchoolId();
   const queryClient = useQueryClient();
@@ -74,6 +83,20 @@ export function useSaveFeeStructure() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.structures(schoolId) });
       toast.success('Fee structure saved');
+    },
+  });
+}
+
+/** Refused server-side once the structure has actually billed anyone. */
+export function useDeleteFeeStructure() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => FinanceEndpoints.deleteFeeStructure(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.structures(schoolId) });
+      toast.success('Fee structure deleted');
     },
   });
 }

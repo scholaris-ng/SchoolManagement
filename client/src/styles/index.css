@@ -243,6 +243,16 @@
     page-break-after: auto;
     break-after: auto;
   }
+  /*
+   * Browsers drop background colours from print output by default, to save
+   * ink — which would otherwise flatten an invoice's brand-coloured header
+   * band and table headings to plain white the moment it left the screen.
+   */
+  .print-page,
+  .print-page * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   @page {
     margin: 12mm;
   }

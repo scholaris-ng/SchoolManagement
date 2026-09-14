@@ -11,6 +11,8 @@ import { ClassRepository } from '../../academics/repositories/class.repository';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
+import { SchoolRepository } from '../../school/repositories/school.repository';
+import { WebsiteService } from '../../school/services/website.service';
 import { InvoicesService, type IssueLine } from './invoices.service';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type { FeeStructureDTO, GenerateInvoicesResultDTO } from '../dto/finance.dto';
@@ -49,6 +51,8 @@ export class FeeStructuresService {
     private readonly terms = TermRepository.Instance,
     private readonly levels = LevelRepository.Instance,
     private readonly classes = ClassRepository.Instance,
+    private readonly schools = SchoolRepository.Instance,
+    private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
 
@@ -62,6 +66,36 @@ export class FeeStructuresService {
       ...query,
       isActive: query.isActive === undefined ? undefined : query.isActive === 'true',
     });
+  }
+
+  /**
+   * One structure on its own — the printable fee schedule reads this rather
+   * than filtering the list already in memory, since a bursar sharing the
+   * link (or reloading the print page) may not have that list loaded at all.
+   * 404, not the 500 `requireDTO` gives internal callers: a bad or stale id
+   * reaching this from the browser is an ordinary "not found", not a bug.
+   */
+  async fetchOne(context: RequestContext, id: string): Promise<FeeStructureDTO> {
+    const dto = await this.structures.findOneDTO(context.schoolId, id);
+    if (!dto) throw AppError.notFound('Fee structure');
+
+    // Letterhead details for the printable schedule — same reasoning as
+    // `InvoicesService.fetchInvoice`: prefer the contact the school publishes
+    // on its website settings, but fall back to the school's own record
+    // rather than go blank when that has never been touched.
+    const [school, website] = await Promise.all([
+      this.schools.findById(context.schoolId),
+      this.websites.getForSchool(context.schoolId),
+    ]);
+    if (!school) throw AppError.internal();
+
+    return {
+      ...dto,
+      schoolName: school.name,
+      schoolLogoUrl: school.branding?.logoUrl ?? null,
+      schoolPhone: website.contactPhone || school.phone,
+      schoolEmail: website.contactEmail || school.email,
+    };
   }
 
   /* -- Writes ---------------------------------------------------------------- */
@@ -149,6 +183,35 @@ export class FeeStructuresService {
     });
 
     return this.requireDTO(context.schoolId, id);
+  }
+
+  /**
+   * Refused once the structure has actually billed anyone: an issued invoice
+   * points back to the structure it was raised from, and a bursar's later
+   * question — "what was this bill built from?" — deserves a real answer.
+   * `isActive` off is the tool for retiring one that has already been used;
+   * this is for the ones created by mistake or never run.
+   */
+  async remove(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.structures.findByIdScoped(context.schoolId, id);
+    if (!existing) throw AppError.notFound('Fee structure');
+
+    if (await this.structures.hasInvoices(context.schoolId, id)) {
+      throw AppError.conflict(
+        'Invoices have already been generated from this structure, so deleting it would leave them pointing at nothing. Turn it off instead.',
+      );
+    }
+
+    await this.structures.delete(context.schoolId, id);
+
+    await this.audit.record(context, {
+      action: 'feeStructure.deleted',
+      entityType: 'FeeStructure',
+      entityId: id,
+      entityLabel: existing.name,
+      before: { sessionId: existing.sessionId, termId: existing.termId },
+      severity: 'WARNING',
+    });
   }
 
   /* -- Billing the cohort ----------------------------------------------------- */

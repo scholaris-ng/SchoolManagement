@@ -48,7 +48,10 @@ const JOINS = `
           'feeItemId', fsl.fee_item_id,
           'feeItemName', fi.name,
           'amount', fsl.amount::float,
-          'isOptional', fsl.is_optional
+          'isOptional', fsl.is_optional,
+          'bankName', fi.bank_name,
+          'accountNumber', fi.account_number,
+          'accountName', fi.account_name
         ) ORDER BY fsl.sort_order, fi.name
       ) AS rows,
       SUM(fsl.amount) FILTER (WHERE NOT fsl.is_optional) AS mandatory,
@@ -243,11 +246,31 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
     return Number(row?.total ?? 0);
   }
 
+  /**
+   * Whether this structure has ever produced a real invoice, cancelled ones
+   * included — deleting one that has would sever the pointer an issued bill
+   * uses to say what it was raised from (`Invoice.feeStructureId`).
+   */
+  async hasInvoices(schoolId: string, structureId: string): Promise<boolean> {
+    const [row] = await this.repo.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM invoices WHERE school_id = $1 AND fee_structure_id = $2
+       ) AS exists`,
+      [schoolId, structureId],
+    );
+    return Boolean(row?.exists);
+  }
+
   /* -- Writes ---------------------------------------------------------------- */
 
   async create(data: DeepPartial<FeeStructure>, manager?: EntityManager): Promise<FeeStructure> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));
+  }
+
+  /** Its lines cascade with it (`FK_fee_structure_lines_structure`). */
+  async delete(schoolId: string, id: string): Promise<void> {
+    await this.repo.delete({ schoolId, id });
   }
 
   async update(
