@@ -217,13 +217,19 @@ export function SchoolSettingsPage() {
                 placeholder="https://"
               />
             </Field>
-            <Field label="Email" required error={fieldErrors.email}>
-              <Input
-                data-cy="school-settings-email"
-                type="email"
-                value={draft.email ?? ''}
-                onChange={(event) => set({ email: event.target.value })}
-              />
+            {/*
+              Read-only, the same as the school code above: this is the
+              school's registered address of record, not a detail to change
+              casually from a settings form. Families see the address a
+              school actually publishes for enquiries — the one under
+              Website settings — which stays fully editable on its own page.
+            */}
+            <Field
+              label="Email"
+              required
+              hint="Your school's registered email. Contact support to change it."
+            >
+              <Input data-cy="school-settings-email" type="email" value={draft.email ?? ''} readOnly disabled />
             </Field>
             <Field label="Phone" required error={fieldErrors.phone}>
               <PhoneField
@@ -480,10 +486,13 @@ export function SchoolSettingsPage() {
  * The fields this endpoint actually accepts.
  *
  * The draft is seeded from the whole school record so the form can display it,
- * but a record is not a patch: sending it back includes `id`, `code`, `status`,
- * `version` and the timestamps, none of which an administrator may edit. The
- * API refuses the lot, and the page then reported a validation failure for a
- * form the user had filled in correctly.
+ * but a record is not a patch: sending it back includes `id`, `code`, `email`,
+ * `status`, `version` and the timestamps, none of which an administrator may
+ * edit from here — `email` is read-only on the form above for the same
+ * reason `code` is, and is left out of this list so the box being disabled
+ * is not the only thing standing between it and a change. The API refuses
+ * the rest of the lot regardless, and the page then reported a validation
+ * failure for a form the user had filled in correctly.
  *
  * Blank optional fields are dropped rather than sent as empty strings. Leaving
  * the short-name box empty means "no change", not "erase it" — `phone`,
@@ -496,7 +505,6 @@ function editableFields(draft: Partial<School>): Partial<School> {
   const text = [
     'name',
     'shortName',
-    'email',
     'phone',
     'website',
     'addressLine1',
