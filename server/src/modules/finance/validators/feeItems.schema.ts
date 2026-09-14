@@ -2,6 +2,16 @@ import { z } from 'zod';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../../config/constants';
 import { FEE_CATEGORIES } from '../entities/feeItem.entity';
 
+/** One place a family can pay this item into. */
+const feeItemAccountInput = z
+  .object({
+    label: z.string().trim().max(80).nullable().optional(),
+    bankName: z.string().trim().min(1, 'Give the bank name').max(80),
+    accountNumber: z.string().trim().min(1, 'Give the account number').max(20),
+    accountName: z.string().trim().min(1, 'Give the account name').max(160),
+  })
+  .strict();
+
 const feeItemBody = z.object({
   name: z.string().trim().min(1, 'A fee name is required').max(120),
   code: z
@@ -17,16 +27,13 @@ const feeItemBody = z.object({
   isRecurring: z.boolean().default(true),
   isActive: z.boolean().default(true),
   /**
-   * Where families pay this particular charge into. All three are meant to
-   * travel together — the client's form only ever sends them as a set — but
-   * left unenforced here so a PATCH naming just one (a corrected account
-   * number, say) is not rejected for leaving the other two out of the body.
-   * A row with only some of the three filled simply shows nothing until it
-   * has all of them (`invoice-detail-page.tsx`).
+   * Where families can pay this particular charge into — a school that
+   * routes tuition to its main account and PTA dues to the PTA's own can
+   * give this item more than one. Omitted on a PATCH means "leave the list
+   * as it is"; present, even as `[]`, replaces the whole set at once, the
+   * same way a fee structure's `lines` do.
    */
-  bankName: z.string().trim().max(80).nullable().optional(),
-  accountNumber: z.string().trim().max(20).nullable().optional(),
-  accountName: z.string().trim().max(160).nullable().optional(),
+  accounts: z.array(feeItemAccountInput).max(10, 'That is a lot of accounts for one charge').optional(),
 });
 
 export const fetchFeeItemsSchema = z.object({
@@ -45,4 +52,5 @@ export const updateFeeItemSchema = z.object({
 
 export type CreateFeeItemInput = z.infer<typeof createFeeItemSchema>['body'];
 export type UpdateFeeItemInput = z.infer<typeof updateFeeItemSchema>['body'];
+export type FeeItemAccountInput = z.infer<typeof feeItemAccountInput>;
 export type FetchFeeItemsQuery = z.infer<typeof fetchFeeItemsSchema>['query'];

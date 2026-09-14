@@ -25,6 +25,14 @@ const structureBody = z.object({
           /** Omitted takes the fee item's own amount. */
           amount: z.coerce.number().min(0, 'An amount cannot be negative').optional(),
           isOptional: z.boolean().optional(),
+          /**
+           * Which of the fee item's own accounts apply here — an item with
+           * two accounts might be billed under just one for this cohort.
+           * Omitted or empty means none are shown on the invoice for this
+           * charge; the service silently drops any id that is not actually
+           * one of this item's accounts.
+           */
+          accountIds: z.array(z.string().uuid()).max(10).default([]),
         })
         .strict(),
     )

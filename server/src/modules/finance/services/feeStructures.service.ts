@@ -9,7 +9,10 @@ import { TermRepository } from '../../academics/repositories/term.repository';
 import { LevelRepository } from '../../academics/repositories/level.repository';
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
-import { FeeStructureRepository } from '../repositories/feeStructure.repository';
+import {
+  FeeStructureRepository,
+  type FeeStructureLineDefinition,
+} from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
@@ -374,22 +377,27 @@ export class FeeStructuresService {
   /**
    * Fills in each line's amount and optionality from the fee item where the
    * request left them out, so a structure that just names its charges gets the
-   * school's own prices rather than zeroes.
+   * school's own prices rather than zeroes. `accountIds` is trusted from the
+   * request but narrowed to ids that are actually accounts of that fee item —
+   * a stale id, from an account deleted between page load and save, is
+   * dropped rather than carried onto the structure.
    */
   private async priceLines(
     context: RequestContext,
-    lines: { feeItemId: string; amount?: number; isOptional?: boolean }[],
-  ): Promise<{ feeItemId: string; amount: number; isOptional: boolean }[]> {
+    lines: { feeItemId: string; amount?: number; isOptional?: boolean; accountIds: string[] }[],
+  ): Promise<{ feeItemId: string; amount: number; isOptional: boolean; accountIds: string[] }[]> {
     const items = await this.feeItems.fetchForSchool(context.schoolId);
     const byId = new Map(items.map((item) => [item.id, item]));
 
     return lines.map((line) => {
       const item = byId.get(line.feeItemId);
       if (!item) throw AppError.validation('One of those charges is not a fee item of this school.');
+      const ownAccountIds = new Set(item.accounts.map((account) => account.id));
       return {
         feeItemId: item.id,
         amount: line.amount ?? item.amount,
         isOptional: line.isOptional ?? item.isOptional,
+        accountIds: line.accountIds.filter((accountId) => ownAccountIds.has(accountId)),
       };
     });
   }
@@ -416,17 +424,7 @@ export class FeeStructuresService {
  * hand.
  */
 function linesFor(
-  definitions: {
-    feeItemId: string;
-    name: string;
-    category: string;
-    amount: number;
-    isOptional: boolean;
-    sortOrder: number;
-    bankName: string | null;
-    accountNumber: string | null;
-    accountName: string | null;
-  }[],
+  definitions: FeeStructureLineDefinition[],
   boardingStatus: 'DAY' | 'BOARDING',
 ): IssueLine[] {
   return definitions
@@ -439,9 +437,7 @@ function linesFor(
       unitAmount: line.amount,
       discountAmount: 0,
       isOptional: line.isOptional,
-      bankName: line.bankName,
-      accountNumber: line.accountNumber,
-      accountName: line.accountName,
+      accounts: line.accounts,
     }));
 }
 

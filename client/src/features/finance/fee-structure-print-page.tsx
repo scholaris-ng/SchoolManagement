@@ -149,12 +149,12 @@ export function FeeStructurePrintPage() {
                       {line.isOptional && (
                         <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
                       )}
-                      {line.bankName && line.accountNumber && (
-                        <span className="block text-xs text-muted-foreground">
-                          Pay into {line.bankName} · {line.accountNumber}
-                          {line.accountName ? ` · ${line.accountName}` : ''}
+                      {line.accounts.map((account) => (
+                        <span key={account.id} className="block text-xs text-muted-foreground">
+                          Pay into {account.label ? `${account.label} — ` : ''}
+                          {account.bankName} · {account.accountNumber} · {account.accountName}
                         </span>
-                      )}
+                      ))}
                     </td>
                     <td className="px-2 py-2 text-right font-medium tabular-nums">
                       {formatCurrency(line.amount, currency, { showDecimals: false })}

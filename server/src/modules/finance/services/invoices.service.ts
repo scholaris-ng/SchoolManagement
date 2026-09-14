@@ -13,6 +13,7 @@ import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
+import type { InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
   InvoiceDTO,
@@ -34,10 +35,8 @@ export interface IssueLine {
   unitAmount: number;
   discountAmount: number;
   isOptional: boolean;
-  /** Where this charge is paid into, snapshotted from the fee item. */
-  bankName: string | null;
-  accountNumber: string | null;
-  accountName: string | null;
+  /** Where this charge is paid into, snapshotted from the fee item's selected accounts. */
+  accounts: InvoiceLineAccountSnapshot[];
 }
 
 /** Everything one invoice needs that the caller already knows. */
@@ -210,9 +209,14 @@ export class InvoicesService {
         unitAmount: item.amount,
         discountAmount: line.discountAmount,
         isOptional: item.isOptional,
-        bankName: item.bankName,
-        accountNumber: item.accountNumber,
-        accountName: item.accountName,
+        // A bill raised by hand has no structure line to have narrowed this
+        // down, so it names everywhere the item can be paid into.
+        accounts: item.accounts.map((account) => ({
+          label: account.label,
+          bankName: account.bankName,
+          accountNumber: account.accountNumber,
+          accountName: account.accountName,
+        })),
       };
     });
 
@@ -338,9 +342,7 @@ export class InvoicesService {
         ),
         isOptional: line.isOptional,
         sortOrder: index,
-        bankName: line.bankName,
-        accountNumber: line.accountNumber,
-        accountName: line.accountName,
+        accounts: line.accounts,
       })),
       manager,
     );

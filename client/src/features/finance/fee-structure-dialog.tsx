@@ -24,6 +24,8 @@ interface LineDraft {
   feeItemId: string;
   amount: string;
   isOptional: boolean;
+  /** Which of the item's own accounts apply here — see `fee-item-dialog.tsx`. */
+  accountIds: string[];
 }
 
 /**
@@ -73,6 +75,7 @@ export function FeeStructureDialog({
       feeItemId: line.feeItemId,
       amount: String(line.amount),
       isOptional: line.isOptional,
+      accountIds: line.accounts.map((account) => account.id),
     })),
   );
 
@@ -101,7 +104,15 @@ export function FeeStructureDialog({
       const item = items.find((entry) => entry.id === itemId);
       return [
         ...current,
-        { feeItemId: itemId, amount: String(item?.amount ?? 0), isOptional: item?.isOptional ?? false },
+        {
+          feeItemId: itemId,
+          amount: String(item?.amount ?? 0),
+          isOptional: item?.isOptional ?? false,
+          // Every account the item has, by default — a bursar with one item
+          // and one account never has to think about this at all, and one
+          // with two only has to narrow it down rather than build it up.
+          accountIds: item?.accounts.map((account) => account.id) ?? [],
+        },
       ];
     });
   };
@@ -109,6 +120,20 @@ export function FeeStructureDialog({
   const patchLine = (itemId: string, patch: Partial<LineDraft>) =>
     setLines((current) =>
       current.map((line) => (line.feeItemId === itemId ? { ...line, ...patch } : line)),
+    );
+
+  const toggleAccount = (itemId: string, accountId: string) =>
+    setLines((current) =>
+      current.map((line) =>
+        line.feeItemId === itemId
+          ? {
+              ...line,
+              accountIds: line.accountIds.includes(accountId)
+                ? line.accountIds.filter((id) => id !== accountId)
+                : [...line.accountIds, accountId],
+            }
+          : line,
+      ),
     );
 
   const toggleId = (list: string[], id: string) =>
@@ -136,6 +161,7 @@ export function FeeStructureDialog({
           feeItemId: item.id,
           amount: String(item.amount ?? 0),
           isOptional: item.isOptional ?? false,
+          accountIds: item.accounts.map((account) => account.id),
         }));
       return [...current, ...additions];
     });
@@ -302,57 +328,79 @@ export function FeeStructureDialog({
               {items.map((item) => {
                 const line = byId.get(item.id);
                 return (
-                  <li key={item.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-                    <label className="flex min-w-0 flex-1 items-center gap-2">
-                      <input
-                        data-cy="structure-item"
-                        type="checkbox"
-                        className="size-4 shrink-0 rounded border-input"
-                        checked={Boolean(line)}
-                        onChange={(event) => toggleItem(item.id, event.target.checked)}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate">
+                  <li key={item.id} className="space-y-2 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="flex min-w-0 flex-1 items-center gap-2">
+                        <input
+                          data-cy="structure-item"
+                          type="checkbox"
+                          className="size-4 shrink-0 rounded border-input"
+                          checked={Boolean(line)}
+                          onChange={(event) => toggleItem(item.id, event.target.checked)}
+                        />
+                        <span className="min-w-0 truncate">
                           {item.name}
                           <span className="text-muted-foreground">
                             {' '}
                             · {humanizeEnum(item.category)}
                           </span>
                         </span>
-                        {/* Set once on the fee item itself (`fee-item-dialog.tsx`),
-                            not per structure — shown here only so a bursar
-                            composing this sheet can see where each charge routes. */}
-                        {item.bankName && item.accountNumber && (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            Pay into {item.bankName} · {item.accountNumber}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                    {line && (
-                      <>
-                        <Input
-                          data-cy="structure-item-amount"
-                          type="number"
-                          min={0}
-                          className="w-32"
-                          aria-label={`Amount for ${item.name}`}
-                          value={line.amount}
-                          onChange={(event) => patchLine(item.id, { amount: event.target.value })}
-                        />
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            data-cy="structure-item-optional"
-                            type="checkbox"
-                            className="size-3.5 rounded border-input"
-                            checked={line.isOptional}
-                            onChange={(event) =>
-                              patchLine(item.id, { isOptional: event.target.checked })
-                            }
+                      </label>
+                      {line && (
+                        <>
+                          <Input
+                            data-cy="structure-item-amount"
+                            type="number"
+                            min={0}
+                            className="w-32"
+                            aria-label={`Amount for ${item.name}`}
+                            value={line.amount}
+                            onChange={(event) => patchLine(item.id, { amount: event.target.value })}
                           />
-                          Optional
-                        </label>
-                      </>
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              data-cy="structure-item-optional"
+                              type="checkbox"
+                              className="size-3.5 rounded border-input"
+                              checked={line.isOptional}
+                              onChange={(event) =>
+                                patchLine(item.id, { isOptional: event.target.checked })
+                              }
+                            />
+                            Optional
+                          </label>
+                        </>
+                      )}
+                    </div>
+                    {/* Which of the item's own accounts (`fee-item-dialog.tsx`)
+                        this structure bills under. One account is shown, not
+                        chosen — there is nothing to narrow down; two or more
+                        need an actual pick, and default to all of them. */}
+                    {line && item.accounts.length === 1 && (
+                      <p className="pl-6 text-xs text-muted-foreground">
+                        Pay into {item.accounts[0].bankName} · {item.accounts[0].accountNumber}
+                      </p>
+                    )}
+                    {line && item.accounts.length > 1 && (
+                      <fieldset className="space-y-1 pl-6">
+                        <legend className="text-xs text-muted-foreground">Pay into</legend>
+                        {item.accounts.map((account) => (
+                          <label
+                            key={account.id}
+                            className="flex items-center gap-2 text-xs text-muted-foreground"
+                          >
+                            <input
+                              data-cy="structure-item-account"
+                              type="checkbox"
+                              className="size-3.5 rounded border-input"
+                              checked={line.accountIds.includes(account.id)}
+                              onChange={() => toggleAccount(item.id, account.id)}
+                            />
+                            {account.label ? `${account.label} — ` : ''}
+                            {account.bankName} · {account.accountNumber}
+                          </label>
+                        ))}
+                      </fieldset>
                     )}
                   </li>
                 );
@@ -392,6 +440,7 @@ export function FeeStructureDialog({
                   feeItemId: line.feeItemId,
                   amount: Number(line.amount) || 0,
                   isOptional: line.isOptional,
+                  accountIds: line.accountIds,
                 })),
                 isActive,
               })

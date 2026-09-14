@@ -51,4 +51,14 @@ export class FeeStructureLine extends BaseEntity {
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
+
+  /**
+   * Which of the fee item's accounts (`FeeItemPaymentAccount`) apply to this
+   * particular structure — a school with two accounts on "Tuition" might bill
+   * junior secondary against just the main one and senior secondary against
+   * both. Empty means none were chosen; ids that no longer resolve (the
+   * account was since deleted) are simply skipped when a bill is raised.
+   */
+  @Column({ name: 'account_ids', type: 'jsonb', default: [] })
+  accountIds: string[];
 }

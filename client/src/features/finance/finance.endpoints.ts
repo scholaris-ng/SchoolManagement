@@ -18,6 +18,33 @@ import type {
 /** Type alias so it keeps the implicit index signature the transport needs. */
 export type FinanceOverviewQuery = { termId?: string };
 
+/** One place to pay a fee item into, as posted — no id, the server mints one. */
+export interface FeeItemAccountInput {
+  label?: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+/**
+ * What the server accepts for a fee item, which is *not* a `FeeItem`: an
+ * account here carries no id, where one coming back does. Typing the request
+ * separately is what stops a screen posting a read model back and being
+ * surprised — the same reasoning `FeeStructureInput` gives below.
+ */
+export interface FeeItemInput {
+  name: string;
+  code: string;
+  description?: string | null;
+  amount: number;
+  category: FeeItem['category'];
+  isOptional: boolean;
+  isRecurring: boolean;
+  isActive: boolean;
+  /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
+  accounts?: FeeItemAccountInput[];
+}
+
 export interface CreateInvoiceInput {
   studentId: string;
   termId: string;
@@ -70,7 +97,7 @@ export interface FeeStructureInput {
   sessionId: string;
   levelIds: string[];
   classIds: string[];
-  lines: { feeItemId: string; amount: number; isOptional: boolean }[];
+  lines: { feeItemId: string; amount: number; isOptional: boolean; accountIds: string[] }[];
   isActive: boolean;
 }
 
@@ -102,9 +129,9 @@ export const FinanceEndpoints = {
 
   fetchFeeItems: (query: ListQuery) => http.get<Paginated<FeeItem>>('/fee-items', { query }),
 
-  createFeeItem: (values: Partial<FeeItem>) => http.post<FeeItem>('/fee-items', values),
+  createFeeItem: (values: Partial<FeeItemInput>) => http.post<FeeItem>('/fee-items', values),
 
-  updateFeeItem: (id: string, values: Partial<FeeItem>) =>
+  updateFeeItem: (id: string, values: Partial<FeeItemInput>) =>
     http.patch<FeeItem>(`/fee-items/${id}`, values),
 
   fetchFeeStructures: (query: ListQuery) =>

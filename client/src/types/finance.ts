@@ -1,3 +1,12 @@
+/** One place a fee item can be paid into. A fee item may have more than one. */
+export interface FeeItemPaymentAccount {
+  id: string;
+  label?: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
 export interface FeeItem {
   id: string;
   schoolId: string;
@@ -10,10 +19,8 @@ export interface FeeItem {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
-  /** Where families pay this charge into. All three are set together, or none. */
-  bankName?: string | null;
-  accountNumber?: string | null;
-  accountName?: string | null;
+  /** Where families can pay this charge into. */
+  accounts: FeeItemPaymentAccount[];
 }
 
 export interface FeeStructureLine {
@@ -22,10 +29,8 @@ export interface FeeStructureLine {
   feeItemName: string;
   amount: number;
   isOptional: boolean;
-  /** The fee item's own payment account, for the printable schedule. */
-  bankName?: string | null;
-  accountNumber?: string | null;
-  accountName?: string | null;
+  /** Which of the fee item's own accounts this structure selected. */
+  accounts: FeeItemPaymentAccount[];
 }
 
 export interface FeeStructure {
@@ -104,9 +109,15 @@ export interface InvoiceLine {
   lineTotal: number;
   isOptional: boolean;
   /** Where to pay this charge, as it stood when the invoice was raised. */
-  bankName?: string | null;
-  accountNumber?: string | null;
-  accountName?: string | null;
+  accounts: InvoiceLineAccount[];
+}
+
+/** A payment account as it stood when an invoice line was raised — a snapshot, no id. */
+export interface InvoiceLineAccount {
+  label?: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
 }
 
 export interface Invoice {

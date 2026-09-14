@@ -12,6 +12,15 @@ import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
  */
 export type InvoiceStatusDTO = 'DRAFT' | 'ISSUED' | 'PART_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 
+/** One of a fee item's payment accounts. Mirrors `FeeItemPaymentAccount` on the client. */
+export interface FeeItemPaymentAccountDTO {
+  id: string;
+  label: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
 /** Mirrors `client/src/types/finance.ts` — the client's copy is the contract. */
 export interface FeeItemDTO {
   id: string;
@@ -24,10 +33,8 @@ export interface FeeItemDTO {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
-  /** Where families pay this charge into. All three or none. */
-  bankName: string | null;
-  accountNumber: string | null;
-  accountName: string | null;
+  /** Where families can pay this charge into — a fee item may have more than one. */
+  accounts: FeeItemPaymentAccountDTO[];
 }
 
 /** Mirrors `Discount` in `client/src/types/finance.ts`. */
@@ -50,10 +57,8 @@ export interface FeeStructureLineDTO {
   feeItemName: string;
   amount: number;
   isOptional: boolean;
-  /** The fee item's own payment account (`FeeItemDTO`), for the printable schedule. */
-  bankName: string | null;
-  accountNumber: string | null;
-  accountName: string | null;
+  /** Which of the fee item's own accounts this structure selected, resolved for display. */
+  accounts: FeeItemPaymentAccountDTO[];
 }
 
 /** Mirrors `FeeStructure` in `client/src/types/finance.ts`. */
@@ -89,6 +94,14 @@ export interface GenerateInvoicesResultDTO {
   invoiceIds: string[];
 }
 
+/** A payment account as it stood when an invoice line was raised — a snapshot, no id. */
+export interface InvoiceLineAccountDTO {
+  label: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
 /** Mirrors `InvoiceLine` in `client/src/types/finance.ts`. */
 export interface InvoiceLineDTO {
   id: string;
@@ -99,10 +112,8 @@ export interface InvoiceLineDTO {
   discountAmount: number;
   lineTotal: number;
   isOptional: boolean;
-  /** Where to pay this charge, snapshotted from the fee item when it was billed. */
-  bankName: string | null;
-  accountNumber: string | null;
-  accountName: string | null;
+  /** Where to pay this charge, snapshotted from the selected accounts when it was billed. */
+  accounts: InvoiceLineAccountDTO[];
 }
 
 /**

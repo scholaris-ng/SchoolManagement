@@ -36,6 +36,27 @@ const PROJECTION = `
   fs.is_active AS "isActive", fs.version
 `;
 
+/**
+ * Resolves a line's `account_ids` into the actual accounts, for the printable
+ * schedule to show. An id that no longer matches anything — the account was
+ * since deleted — is simply left out rather than surfaced as an error.
+ */
+const LINE_ACCOUNTS_SQL = `
+  LEFT JOIN LATERAL (
+    SELECT json_agg(
+             json_build_object(
+               'id', fia.id,
+               'label', fia.label,
+               'bankName', fia.bank_name,
+               'accountNumber', fia.account_number,
+               'accountName', fia.account_name
+             ) ORDER BY fia.sort_order
+           ) AS rows
+      FROM fee_item_payment_accounts fia
+     WHERE fia.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
+  ) acc ON TRUE
+`;
+
 const JOINS = `
   FROM fee_structures fs
   JOIN academic_sessions ses ON ses.id = fs.session_id
@@ -49,15 +70,14 @@ const JOINS = `
           'feeItemName', fi.name,
           'amount', fsl.amount::float,
           'isOptional', fsl.is_optional,
-          'bankName', fi.bank_name,
-          'accountNumber', fi.account_number,
-          'accountName', fi.account_name
+          'accounts', COALESCE(acc.rows, '[]'::json)
         ) ORDER BY fsl.sort_order, fi.name
       ) AS rows,
       SUM(fsl.amount) FILTER (WHERE NOT fsl.is_optional) AS mandatory,
       SUM(fsl.amount) FILTER (WHERE fsl.is_optional) AS optional
     FROM fee_structure_lines fsl
     JOIN fee_items fi ON fi.id = fsl.fee_item_id
+    ${LINE_ACCOUNTS_SQL}
     WHERE fsl.fee_structure_id = fs.id
   ) lines ON TRUE
 `;
@@ -79,9 +99,8 @@ export interface FeeStructureLineDefinition {
   amount: number;
   isOptional: boolean;
   sortOrder: number;
-  bankName: string | null;
-  accountNumber: string | null;
-  accountName: string | null;
+  /** The selected accounts, already in the snapshot shape `IssueLine.accounts` wants. */
+  accounts: { label: string | null; bankName: string; accountNumber: string; accountName: string }[];
 }
 
 /** A pupil a bulk run is about to bill. */
@@ -155,10 +174,21 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
       `SELECT fsl.fee_item_id AS "feeItemId", fi.name, fi.category,
               fsl.amount::float AS amount, fsl.is_optional AS "isOptional",
               fsl.sort_order AS "sortOrder",
-              fi.bank_name AS "bankName", fi.account_number AS "accountNumber",
-              fi.account_name AS "accountName"
+              COALESCE(acc.rows, '[]'::json) AS accounts
          FROM fee_structure_lines fsl
          JOIN fee_items fi ON fi.id = fsl.fee_item_id
+         LEFT JOIN LATERAL (
+           SELECT json_agg(
+                    json_build_object(
+                      'label', fia.label,
+                      'bankName', fia.bank_name,
+                      'accountNumber', fia.account_number,
+                      'accountName', fia.account_name
+                    ) ORDER BY fia.sort_order
+                  ) AS rows
+             FROM fee_item_payment_accounts fia
+            WHERE fia.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
+         ) acc ON TRUE
         WHERE fsl.school_id = $1 AND fsl.fee_structure_id = $2
         ORDER BY fsl.sort_order, fi.name`,
       [schoolId, structureId],
@@ -292,7 +322,7 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
   async replaceLines(
     schoolId: string,
     structureId: string,
-    lines: { feeItemId: string; amount: number; isOptional: boolean }[],
+    lines: { feeItemId: string; amount: number; isOptional: boolean; accountIds: string[] }[],
     manager?: EntityManager,
   ): Promise<void> {
     const repo = manager ? manager.getRepository(FeeStructureLine) : this.lines;
@@ -306,6 +336,7 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
         feeItemId: line.feeItemId,
         amount: line.amount.toFixed(2),
         isOptional: line.isOptional,
+        accountIds: line.accountIds,
         sortOrder: index,
       })),
     );

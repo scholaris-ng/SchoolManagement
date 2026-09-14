@@ -62,22 +62,9 @@ export class FeeItem extends SoftDeletableEntity {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
-
-  /**
-   * Where a family transfers money for this particular charge — a school that
-   * routes tuition to its main account and PTA dues to the PTA's own needs
-   * this named per item, not one bank detail for the whole invoice. All three
-   * are set together or not at all (`feeItems.schema.ts`). Copied onto
-   * `InvoiceLine` at issue time, the same as `amount`, so a bill already sent
-   * keeps naming the account it was raised under even if this one later
-   * changes.
-   */
-  @Column({ name: 'bank_name', type: 'varchar', length: 80, nullable: true })
-  bankName: string | null;
-
-  @Column({ name: 'account_number', type: 'varchar', length: 20, nullable: true })
-  accountNumber: string | null;
-
-  @Column({ name: 'account_name', type: 'varchar', length: 160, nullable: true })
-  accountName: string | null;
 }
+
+// Where families pay this charge into lives in `FeeItemPaymentAccount` — an
+// item can have more than one, so it is a child table rather than a column
+// here. See that entity, and `FeeStructureLine.accountIds` for how a
+// particular structure chooses which of an item's accounts apply.

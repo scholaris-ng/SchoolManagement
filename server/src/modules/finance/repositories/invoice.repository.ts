@@ -185,9 +185,7 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
               'discountAmount', il.discount_amount::float,
               'lineTotal', il.line_total::float,
               'isOptional', il.is_optional,
-              'bankName', il.bank_name,
-              'accountNumber', il.account_number,
-              'accountName', il.account_name
+              'accounts', il.accounts
             ) ORDER BY il.sort_order, il.description
           )
           FROM invoice_lines il WHERE il.invoice_id = i.id

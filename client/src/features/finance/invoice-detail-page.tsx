@@ -185,12 +185,12 @@ export function InvoiceDetailPage() {
                       {line.isOptional && (
                         <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
                       )}
-                      {line.bankName && line.accountNumber && (
-                        <span className="block text-xs text-muted-foreground">
-                          Pay into {line.bankName} · {line.accountNumber}
-                          {line.accountName ? ` · ${line.accountName}` : ''}
+                      {line.accounts.map((account, index) => (
+                        <span key={index} className="block text-xs text-muted-foreground">
+                          Pay into {account.label ? `${account.label} — ` : ''}
+                          {account.bankName} · {account.accountNumber} · {account.accountName}
                         </span>
-                      )}
+                      ))}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{line.quantity}</td>
                     <td className="px-3 py-2 text-right tabular-nums">

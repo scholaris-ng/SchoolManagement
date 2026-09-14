@@ -69,17 +69,21 @@ export class InvoiceLine extends BaseEntity {
   sortOrder: number;
 
   /**
-   * Where to pay this particular charge, copied from `FeeItem` at the moment
-   * this line is raised — same reasoning as `description` and `unitAmount`
-   * above: the school changing its bank account next term must not rewrite
-   * where a bill already sent says the money goes.
+   * Where to pay this particular charge — copied from whichever of the fee
+   * item's accounts the structure selected (`FeeStructureLine.accountIds`),
+   * at the moment this line is raised, for the same reason `description` and
+   * `unitAmount` are copied rather than referenced: the school changing or
+   * deleting an account next term must not rewrite where a bill already sent
+   * says the money goes. A snapshot, not a foreign key — that is also why it
+   * carries no id of its own, only what a family reading the bill needs.
    */
-  @Column({ name: 'bank_name', type: 'varchar', length: 80, nullable: true })
-  bankName: string | null;
+  @Column({ type: 'jsonb', default: [] })
+  accounts: InvoiceLineAccountSnapshot[];
+}
 
-  @Column({ name: 'account_number', type: 'varchar', length: 20, nullable: true })
-  accountNumber: string | null;
-
-  @Column({ name: 'account_name', type: 'varchar', length: 160, nullable: true })
-  accountName: string | null;
+export interface InvoiceLineAccountSnapshot {
+  label: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
 }

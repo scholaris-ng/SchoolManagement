@@ -2,6 +2,7 @@ import { AppError } from '../../../shared/errors/AppError';
 import { paginatedResult } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import type { RequestContext } from '../../../shared/types/context';
+import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import type { FeeItemDTO } from '../dto/finance.dto';
@@ -40,19 +41,25 @@ export class FeeItemsService {
     const clash = await this.feeItems.findByCode(context.schoolId, input.code);
     if (clash) throw AppError.conflict('A fee item with that code already exists.');
 
-    const created = await this.feeItems.create({
-      schoolId: context.schoolId,
-      name: input.name,
-      code: input.code,
-      description: input.description ?? null,
-      amount: input.amount.toFixed(2),
-      category: input.category as FeeCategory,
-      isOptional: input.isOptional,
-      isRecurring: input.isRecurring,
-      isActive: input.isActive,
-      bankName: input.bankName ?? null,
-      accountNumber: input.accountNumber ?? null,
-      accountName: input.accountName ?? null,
+    const created = await AppDataSource.transaction(async (manager) => {
+      const item = await this.feeItems.create(
+        {
+          schoolId: context.schoolId,
+          name: input.name,
+          code: input.code,
+          description: input.description ?? null,
+          amount: input.amount.toFixed(2),
+          category: input.category as FeeCategory,
+          isOptional: input.isOptional,
+          isRecurring: input.isRecurring,
+          isActive: input.isActive,
+        },
+        manager,
+      );
+      if (input.accounts) {
+        await this.feeItems.replaceAccounts(context.schoolId, item.id, input.accounts, manager);
+      }
+      return item;
     });
 
     await this.audit.record(context, {
@@ -60,7 +67,12 @@ export class FeeItemsService {
       entityType: 'FeeItem',
       entityId: created.id,
       entityLabel: `${created.name} (${created.code})`,
-      after: { code: created.code, amount: created.amount, category: created.category },
+      after: {
+        code: created.code,
+        amount: created.amount,
+        category: created.category,
+        accounts: input.accounts?.length ?? 0,
+      },
     });
 
     return this.requireDTO(context, created.id);
@@ -79,10 +91,23 @@ export class FeeItemsService {
       if (clash) throw AppError.conflict('A fee item with that code already exists.');
     }
 
-    await this.feeItems.update(id, {
-      ...patch,
-      amount: patch.amount === undefined ? undefined : patch.amount.toFixed(2),
-      category: patch.category as FeeCategory | undefined,
+    const { accounts, ...fields } = patch;
+
+    await AppDataSource.transaction(async (manager) => {
+      await this.feeItems.update(
+        id,
+        {
+          ...fields,
+          amount: fields.amount === undefined ? undefined : fields.amount.toFixed(2),
+          category: fields.category as FeeCategory | undefined,
+        },
+        manager,
+      );
+      // Omitted means "leave the accounts as they are" — present, even `[]`,
+      // replaces the whole set, the same as a fee structure's `lines`.
+      if (accounts !== undefined) {
+        await this.feeItems.replaceAccounts(context.schoolId, id, accounts, manager);
+      }
     });
 
     await this.audit.record(context, {
@@ -90,7 +115,7 @@ export class FeeItemsService {
       entityType: 'FeeItem',
       entityId: id,
       entityLabel: `${patch.name ?? existing.name} (${patch.code ?? existing.code})`,
-      after: patch,
+      after: { ...fields, accounts: accounts?.length },
     });
 
     return this.requireDTO(context, id);

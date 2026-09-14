@@ -3,9 +3,10 @@ import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
-import type { Discount, FeeItem } from '@/types/finance';
+import type { Discount } from '@/types/finance';
 import { FinanceEndpoints } from './finance.endpoints';
 import type {
+  FeeItemInput,
   FeeStructureInput,
   FinanceOverviewQuery,
   GenerateInvoicesInput,
@@ -44,7 +45,7 @@ export function useSaveFeeItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, values }: { id?: string; values: Partial<FeeItem> }) =>
+    mutationFn: ({ id, values }: { id?: string; values: Partial<FeeItemInput> }) =>
       id ? FinanceEndpoints.updateFeeItem(id, values) : FinanceEndpoints.createFeeItem(values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.feeItems(schoolId) });
