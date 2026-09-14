@@ -26,12 +26,20 @@ export function ClassDialog({
   const save = useSaveClass();
   const teachers = useTeacherOptions();
   const [name, setName] = useState(state.schoolClass?.name ?? '');
-  const [levelId, setLevelId] = useState(state.schoolClass?.levelId ?? levels[0]?.value ?? '');
+  const [levelId, setLevelId] = useState(state.schoolClass?.levelId ?? '');
   const [arm, setArm] = useState(state.schoolClass?.arm ?? '');
   const [capacity, setCapacity] = useState(String(state.schoolClass?.capacity ?? 40));
   const [formTeacherIds, setFormTeacherIds] = useState<string[]>(
     state.schoolClass?.formTeacherIds ?? [],
   );
+
+  // `levels` can still be loading the moment this dialog first mounts, so a
+  // default read once into `useState` would freeze at `''` — the dropdown
+  // would then show the first level (a bare `<select>`'s own fallback when
+  // its bound value matches no option) while `levelId` itself stayed empty,
+  // leaving Save disabled no matter what the screen appeared to show.
+  // Recomputing the fallback on every render instead keeps the two in sync.
+  const effectiveLevelId = levelId || levels[0]?.value || '';
 
   const toggleTeacher = (teacherId: string) =>
     setFormTeacherIds((current) =>
@@ -66,7 +74,7 @@ export function ClassDialog({
             <NativeSelect
               data-cy="class-level"
               id="class-level"
-              value={levelId}
+              value={effectiveLevelId}
               onChange={(event) => setLevelId(event.target.value)}
             >
               {levels.map((level) => (
@@ -128,14 +136,14 @@ export function ClassDialog({
           <Button
             data-cy="settings-academics-settings-save-5"
             loading={save.isPending}
-            disabled={!name.trim() || !levelId}
+            disabled={!name.trim() || !effectiveLevelId}
             onClick={() =>
               void save
                 .mutateAsync({
                   id: state.schoolClass?.id,
                   values: {
                     name: name.trim(),
-                    levelId,
+                    levelId: effectiveLevelId,
                     arm: arm.trim() || null,
                     capacity: Number(capacity),
                     formTeacherIds,

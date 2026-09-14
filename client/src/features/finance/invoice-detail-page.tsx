@@ -213,7 +213,7 @@ export function InvoiceDetailPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             {record.note && (
               <p
-                className="max-w-sm flex-1 rounded-md border-l-4 bg-muted/40 p-3 text-sm font-bold text-foreground"
+                className="max-w-sm flex-1 whitespace-pre-line rounded-md border-l-4 bg-muted/40 p-3 text-sm font-bold text-foreground"
                 style={{ borderColor: accent }}
               >
                 {record.note}

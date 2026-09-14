@@ -183,7 +183,7 @@ export function FeeStructurePrintPage() {
           </div>
 
           {note.trim() && (
-            <p className="border-t border-border pt-3 text-sm font-bold text-foreground">
+            <p className="whitespace-pre-line border-t border-border pt-3 text-sm font-bold text-foreground">
               {note}
             </p>
           )}
