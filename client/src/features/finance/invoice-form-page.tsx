@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
 import { useCurrentTerm, useTerms } from '@/features/academics/api';
-import { useStudentSearch } from '@/features/students/api';
+import { useStudent, useStudentSearch } from '@/features/students/api';
 import { useCreateInvoice, useFeeItems } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -23,8 +23,6 @@ import { Row } from './invoice-form-page-parts';
 
 interface LineDraft {
   feeItemId: string;
-  quantity: number;
-  discountAmount: number;
 }
 
 /**
@@ -43,13 +41,32 @@ export function InvoiceFormPage() {
   const terms = useTerms();
   const feeItems = useFeeItems();
 
+  const preselectedStudentId = searchParams.get('studentId') ?? undefined;
   const [studentQuery, setStudentQuery] = useState('');
   const [student, setStudent] = useState<{ id: string; name: string; admissionNo: string } | null>(
-    searchParams.get('studentId')
-      ? { id: searchParams.get('studentId')!, name: 'Selected student', admissionNo: '' }
+    preselectedStudentId
+      ? { id: preselectedStudentId, name: 'Selected student', admissionNo: '' }
       : null,
   );
   const results = useStudentSearch(studentQuery, { enabled: studentQuery.length >= 2 });
+  const preselectedStudent = useStudent(preselectedStudentId);
+
+  // Fills in the real name and admission number once the record for a
+  // student passed via `?studentId=` has loaded, replacing the placeholder
+  // set above so the form never blocks on this fetch. Guarded so it never
+  // overwrites a different student the bursar picked via "Change".
+  useEffect(() => {
+    if (!preselectedStudent.data) return;
+    setStudent((current) =>
+      current && current.id === preselectedStudent.data.id
+        ? {
+            id: preselectedStudent.data.id,
+            name: preselectedStudent.data.fullName,
+            admissionNo: preselectedStudent.data.admissionNo,
+          }
+        : current,
+    );
+  }, [preselectedStudent.data]);
 
   const [termId, setTermId] = useState('');
   const [dueDate, setDueDate] = useState(
@@ -67,29 +84,22 @@ export function InvoiceFormPage() {
     () =>
       lines.reduce((sum, line) => {
         const item = items.find((entry) => entry.id === line.feeItemId);
-        return sum + (item?.amount ?? 0) * line.quantity;
+        return sum + (item?.amount ?? 0);
       }, 0),
     [lines, items],
-  );
-  const discountTotal = useMemo(
-    () => lines.reduce((sum, line) => sum + line.discountAmount, 0),
-    [lines],
   );
 
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
     if (!firstUnused) return;
-    setLines((current) => [
-      ...current,
-      { feeItemId: firstUnused.id, quantity: 1, discountAmount: 0 },
-    ]);
+    setLines((current) => [...current, { feeItemId: firstUnused.id }]);
   };
 
   const addMandatoryItems = () => {
     setLines(
       items
         .filter((item) => !item.isOptional && item.isActive)
-        .map((item) => ({ feeItemId: item.id, quantity: 1, discountAmount: 0 })),
+        .map((item) => ({ feeItemId: item.id })),
     );
   };
 
@@ -102,7 +112,7 @@ export function InvoiceFormPage() {
         studentId: student.id,
         termId: effectiveTermId,
         dueDate,
-        lines,
+        lines: lines.map((line) => ({ ...line, quantity: 1, discountAmount: 0 })),
         note: note.trim() || undefined,
       });
       navigate(`/finance/invoices/${invoice.id}`);
@@ -247,87 +257,62 @@ export function InvoiceFormPage() {
             <ul className="space-y-2">
               {lines.map((line, index) => {
                 const item = items.find((entry) => entry.id === line.feeItemId);
-                const lineTotal = (item?.amount ?? 0) * line.quantity - line.discountAmount;
                 return (
-                  <li
-                    key={index}
-                    className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr,5rem,7rem,7rem,auto] sm:items-end"
-                  >
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`line-item-${index}`}>Fee item</Label>
-                      <NativeSelect
-                        data-cy="finance-invoice-form-fee-item-id"
-                        id={`line-item-${index}`}
-                        value={line.feeItemId}
-                        onChange={(event) =>
-                          setLines((current) =>
-                            current.map((entry, i) =>
-                              i === index ? { ...entry, feeItemId: event.target.value } : entry,
-                            ),
-                          )
-                        }
+                  <li key={index} className="space-y-2 rounded-md border border-border p-3">
+                    <div className="flex items-end gap-3">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <Label htmlFor={`line-item-${index}`}>Fee item</Label>
+                        <NativeSelect
+                          data-cy="finance-invoice-form-fee-item-id"
+                          id={`line-item-${index}`}
+                          value={line.feeItemId}
+                          onChange={(event) =>
+                            setLines((current) =>
+                              current.map((entry, i) =>
+                                i === index ? { ...entry, feeItemId: event.target.value } : entry,
+                              ),
+                            )
+                          }
+                        >
+                          {items.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name}
+                              {option.isOptional ? ' (optional)' : ''}
+                            </option>
+                          ))}
+                        </NativeSelect>
+                      </div>
+                      <div className="shrink-0 text-right text-sm">
+                        <p className="text-xs text-muted-foreground">Amount</p>
+                        <p className="font-medium tabular-nums">
+                          {formatCurrency(item?.amount ?? 0, 'NGN', { showDecimals: false })}
+                        </p>
+                      </div>
+                      <Button
+                        data-cy="finance-invoice-form-remove-line"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove line"
+                        onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
                       >
-                        {items.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.name}
-                            {option.isOptional ? ' (optional)' : ''}
-                          </option>
-                        ))}
-                      </NativeSelect>
+                        <Trash2 />
+                      </Button>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`line-qty-${index}`}>Qty</Label>
-                      <Input
-                        data-cy="finance-invoice-form-quantity"
-                        id={`line-qty-${index}`}
-                        type="number"
-                        min={1}
-                        value={line.quantity}
-                        onChange={(event) =>
-                          setLines((current) =>
-                            current.map((entry, i) =>
-                              i === index
-                                ? { ...entry, quantity: Math.max(1, Number(event.target.value)) }
-                                : entry,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`line-discount-${index}`}>Discount</Label>
-                      <Input
-                        data-cy="finance-invoice-form-discount-amount"
-                        id={`line-discount-${index}`}
-                        type="number"
-                        min={0}
-                        value={line.discountAmount}
-                        onChange={(event) =>
-                          setLines((current) =>
-                            current.map((entry, i) =>
-                              i === index
-                                ? { ...entry, discountAmount: Math.max(0, Number(event.target.value)) }
-                                : entry,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="text-right text-sm">
-                      <p className="text-xs text-muted-foreground">Line total</p>
-                      <p className="font-medium tabular-nums">
-                        {formatCurrency(lineTotal, 'NGN', { showDecimals: false })}
+                    {item && item.accounts.length > 0 && (
+                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <Landmark className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          Pay into{' '}
+                          {item.accounts.map((account, i) => (
+                            <span key={i}>
+                              {i > 0 ? ' or ' : ''}
+                              {account.label ? `${account.label} — ` : ''}
+                              {account.bankName} · {account.accountNumber} · {account.accountName}
+                            </span>
+                          ))}
+                        </span>
                       </p>
-                    </div>
-                    <Button
-                      data-cy="finance-invoice-form-remove-line"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Remove line"
-                      onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
-                    >
-                      <Trash2 />
-                    </Button>
+                    )}
                   </li>
                 );
               })}
@@ -347,14 +332,9 @@ export function InvoiceFormPage() {
           </div>
 
           <dl className="space-y-1 border-t border-border pt-3 text-sm">
-            <Row label="Subtotal" value={formatCurrency(subtotal, 'NGN', { showDecimals: false })} />
-            <Row
-              label="Discounts"
-              value={`− ${formatCurrency(discountTotal, 'NGN', { showDecimals: false })}`}
-            />
             <Row
               label="Total for this term"
-              value={formatCurrency(subtotal - discountTotal, 'NGN', { showDecimals: false })}
+              value={formatCurrency(subtotal, 'NGN', { showDecimals: false })}
               emphasis
             />
           </dl>

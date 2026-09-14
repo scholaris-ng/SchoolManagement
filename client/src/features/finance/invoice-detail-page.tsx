@@ -59,8 +59,6 @@ export function InvoiceDetailPage() {
   const accent = membership?.branding.accentColor || primary;
   const onPrimary = contrastingTextColor(primary);
   const logoUrl = record.schoolLogoUrl || membership?.branding.logoUrl || DEFAULT_LOGO;
-  // Only worth a section of its own once there is more than one account to
-  // add up — with a single account the grand total above already answers it.
   const accountSummary = summarizeByAccount(record.lines, (line) => line.lineTotal);
 
   return (
@@ -176,10 +174,7 @@ export function InvoiceDetailPage() {
               <thead style={{ backgroundColor: primary, color: onPrimary }}>
                 <tr className="text-xs uppercase tracking-wide">
                   <th scope="col" className="px-3 py-2.5 text-left">Description</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Qty</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Unit</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Discount</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Total</th>
+                  <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -196,15 +191,6 @@ export function InvoiceDetailPage() {
                           {account.bankName} · {account.accountNumber} · {account.accountName}
                         </span>
                       ))}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{line.quantity}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {formatCurrency(line.unitAmount, currency, { showDecimals: false })}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {line.discountAmount > 0
-                        ? `− ${formatCurrency(line.discountAmount, currency, { showDecimals: false })}`
-                        : '—'}
                     </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">
                       {formatCurrency(line.lineTotal, currency, { showDecimals: false })}
@@ -266,7 +252,7 @@ export function InvoiceDetailPage() {
             </dl>
           </div>
 
-          {accountSummary.length > 1 && (
+          {accountSummary.length > 0 && (
             <PaymentSummary rows={accountSummary} currency={currency} accent={accent} />
           )}
 
