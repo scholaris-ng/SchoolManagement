@@ -5,6 +5,8 @@ import { contrastingTextColor } from '@/lib/utils';
 import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useInvoice } from './api';
+import { summarizeByAccount } from './account-summary';
+import { PaymentSummary } from './payment-summary';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -57,6 +59,9 @@ export function InvoiceDetailPage() {
   const accent = membership?.branding.accentColor || primary;
   const onPrimary = contrastingTextColor(primary);
   const logoUrl = record.schoolLogoUrl || membership?.branding.logoUrl || DEFAULT_LOGO;
+  // Only worth a section of its own once there is more than one account to
+  // add up — with a single account the grand total above already answers it.
+  const accountSummary = summarizeByAccount(record.lines, (line) => line.lineTotal);
 
   return (
     <PageContainer width="narrow">
@@ -260,6 +265,10 @@ export function InvoiceDetailPage() {
               </div>
             </dl>
           </div>
+
+          {accountSummary.length > 1 && (
+            <PaymentSummary rows={accountSummary} currency={currency} accent={accent} />
+          )}
 
           <footer
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 border-t border-border pt-4 text-xs text-muted-foreground"

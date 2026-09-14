@@ -154,6 +154,44 @@ export interface Invoice {
   schoolEmail: string;
 }
 
+/** One charge on a custom bill. */
+export interface CustomBillLine {
+  description: string;
+  amount: number;
+}
+
+/** Where a custom bill's total can be paid — any one of them settles it, not a split. */
+export interface CustomBillAccount {
+  label?: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+/**
+ * A one-off bill for whoever a school needs to invoice outside its own
+ * enrolled students — a contractor, a visitor, a single charge with no real
+ * student behind it. Never an `Invoice`: it carries no balance, no ledger
+ * entry, nothing a payment can be allocated against. It exists purely to be
+ * printed or shared.
+ */
+export interface CustomBill {
+  id: string;
+  schoolId: string;
+  payerName: string;
+  lines: CustomBillLine[];
+  total: number;
+  note?: string | null;
+  accounts: CustomBillAccount[];
+  createdAt: string;
+  updatedAt: string;
+  /** Letterhead details for the printable copy — set only by `fetchCustomBill`. */
+  schoolName?: string;
+  schoolLogoUrl?: string | null;
+  schoolPhone?: string;
+  schoolEmail?: string;
+}
+
 /**
  * A bank account number a family transfers school fees into, issued by a
  * provider (Raven) for one student and one amount. Whatever lands on it is

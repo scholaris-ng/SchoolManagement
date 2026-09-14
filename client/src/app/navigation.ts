@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Coins,
   CreditCard,
+  FilePlus2,
   FileSpreadsheet,
   FileText,
   Gavel,
@@ -137,6 +138,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Overview', to: '/finance', icon: Wallet, require: 'analytics.read' },
       { label: 'Fees', to: '/finance/fees', icon: Coins, require: 'fee.manage' },
       { label: 'Invoices', to: '/finance/invoices', icon: Receipt, require: 'invoice.manage' },
+      { label: 'Custom bills', to: '/finance/custom-bills', icon: FilePlus2, require: 'invoice.manage' },
       { label: 'Payments', to: '/finance/payments', icon: CreditCard, require: 'payment.manage' },
       {
         label: 'Payment receipts',
@@ -212,6 +214,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { label: 'Enter scores', to: '/results/entry', icon: Table2, require: 'result.enter', keywords: ['marks', 'grades'] },
   { label: 'Record a payment', to: '/finance/payments/new', icon: CreditCard, require: 'payment.manage', keywords: ['receipt', 'cash'] },
   { label: 'Create an invoice', to: '/finance/invoices/new', icon: Receipt, require: 'invoice.manage', keywords: ['bill', 'fees'] },
+  { label: 'Create a custom bill', to: '/finance/custom-bills', icon: FilePlus2, require: 'invoice.manage', keywords: ['bill', 'contractor', 'visitor', 'one-off'] },
   { label: 'Post an announcement', to: '/announcements/new', icon: Megaphone, require: 'announcement.manage', keywords: ['notice'] },
   { label: 'Import records', to: '/import', icon: UploadCloud, require: 'import.run', keywords: ['excel', 'xlsx', 'spreadsheet', 'bulk'] },
   { label: 'Log an incident', to: '/discipline/new', icon: Gavel, require: 'discipline.manage', keywords: ['behaviour', 'referral'] },

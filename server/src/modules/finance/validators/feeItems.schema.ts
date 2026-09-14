@@ -50,7 +50,17 @@ export const updateFeeItemSchema = z.object({
   body: feeItemBody.partial().strict(),
 });
 
+/** One id or a hundred — a single "Delete" button posts an array of one. */
+export const bulkDeleteFeeItemsSchema = z.object({
+  body: z
+    .object({
+      ids: z.array(z.string().uuid()).min(1, 'Choose at least one fee item').max(200),
+    })
+    .strict(),
+});
+
 export type CreateFeeItemInput = z.infer<typeof createFeeItemSchema>['body'];
 export type UpdateFeeItemInput = z.infer<typeof updateFeeItemSchema>['body'];
 export type FeeItemAccountInput = z.infer<typeof feeItemAccountInput>;
 export type FetchFeeItemsQuery = z.infer<typeof fetchFeeItemsSchema>['query'];
+export type BulkDeleteFeeItemsInput = z.infer<typeof bulkDeleteFeeItemsSchema>['body'];

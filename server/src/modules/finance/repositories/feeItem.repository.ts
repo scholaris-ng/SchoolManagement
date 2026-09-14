@@ -113,6 +113,12 @@ export class FeeItemRepository extends TenantRepository<FeeItem> {
     return this.repo.count({ where: { schoolId, id: In(ids) } });
   }
 
+  /** One id or a hundred — the delete button and "delete selected" both call this. */
+  async softDeleteMany(schoolId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.repo.softDelete({ schoolId, id: In(ids) } as never);
+  }
+
   async create(data: DeepPartial<FeeItem>, manager?: EntityManager): Promise<FeeItem> {
     const repo = this.repoFor(manager);
     return repo.save(repo.create(data));

@@ -62,6 +62,7 @@ import { PaymentAccount } from '../../modules/finance/entities/paymentAccount.en
 import { Payment } from '../../modules/finance/entities/payment.entity';
 import { PaymentAllocation } from '../../modules/finance/entities/paymentAllocation.entity';
 import { PaymentReceipt } from '../../modules/finance/entities/paymentReceipt.entity';
+import { CustomBill } from '../../modules/finance/entities/customBill.entity';
 import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
 import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
@@ -137,6 +138,7 @@ export const entities = [
   Payment,
   PaymentAllocation,
   PaymentReceipt,
+  CustomBill,
   ImportJob,
   Notification,
   NotificationPreference,

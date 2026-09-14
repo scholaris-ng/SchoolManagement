@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import {
+  useDeleteFeeItems,
   useDeleteFeeStructure,
   useDiscounts,
   useFeeItems,
@@ -56,12 +57,15 @@ export function FeesPage() {
   const discounts = useDiscounts();
 
   const saveFeeItem = useSaveFeeItem();
+  const deleteFeeItems = useDeleteFeeItems();
   const saveDiscount = useSaveDiscount();
   const saveStructure = useSaveFeeStructure();
   const deleteStructure = useDeleteFeeStructure();
   const generateInvoices = useGenerateInvoices();
 
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: FeeItem }>({ open: false });
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [pendingDeleteItems, setPendingDeleteItems] = useState<FeeItem[] | null>(null);
   const [discountDialog, setDiscountDialog] = useState<{ open: boolean; discount?: Discount }>({
     open: false,
   });
@@ -87,6 +91,15 @@ export function FeesPage() {
 
   const newLabel =
     tab === 'discounts' ? 'New discount' : tab === 'structures' ? 'New fee structure' : 'New fee item';
+
+  const toggleItemSelected = (id: string) =>
+    setSelectedItemIds((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+    );
+
+  const allItemIds = feeItems.data?.items.map((item) => item.id) ?? [];
+  const allItemsSelected = allItemIds.length > 0 && allItemIds.every((id) => selectedItemIds.includes(id));
+  const toggleAllItemsSelected = () => setSelectedItemIds(allItemsSelected ? [] : allItemIds);
 
   return (
     <PageContainer>
@@ -144,11 +157,43 @@ export function FeesPage() {
       {tab === 'items' && (
         <Card>
           <CardHeader>
-            <CardTitle>Fee items</CardTitle>
-            <CardDescription>
-              The individual charges an invoice is built from. Optional items are only billed to
-              families who take them, such as transport or boarding.
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Fee items</CardTitle>
+                <CardDescription>
+                  The individual charges an invoice is built from. Optional items are only billed
+                  to families who take them, such as transport or boarding.
+                </CardDescription>
+              </div>
+              {canManage && selectedItemIds.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedItemIds.length} selected
+                  </span>
+                  <Button
+                    data-cy="finance-fees-clear-selection"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedItemIds([])}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    data-cy="finance-fees-delete-selected"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setPendingDeleteItems(
+                        (feeItems.data?.items ?? []).filter((item) => selectedItemIds.includes(item.id)),
+                      )
+                    }
+                  >
+                    <Trash2 />
+                    Delete selected
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {feeItems.isPending ? (
@@ -161,40 +206,75 @@ export function FeesPage() {
                 description="Start with tuition, then add transport, boarding and one-off charges."
               />
             ) : (
-              <ul className="divide-y divide-border">
-                {feeItems.data?.items.map((item) => (
-                  <li key={item.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">
-                        {item.name}
-                        <span className="font-normal text-muted-foreground"> · {item.code}</span>
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {item.description ?? humanizeEnum(item.category)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone="neutral">{humanizeEnum(item.category)}</Badge>
-                      {item.isOptional && <Badge tone="info">Optional</Badge>}
-                      {item.isRecurring && <Badge tone="outline">Every term</Badge>}
-                      {!item.isActive && <Badge tone="warning">Inactive</Badge>}
-                    </div>
-                    <span className="w-28 shrink-0 text-right font-medium tabular-nums">
-                      {formatCurrency(item.amount, currency, { showDecimals: false })}
-                    </span>
-                    {canManage && (
-                      <Button
-                        data-cy="finance-fees-edit"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setItemDialog({ open: true, item })}
-                      >
-                        Edit
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <>
+                {canManage && (
+                  <label className="flex items-center gap-2 border-b border-border px-5 py-2 text-xs text-muted-foreground">
+                    <input
+                      data-cy="finance-fees-select-all"
+                      type="checkbox"
+                      className="size-4 rounded border-input"
+                      checked={allItemsSelected}
+                      onChange={toggleAllItemsSelected}
+                    />
+                    Select all
+                  </label>
+                )}
+                <ul className="divide-y divide-border">
+                  {feeItems.data?.items.map((item) => (
+                    <li key={item.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                      {canManage && (
+                        <input
+                          data-cy="finance-fees-select"
+                          type="checkbox"
+                          className="size-4 shrink-0 rounded border-input"
+                          checked={selectedItemIds.includes(item.id)}
+                          onChange={() => toggleItemSelected(item.id)}
+                          aria-label={`Select ${item.name}`}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {item.name}
+                          <span className="font-normal text-muted-foreground"> · {item.code}</span>
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {item.description ?? humanizeEnum(item.category)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone="neutral">{humanizeEnum(item.category)}</Badge>
+                        {item.isOptional && <Badge tone="info">Optional</Badge>}
+                        {item.isRecurring && <Badge tone="outline">Every term</Badge>}
+                        {!item.isActive && <Badge tone="warning">Inactive</Badge>}
+                      </div>
+                      <span className="w-28 shrink-0 text-right font-medium tabular-nums">
+                        {formatCurrency(item.amount, currency, { showDecimals: false })}
+                      </span>
+                      {canManage && (
+                        <>
+                          <Button
+                            data-cy="finance-fees-edit"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setItemDialog({ open: true, item })}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            data-cy="finance-fees-delete"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPendingDeleteItems([item])}
+                          >
+                            <Trash2 />
+                            Delete
+                          </Button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </CardContent>
         </Card>
@@ -373,6 +453,31 @@ export function FeesPage() {
             .then(() => setItemDialog({ open: false }))
         }
         saving={saveFeeItem.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteItems)}
+        onOpenChange={(open) => !open && setPendingDeleteItems(null)}
+        title={
+          pendingDeleteItems && pendingDeleteItems.length > 1
+            ? `Delete ${pendingDeleteItems.length} fee items?`
+            : 'Delete this fee item?'
+        }
+        description={
+          pendingDeleteItems && pendingDeleteItems.length > 1
+            ? `"${pendingDeleteItems.map((item) => item.name).join('", "')}" will be removed from this list. Invoices already raised with any of these charges keep them exactly as billed.`
+            : `"${pendingDeleteItems?.[0]?.name}" will be removed from this list. Invoices already raised with this charge keep it exactly as billed.`
+        }
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteFeeItems.isPending}
+        onConfirm={async () => {
+          if (pendingDeleteItems) {
+            await deleteFeeItems.mutateAsync(pendingDeleteItems.map((item) => item.id));
+            setSelectedItemIds([]);
+          }
+          setPendingDeleteItems(null);
+        }}
       />
 
       <FeeStructureDialog

@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Mail, MessageCircle, Phone, Printer } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
+import { contrastingTextColor } from '@/lib/utils';
 import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useFeeStructure } from './api';
+import { summarizeByAccount } from './account-summary';
+import { PaymentSummary } from './payment-summary';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Badge, Card, CardContent, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -22,7 +25,9 @@ const DEFAULT_LOGO = '/site/logo.png';
  * now, and reports the rest as skipped; that is correct, not a bug, when the
  * scope covers nobody yet. This is the other thing a bursar reaches for: a
  * plain statement of what a term costs, to hand a prospective family or post
- * where everyone can see it, before a single pupil is billed from it.
+ * where everyone can see it, before a single pupil is billed from it. Same
+ * letterhead treatment as `invoice-detail-page.tsx`, so the two read as one
+ * family of documents rather than a polished one and a plain one.
  */
 export function FeeStructurePrintPage() {
   const { id } = useParams<{ id: string }>();
@@ -61,11 +66,19 @@ export function FeeStructurePrintPage() {
 
   const record = structure.data;
   const currency = 'NGN';
+  // Only worth a section of its own once there is more than one account to
+  // add up — with a single account the totals just above already answer it.
+  const accountSummary = summarizeByAccount(record.lines, (line) => line.amount);
   const scopeLine = [
     `${record.sessionName} Session`,
     record.termName ?? 'Every term',
     record.levelNames.length > 0 ? record.levelNames.join(', ') : 'All levels',
   ].join(' · ');
+
+  const primary = membership?.branding.primaryColor || '#1d4ed8';
+  const accent = membership?.branding.accentColor || primary;
+  const onPrimary = contrastingTextColor(primary);
+  const logoUrl = record.schoolLogoUrl || membership?.branding.logoUrl || DEFAULT_LOGO;
 
   return (
     <PageContainer width="narrow">
@@ -112,39 +125,47 @@ export function FeeStructurePrintPage() {
         </p>
       </div>
 
-      <Card className="print-page">
-        <CardContent className="space-y-5 pt-6">
-          <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
-            <img
-              src={record.schoolLogoUrl || membership?.branding.logoUrl || DEFAULT_LOGO}
-              alt=""
-              className="size-14 object-contain"
-            />
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold">{record.schoolName ?? membership?.schoolName}</h2>
-              <p className="text-sm text-muted-foreground">Fee schedule</p>
+      <Card className="print-page overflow-hidden">
+        <div style={{ backgroundColor: primary }} className="h-2.5" />
+
+        <CardContent className="space-y-6 pt-6">
+          <header
+            className="flex flex-wrap items-start justify-between gap-6 border-b-2 pb-5"
+            style={{ borderColor: primary }}
+          >
+            <div className="flex min-w-0 items-start gap-4">
+              <img src={logoUrl} alt="" className="size-16 shrink-0 rounded-md object-contain" />
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold" style={{ color: primary }}>
+                  {record.schoolName ?? membership?.schoolName}
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">{scopeLine}</p>
+              </div>
             </div>
             <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Structure</p>
-              <p className="font-semibold">{record.name}</p>
+              <p
+                className="text-2xl font-extrabold uppercase tracking-wide"
+                style={{ color: accent }}
+              >
+                Fee schedule
+              </p>
+              <p className="text-sm text-muted-foreground">{record.name}</p>
             </div>
           </header>
 
-          <p className="text-sm text-muted-foreground">{scopeLine}</p>
-
-          <div className="scrollbar-thin overflow-x-auto">
+          <div className="scrollbar-thin overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
               <caption className="sr-only">Charges in this fee structure</caption>
-              <thead className="border-y border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th scope="col" className="px-2 py-2 text-left">Charge</th>
-                  <th scope="col" className="px-2 py-2 text-right">Amount</th>
+              <thead style={{ backgroundColor: primary, color: onPrimary }}>
+                <tr className="text-xs uppercase tracking-wide">
+                  <th scope="col" className="px-3 py-2.5 text-left">Charge</th>
+                  <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {record.lines.map((line) => (
                   <tr key={line.id}>
-                    <td className="px-2 py-2">
+                    <td className="px-3 py-2">
                       {line.feeItemName}
                       {line.isOptional && (
                         <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
@@ -156,7 +177,7 @@ export function FeeStructurePrintPage() {
                         </span>
                       ))}
                     </td>
-                    <td className="px-2 py-2 text-right font-medium tabular-nums">
+                    <td className="px-3 py-2 text-right font-medium tabular-nums">
                       {formatCurrency(line.amount, currency, { showDecimals: false })}
                     </td>
                   </tr>
@@ -165,27 +186,36 @@ export function FeeStructurePrintPage() {
             </table>
           </div>
 
-          <div className="ml-auto max-w-xs space-y-1 border-t border-border pt-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Every pupil in scope</span>
-              <span className="font-semibold tabular-nums">
-                {formatCurrency(record.mandatoryTotal, currency, { showDecimals: false })}
-              </span>
-            </div>
-            {record.optionalTotal > 0 && (
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Optional, on top</span>
-                <span className="tabular-nums">
-                  + {formatCurrency(record.optionalTotal, currency, { showDecimals: false })}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            {note.trim() && (
+              <p
+                className="max-w-sm flex-1 whitespace-pre-line rounded-md border-l-4 bg-muted/40 p-3 text-sm font-bold text-foreground"
+                style={{ borderColor: accent }}
+              >
+                {note}
+              </p>
+            )}
+
+            <dl className="ml-auto w-full max-w-xs space-y-1 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Every pupil in scope</span>
+                <span className="font-semibold tabular-nums">
+                  {formatCurrency(record.mandatoryTotal, currency, { showDecimals: false })}
                 </span>
               </div>
-            )}
+              {record.optionalTotal > 0 && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Optional, on top</span>
+                  <span className="tabular-nums">
+                    + {formatCurrency(record.optionalTotal, currency, { showDecimals: false })}
+                  </span>
+                </div>
+              )}
+            </dl>
           </div>
 
-          {note.trim() && (
-            <p className="whitespace-pre-line border-t border-border pt-3 text-sm font-bold text-foreground">
-              {note}
-            </p>
+          {accountSummary.length > 1 && (
+            <PaymentSummary rows={accountSummary} currency={currency} accent={accent} />
           )}
 
           {!record.isActive && (
@@ -197,13 +227,13 @@ export function FeeStructurePrintPage() {
               <span>Questions about this schedule?</span>
               {record.schoolPhone && (
                 <span className="inline-flex items-center gap-1.5">
-                  <Phone className="size-3.5" aria-hidden="true" />
+                  <Phone className="size-3.5" style={{ color: primary }} aria-hidden="true" />
                   {record.schoolPhone}
                 </span>
               )}
               {record.schoolEmail && (
                 <span className="inline-flex items-center gap-1.5">
-                  <Mail className="size-3.5" aria-hidden="true" />
+                  <Mail className="size-3.5" style={{ color: primary }} aria-hidden="true" />
                   {record.schoolEmail}
                 </span>
               )}

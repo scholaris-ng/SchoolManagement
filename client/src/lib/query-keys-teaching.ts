@@ -42,6 +42,9 @@ export const teachingKeys = {
     /** The office's whole review queue, across every student. */
     allPaymentReceipts: (schoolId: Scope, query?: ListQuery) =>
       scoped(schoolId, 'payment-receipts', query ?? {}),
+    customBills: (schoolId: Scope, query?: ListQuery) =>
+      scoped(schoolId, 'custom-bills', query ?? {}),
+    customBill: (schoolId: Scope, id: string) => scoped(schoolId, 'custom-bills', id),
   },
 
   curriculum: {

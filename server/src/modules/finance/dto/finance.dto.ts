@@ -296,3 +296,42 @@ export interface PaymentReceiptDTO {
   reviewNote: string | null;
   paymentId: string | null;
 }
+
+/** One charge on a custom bill. Mirrors `CustomBillLine` on the client. */
+export interface CustomBillLineDTO {
+  description: string;
+  amount: number;
+}
+
+/** Where a custom bill's total can be paid. Mirrors `CustomBillAccount` on the client. */
+export interface CustomBillAccountDTO {
+  label: string | null;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+/**
+ * Mirrors `CustomBill` in `client/src/types/finance.ts`.
+ *
+ * Not an `Invoice` and never becomes one: it has no student, so none of an
+ * invoice's ledger machinery — balance, carry-forward, payment allocation —
+ * applies to it. It exists purely to be printed or shared.
+ */
+export interface CustomBillDTO {
+  id: string;
+  schoolId: string;
+  payerName: string;
+  lines: CustomBillLineDTO[];
+  total: number;
+  note: string | null;
+  /** Any one of these settles the whole total — alternatives, not a split. */
+  accounts: CustomBillAccountDTO[];
+  createdAt: string;
+  updatedAt: string;
+  /** Letterhead details for the printable copy — set only by `fetchOne`. */
+  schoolName?: string;
+  schoolLogoUrl?: string | null;
+  schoolPhone?: string;
+  schoolEmail?: string;
+}

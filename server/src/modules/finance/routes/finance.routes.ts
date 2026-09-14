@@ -8,7 +8,9 @@ import { DiscountsController } from '../controllers/discounts.controller';
 import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
 import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
+import { CustomBillsController } from '../controllers/customBills.controller';
 import {
+  bulkDeleteFeeItemsSchema,
   createFeeItemSchema,
   fetchFeeItemsSchema,
   updateFeeItemSchema,
@@ -45,6 +47,12 @@ import {
   RECEIPT_FILE_MIME_TYPES,
   submitPaymentReceiptSchema,
 } from '../validators/paymentReceipts.schema';
+import {
+  createCustomBillSchema,
+  customBillParamSchema,
+  fetchCustomBillsSchema,
+  updateCustomBillSchema,
+} from '../validators/customBills.schema';
 
 /**
  * The finance screens, end to end.
@@ -86,6 +94,18 @@ router.patch(
   authorise('fee.manage'),
   validate(updateFeeItemSchema),
   FeeItemsController.update,
+);
+
+/**
+ * A soft delete — one id or a hundred. `POST`, not `DELETE`, because a
+ * `DELETE` request carrying a JSON body is a fight with every layer between
+ * the browser and here that a plain `POST` avoids entirely.
+ */
+router.post(
+  '/fee-items/bulk-delete',
+  authorise('fee.manage'),
+  validate(bulkDeleteFeeItemsSchema),
+  FeeItemsController.removeMany,
 );
 
 router.get(
@@ -298,6 +318,47 @@ router.get(
   authorise('analytics.read'),
   validate(fetchDebtorsSchema),
   InvoicesController.debtors,
+);
+
+/**
+ * One-off bills outside the real ledger — a contractor, a visitor, a charge
+ * with no enrolled student behind it. `invoice.manage` throughout, not
+ * `finance.read`: unlike a real invoice this is never one family's own
+ * record to see, so there is no parent-facing reason to expose it.
+ */
+router.get(
+  '/custom-bills',
+  authorise('invoice.manage'),
+  validate(fetchCustomBillsSchema),
+  CustomBillsController.fetchAll,
+);
+
+router.post(
+  '/custom-bills',
+  authorise('invoice.manage'),
+  validate(createCustomBillSchema),
+  CustomBillsController.create,
+);
+
+router.get(
+  '/custom-bills/:id',
+  authorise('invoice.manage'),
+  validate(customBillParamSchema),
+  CustomBillsController.fetchOne,
+);
+
+router.patch(
+  '/custom-bills/:id',
+  authorise('invoice.manage'),
+  validate(updateCustomBillSchema),
+  CustomBillsController.update,
+);
+
+router.delete(
+  '/custom-bills/:id',
+  authorise('invoice.manage'),
+  validate(customBillParamSchema),
+  CustomBillsController.remove,
 );
 
 export default router;

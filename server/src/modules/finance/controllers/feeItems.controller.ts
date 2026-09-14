@@ -3,6 +3,7 @@ import { ApiResponse } from '../../../shared/response/apiResponse';
 import { contextOf } from '../../../shared/middleware/tenant.middleware';
 import { FeeItemsService } from '../services/feeItems.service';
 import type {
+  BulkDeleteFeeItemsInput,
   CreateFeeItemInput,
   FetchFeeItemsQuery,
   UpdateFeeItemInput,
@@ -36,6 +37,17 @@ export class FeeItemsController {
       const { id } = req.validated!.params as { id: string };
       const body = req.validated!.body as UpdateFeeItemInput;
       res.status(200).json(ApiResponse.ok(await service().update(contextOf(req), id, body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** One id or a hundred — a single "Delete" button posts an array of one. */
+  static async removeMany(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = req.validated!.body as BulkDeleteFeeItemsInput;
+      await service().removeMany(contextOf(req), body);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

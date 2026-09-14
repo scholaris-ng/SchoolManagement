@@ -54,6 +54,20 @@ export function useSaveFeeItem() {
   });
 }
 
+/** One id or a hundred — the row's own "Delete" and "Delete selected" both call this. */
+export function useDeleteFeeItems() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => FinanceEndpoints.deleteFeeItems(ids),
+    onSuccess: (_data, ids) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.feeItems(schoolId) });
+      toast.success(`${ids.length} fee item${ids.length === 1 ? '' : 's'} deleted`);
+    },
+  });
+}
+
 export function useFeeStructures(query: ListQuery = { page: 1, pageSize: 50 }) {
   const schoolId = useSchoolId();
   return useQuery({

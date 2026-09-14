@@ -50,6 +50,14 @@ const ReceiptPage = lazy(() =>
 const DebtorsPage = lazy(() =>
   import('@/features/finance/debtors-page').then((m) => ({ default: m.DebtorsPage })),
 );
+const CustomBillsPage = lazy(() =>
+  import('@/features/finance/custom-bills-page').then((m) => ({ default: m.CustomBillsPage })),
+);
+const CustomBillPrintPage = lazy(() =>
+  import('@/features/finance/custom-bill-print-page').then((m) => ({
+    default: m.CustomBillPrintPage,
+  })),
+);
 
 /* -- Behaviour & safety ---------------------------------------------------- */
 
@@ -64,6 +72,8 @@ export const financeRoutes: RouteObject[] = [
       { path: 'finance/invoices/new', element: <InvoiceFormPage /> },
       { path: 'finance/invoices', element: <InvoicesPage /> },
       { path: 'finance/invoices/:id', element: <InvoiceDetailPage /> },
+      { path: 'finance/custom-bills', element: <CustomBillsPage /> },
+      { path: 'finance/custom-bills/:id/print', element: <CustomBillPrintPage /> },
     ],
   },
   {

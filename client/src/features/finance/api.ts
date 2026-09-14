@@ -8,6 +8,7 @@
 export type {
   CreateInvoiceInput,
   CreatePaymentAccountInput,
+  CustomBillInput,
   FinanceOverviewQuery,
   GenerateInvoicesInput,
   RecordPaymentInput,
@@ -18,3 +19,4 @@ export * from './use-fees';
 export * from './use-invoices';
 export * from './use-payments';
 export * from './use-payment-receipts';
+export * from './use-custom-bills';

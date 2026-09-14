@@ -6,7 +6,11 @@ import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import type { FeeItemDTO } from '../dto/finance.dto';
-import type { CreateFeeItemInput, UpdateFeeItemInput } from '../validators/feeItems.schema';
+import type {
+  BulkDeleteFeeItemsInput,
+  CreateFeeItemInput,
+  UpdateFeeItemInput,
+} from '../validators/feeItems.schema';
 import type { FeeCategory } from '../entities/feeItem.entity';
 
 /**
@@ -119,6 +123,30 @@ export class FeeItemsService {
     });
 
     return this.requireDTO(context, id);
+  }
+
+  /**
+   * A soft delete, never a hard one: `invoice_lines` already snapshots the
+   * name, category and amount at issue time (spec section 26), so an item
+   * used on a real bill is never actually read back through here again —
+   * removing it from the list a bursar picks from is all this needs to do,
+   * and it stays reversible if that turns out to be a mistake.
+   */
+  async removeMany(context: RequestContext, input: BulkDeleteFeeItemsInput): Promise<void> {
+    const found = await this.feeItems.countExisting(context.schoolId, input.ids);
+    if (found !== input.ids.length) {
+      throw AppError.notFound('Fee item');
+    }
+
+    await this.feeItems.softDeleteMany(context.schoolId, input.ids);
+
+    await this.audit.record(context, {
+      action: 'feeItem.deleted',
+      entityType: 'FeeItem',
+      entityId: input.ids[0],
+      entityLabel: `${input.ids.length} fee item${input.ids.length === 1 ? '' : 's'}`,
+      after: { ids: input.ids },
+    });
   }
 
   private async requireDTO(context: RequestContext, id: string): Promise<FeeItemDTO> {

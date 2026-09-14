@@ -1,6 +1,7 @@
 import { http } from '@/lib/http';
 import type { ListQuery, Paginated } from '@/types/api';
 import type {
+  CustomBill,
   Discount,
   FeeItem,
   FeeStructure,
@@ -110,6 +111,20 @@ export interface GenerateInvoicesInput {
 }
 
 /**
+ * What the server accepts for a one-off bill — see `CustomBill` for why it
+ * is not a student invoice. Typed separately for the same reason
+ * `FeeStructureInput` is: a read coming back carries an id, a total and
+ * timestamps that a write never sends.
+ */
+export interface CustomBillInput {
+  payerName: string;
+  lines: { description: string; amount: number }[];
+  note?: string;
+  /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
+  accounts?: { label?: string | null; bankName: string; accountNumber: string; accountName: string }[];
+}
+
+/**
  * Endpoint layer for finance.
  *
  * Fee definitions, invoices and payments are deliberately three separate
@@ -133,6 +148,9 @@ export const FinanceEndpoints = {
 
   updateFeeItem: (id: string, values: Partial<FeeItemInput>) =>
     http.patch<FeeItem>(`/fee-items/${id}`, values),
+
+  /** One id or a hundred — a single "Delete" button posts an array of one. */
+  deleteFeeItems: (ids: string[]) => http.post<void>('/fee-items/bulk-delete', { ids }),
 
   fetchFeeStructures: (query: ListQuery) =>
     http.get<Paginated<FeeStructure>>('/fee-structures', { query }),
@@ -226,4 +244,19 @@ export const FinanceEndpoints = {
 
   rejectPaymentReceipt: (id: string, note: string) =>
     http.post<PaymentReceiptSubmission>(`/payment-receipts/${id}/reject`, { note }),
+
+  /* -- Custom bills — one-off documents outside the real ledger -------------- */
+
+  fetchCustomBills: (query: ListQuery) =>
+    http.get<Paginated<CustomBill>>('/custom-bills', { query }),
+
+  fetchCustomBill: (id: string) => http.get<CustomBill>(`/custom-bills/${id}`),
+
+  createCustomBill: (values: Partial<CustomBillInput>) =>
+    http.post<CustomBill>('/custom-bills', values),
+
+  updateCustomBill: (id: string, values: Partial<CustomBillInput>) =>
+    http.patch<CustomBill>(`/custom-bills/${id}`, values),
+
+  deleteCustomBill: (id: string) => http.delete<void>(`/custom-bills/${id}`),
 };
