@@ -45,15 +45,15 @@ const LINE_ACCOUNTS_SQL = `
   LEFT JOIN LATERAL (
     SELECT json_agg(
              json_build_object(
-               'id', fia.id,
-               'label', fia.label,
-               'bankName', fia.bank_name,
-               'accountNumber', fia.account_number,
-               'accountName', fia.account_name
-             ) ORDER BY fia.sort_order
+               'id', pd.id,
+               'label', pd.label,
+               'bankName', pd.bank_name,
+               'accountNumber', pd.account_number,
+               'accountName', pd.account_name
+             ) ORDER BY pd.sort_order
            ) AS rows
-      FROM fee_item_payment_accounts fia
-     WHERE fia.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
+      FROM payment_destinations pd
+     WHERE pd.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
   ) acc ON TRUE
 `;
 
@@ -180,14 +180,14 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
          LEFT JOIN LATERAL (
            SELECT json_agg(
                     json_build_object(
-                      'label', fia.label,
-                      'bankName', fia.bank_name,
-                      'accountNumber', fia.account_number,
-                      'accountName', fia.account_name
-                    ) ORDER BY fia.sort_order
+                      'label', pd.label,
+                      'bankName', pd.bank_name,
+                      'accountNumber', pd.account_number,
+                      'accountName', pd.account_name
+                    ) ORDER BY pd.sort_order
                   ) AS rows
-             FROM fee_item_payment_accounts fia
-            WHERE fia.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
+             FROM payment_destinations pd
+            WHERE pd.id::text IN (SELECT jsonb_array_elements_text(fsl.account_ids))
          ) acc ON TRUE
         WHERE fsl.school_id = $1 AND fsl.fee_structure_id = $2
         ORDER BY fsl.sort_order, fi.name`,

@@ -11,6 +11,7 @@ export type {
   CustomBillInput,
   FinanceOverviewQuery,
   GenerateInvoicesInput,
+  PaymentDestinationInput,
   RecordPaymentInput,
   SubmitPaymentReceiptInput,
 } from './finance.endpoints';
@@ -20,3 +21,4 @@ export * from './use-invoices';
 export * from './use-payments';
 export * from './use-payment-receipts';
 export * from './use-custom-bills';
+export * from './use-payment-destinations';

@@ -52,7 +52,7 @@ import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
 import { FeeItem } from '../../modules/finance/entities/feeItem.entity';
-import { FeeItemPaymentAccount } from '../../modules/finance/entities/feeItemPaymentAccount.entity';
+import { PaymentDestination } from '../../modules/finance/entities/paymentDestination.entity';
 import { Discount } from '../../modules/finance/entities/discount.entity';
 import { FeeStructure } from '../../modules/finance/entities/feeStructure.entity';
 import { FeeStructureLine } from '../../modules/finance/entities/feeStructureLine.entity';
@@ -128,7 +128,7 @@ export const entities = [
   AdmissionApplication,
   AdmissionStageEvent,
   FeeItem,
-  FeeItemPaymentAccount,
+  PaymentDestination,
   Discount,
   FeeStructure,
   FeeStructureLine,

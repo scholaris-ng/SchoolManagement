@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
+import { usePaymentDestinations } from './use-payment-destinations';
 import type { CustomBill } from '@/types/finance';
 import type { CustomBillInput } from './finance.endpoints';
 import { Label } from '@/components/ui/primitives';
@@ -21,15 +22,7 @@ interface LineDraft {
   amount: string;
 }
 
-interface AccountDraft {
-  label: string;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 const BLANK_LINE: LineDraft = { description: '', amount: '' };
-const BLANK_ACCOUNT: AccountDraft = { label: '', bankName: '', accountNumber: '', accountName: '' };
 
 /**
  * A bill for whoever or whatever falls outside the real invoicing system —
@@ -54,6 +47,7 @@ export function CustomBillDialog({
 }) {
   const existing = state.bill;
   const isDuplicate = state.mode === 'duplicate';
+  const destinations = usePaymentDestinations();
 
   const [payerName, setPayerName] = useState(existing?.payerName ?? '');
   const [note, setNote] = useState(existing?.note ?? '');
@@ -71,20 +65,12 @@ export function CustomBillDialog({
       current.map((line, position) => (position === index ? { ...line, ...patch } : line)),
     );
 
-  const [accounts, setAccounts] = useState<AccountDraft[]>(
-    (existing?.accounts ?? []).map((account) => ({
-      label: account.label ?? '',
-      bankName: account.bankName,
-      accountNumber: account.accountNumber,
-      accountName: account.accountName,
-    })),
+  const [paymentDestinationIds, setPaymentDestinationIds] = useState<string[]>(
+    (existing?.accounts ?? []).map((account) => account.id),
   );
-  const addAccount = () => setAccounts((current) => [...current, { ...BLANK_ACCOUNT }]);
-  const removeAccount = (index: number) =>
-    setAccounts((current) => current.filter((_, position) => position !== index));
-  const patchAccount = (index: number, patch: Partial<AccountDraft>) =>
-    setAccounts((current) =>
-      current.map((account, position) => (position === index ? { ...account, ...patch } : account)),
+  const toggleDestination = (id: string) =>
+    setPaymentDestinationIds((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
     );
 
   const currency = 'NGN';
@@ -178,78 +164,33 @@ export function CustomBillDialog({
                 (optional — any one of them settles the total)
               </span>
             </legend>
-            {accounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No payment accounts added yet.</p>
+            {(destinations.data ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No payment accounts saved yet. Add one from the "Payment accounts" tab, then come
+                back here to pick it.
+              </p>
             ) : (
-              <ul className="space-y-3">
-                {accounts.map((account, index) => (
-                  <li key={index} className="space-y-2 rounded-md border border-border p-3">
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <Label htmlFor={`bill-account-label-${index}`}>Label</Label>
-                        <Input
-                          data-cy="custom-bill-account-label"
-                          id={`bill-account-label-${index}`}
-                          value={account.label}
-                          onChange={(event) => patchAccount(index, { label: event.target.value })}
-                          placeholder="e.g. Main account"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="mt-6"
-                        onClick={() => removeAccount(index)}
-                        aria-label={`Remove ${account.label || `account ${index + 1}`}`}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`bill-account-bank-${index}`} required>
-                          Bank name
-                        </Label>
-                        <Input
-                          data-cy="custom-bill-account-bank"
-                          id={`bill-account-bank-${index}`}
-                          value={account.bankName}
-                          onChange={(event) => patchAccount(index, { bankName: event.target.value })}
-                          placeholder="e.g. GTBank"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`bill-account-number-${index}`} required>
-                          Account number
-                        </Label>
-                        <Input
-                          data-cy="custom-bill-account-number"
-                          id={`bill-account-number-${index}`}
-                          value={account.accountNumber}
-                          onChange={(event) => patchAccount(index, { accountNumber: event.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`bill-account-name-${index}`} required>
-                          Account name
-                        </Label>
-                        <Input
-                          data-cy="custom-bill-account-name"
-                          id={`bill-account-name-${index}`}
-                          value={account.accountName}
-                          onChange={(event) => patchAccount(index, { accountName: event.target.value })}
-                        />
-                      </div>
-                    </div>
+              <ul className="divide-y divide-border rounded-md border border-border">
+                {(destinations.data ?? []).map((destination) => (
+                  <li key={destination.id} className="px-3 py-2 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        data-cy="custom-bill-account"
+                        type="checkbox"
+                        className="size-4 shrink-0 rounded border-input"
+                        checked={paymentDestinationIds.includes(destination.id)}
+                        onChange={() => toggleDestination(destination.id)}
+                      />
+                      <span className="min-w-0 truncate">
+                        {destination.label ? `${destination.label} — ` : ''}
+                        {destination.bankName} · {destination.accountNumber}
+                        <span className="text-muted-foreground"> ({destination.accountName})</span>
+                      </span>
+                    </label>
                   </li>
                 ))}
               </ul>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={addAccount}>
-              <Plus />
-              Add account
-            </Button>
           </fieldset>
 
           <div className="space-y-1.5">
@@ -286,14 +227,7 @@ export function CustomBillDialog({
                 // absent key as "leave the existing note alone", not "clear
                 // it". The server already turns '' into null on its side.
                 note: note.trim(),
-                accounts: accounts
-                  .filter((account) => account.bankName.trim() && account.accountNumber.trim() && account.accountName.trim())
-                  .map((account) => ({
-                    label: account.label.trim() || null,
-                    bankName: account.bankName.trim(),
-                    accountNumber: account.accountNumber.trim(),
-                    accountName: account.accountName.trim(),
-                  })),
+                paymentDestinationIds,
               })
             }
           >

@@ -1,10 +1,31 @@
-/** One place a fee item can be paid into. A fee item may have more than one. */
-export interface FeeItemPaymentAccount {
+/**
+ * A bank account the school gets paid into, managed once in one central
+ * place. A fee item, a fee structure line, and a custom bill each pick from
+ * this list by id rather than owning their own copy of the details — edit an
+ * account here and it changes everywhere it is picked. An issued invoice is
+ * unaffected either way: `InvoiceLineAccount` snapshots the details it was
+ * raised under.
+ */
+export interface PaymentDestination {
   id: string;
+  schoolId: string;
   label?: string | null;
   bankName: string;
   accountNumber: string;
   accountName: string;
+  sortOrder: number;
+}
+
+/**
+ * More than one saved account describing what looks like the same real bank
+ * account — the same bank and account number entered separately more than
+ * once, typically because it predates centralising accounts into one list.
+ * Offered so a bursar can fold the group into one.
+ */
+export interface PaymentDestinationDuplicateGroup {
+  bankName: string;
+  accountNumber: string;
+  destinations: PaymentDestination[];
 }
 
 export interface FeeItem {
@@ -19,8 +40,8 @@ export interface FeeItem {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
-  /** Where families can pay this charge into. */
-  accounts: FeeItemPaymentAccount[];
+  /** Where families can pay this charge into, resolved for display. */
+  accounts: PaymentDestination[];
 }
 
 export interface FeeStructureLine {
@@ -29,8 +50,8 @@ export interface FeeStructureLine {
   feeItemName: string;
   amount: number;
   isOptional: boolean;
-  /** Which of the fee item's own accounts this structure selected. */
-  accounts: FeeItemPaymentAccount[];
+  /** Which of the fee item's own accounts this structure selected, resolved for display. */
+  accounts: PaymentDestination[];
 }
 
 export interface FeeStructure {
@@ -160,14 +181,6 @@ export interface CustomBillLine {
   amount: number;
 }
 
-/** Where a custom bill's total can be paid — any one of them settles it, not a split. */
-export interface CustomBillAccount {
-  label?: string | null;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 /**
  * A one-off bill for whoever a school needs to invoice outside its own
  * enrolled students — a contractor, a visitor, a single charge with no real
@@ -182,7 +195,8 @@ export interface CustomBill {
   lines: CustomBillLine[];
   total: number;
   note?: string | null;
-  accounts: CustomBillAccount[];
+  /** Any one of these settles the whole total — alternatives, not a split. Resolved for display. */
+  accounts: PaymentDestination[];
   createdAt: string;
   updatedAt: string;
   /** Letterhead details for the printable copy — set only by `fetchCustomBill`. */

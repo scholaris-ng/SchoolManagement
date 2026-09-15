@@ -5,6 +5,7 @@ import { AuditService } from '../../audit/services/audit.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import { CustomBillRepository } from '../repositories/customBill.repository';
+import { PaymentDestinationRepository } from '../repositories/paymentDestination.repository';
 import type { CustomBillDTO } from '../dto/finance.dto';
 import type {
   CreateCustomBillInput,
@@ -27,6 +28,7 @@ export class CustomBillsService {
 
   private constructor(
     private readonly bills = CustomBillRepository.Instance,
+    private readonly destinations = PaymentDestinationRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
@@ -65,13 +67,16 @@ export class CustomBillsService {
   }
 
   async create(context: RequestContext, input: CreateCustomBillInput): Promise<CustomBillDTO> {
+    const paymentDestinationIds = input.paymentDestinationIds ?? [];
+    await this.assertDestinationsExist(context.schoolId, paymentDestinationIds);
+
     const created = await this.bills.create({
       schoolId: context.schoolId,
       payerName: input.payerName,
       lines: input.lines,
       total: totalOf(input.lines),
       note: input.note ? input.note : null,
-      accounts: accountsOf(input.accounts),
+      paymentDestinationIds,
       createdByUserId: context.user.id,
     });
 
@@ -94,12 +99,16 @@ export class CustomBillsService {
     const existing = await this.bills.findByIdScoped(context.schoolId, id);
     if (!existing) throw AppError.notFound('Bill');
 
+    if (patch.paymentDestinationIds !== undefined) {
+      await this.assertDestinationsExist(context.schoolId, patch.paymentDestinationIds);
+    }
+
     await this.bills.update(id, {
       payerName: patch.payerName,
       lines: patch.lines,
       total: patch.lines ? totalOf(patch.lines) : undefined,
       note: patch.note === undefined ? undefined : patch.note || null,
-      accounts: patch.accounts === undefined ? undefined : accountsOf(patch.accounts),
+      paymentDestinationIds: patch.paymentDestinationIds,
     });
 
     await this.audit.record(context, {
@@ -129,6 +138,14 @@ export class CustomBillsService {
     });
   }
 
+  private async assertDestinationsExist(schoolId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const found = await this.destinations.countExisting(schoolId, ids);
+    if (found !== ids.length) {
+      throw AppError.badRequest('One or more payment accounts could not be found.');
+    }
+  }
+
   private async requireDTO(schoolId: string, id: string): Promise<CustomBillDTO> {
     const dto = await this.bills.findOneDTO(schoolId, id);
     if (!dto) throw AppError.internal();
@@ -140,11 +157,4 @@ export class CustomBillsService {
 function totalOf(lines: { amount: number }[]): string {
   const kobo = lines.reduce((sum, line) => sum + Math.round(line.amount * MONEY_SCALE), 0);
   return (kobo / MONEY_SCALE).toFixed(2);
-}
-
-/** `label` is optional on the wire; the entity always carries one, `null` or not. */
-function accountsOf(
-  accounts: { label?: string | null; bankName: string; accountNumber: string; accountName: string }[] | undefined,
-): { label: string | null; bankName: string; accountNumber: string; accountName: string }[] {
-  return (accounts ?? []).map((account) => ({ ...account, label: account.label ?? null }));
 }

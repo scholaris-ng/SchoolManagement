@@ -9,6 +9,7 @@ import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
 import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
 import { CustomBillsController } from '../controllers/customBills.controller';
+import { PaymentDestinationsController } from '../controllers/paymentDestinations.controller';
 import {
   bulkDeleteFeeItemsSchema,
   createFeeItemSchema,
@@ -53,6 +54,12 @@ import {
   fetchCustomBillsSchema,
   updateCustomBillSchema,
 } from '../validators/customBills.schema';
+import {
+  createPaymentDestinationSchema,
+  mergePaymentDestinationsSchema,
+  paymentDestinationParamSchema,
+  updatePaymentDestinationSchema,
+} from '../validators/paymentDestinations.schema';
 
 /**
  * The finance screens, end to end.
@@ -175,6 +182,60 @@ router.patch(
   authorise('discount.manage'),
   validate(updateDiscountSchema),
   DiscountsController.update,
+);
+
+/**
+ * The school's own bank accounts, managed once in one place and picked by id
+ * from a fee item, a fee structure line, or a custom bill — see
+ * `PaymentDestination`. Readable under either `fee.manage` or `invoice.manage`
+ * since both a fee item dialog and a custom bill dialog need this list to
+ * offer a choice from; only `fee.manage` may change the accounts themselves.
+ */
+router.get(
+  '/payment-destinations',
+  authorise('finance.read', 'fee.manage', 'invoice.manage'),
+  PaymentDestinationsController.fetchAll,
+);
+
+/**
+ * Groups of saved accounts that share a bank and account number — almost
+ * always the same real account entered more than once before accounts were
+ * centralised. Registered ahead of nothing that would collide: there is no
+ * `GET /payment-destinations/:id`, only the list above.
+ */
+router.get(
+  '/payment-destinations/duplicates',
+  authorise('fee.manage'),
+  PaymentDestinationsController.fetchDuplicates,
+);
+
+router.post(
+  '/payment-destinations',
+  authorise('fee.manage'),
+  validate(createPaymentDestinationSchema),
+  PaymentDestinationsController.create,
+);
+
+/** Folds a group of duplicates into one survivor — see `PaymentDestinationRepository.merge`. */
+router.post(
+  '/payment-destinations/merge',
+  authorise('fee.manage'),
+  validate(mergePaymentDestinationsSchema),
+  PaymentDestinationsController.merge,
+);
+
+router.patch(
+  '/payment-destinations/:id',
+  authorise('fee.manage'),
+  validate(updatePaymentDestinationSchema),
+  PaymentDestinationsController.update,
+);
+
+router.delete(
+  '/payment-destinations/:id',
+  authorise('fee.manage'),
+  validate(paymentDestinationParamSchema),
+  PaymentDestinationsController.remove,
 );
 
 /* -- The ledger: what is owed and what arrived ----------------------------- */

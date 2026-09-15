@@ -53,7 +53,7 @@ export class FeeStructureLine extends BaseEntity {
   sortOrder: number;
 
   /**
-   * Which of the fee item's accounts (`FeeItemPaymentAccount`) apply to this
+   * Which of the fee item's accounts (`PaymentDestination`) apply to this
    * particular structure — a school with two accounts on "Tuition" might bill
    * junior secondary against just the main one and senior secondary against
    * both. Empty means none were chosen; ids that no longer resolve (the

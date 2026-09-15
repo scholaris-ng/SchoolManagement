@@ -6,6 +6,8 @@ export { FeeItemDialog } from './fee-item-dialog';
 export { DiscountDialog } from './discount-dialog';
 export { FeeStructureDialog } from './fee-structure-dialog';
 export { GenerateInvoicesDialog } from './generate-invoices-dialog';
+export { PaymentDestinationDialog } from './payment-destination-dialog';
+export { DuplicatePaymentDestinations } from './duplicate-payment-destinations';
 
 
 export function Toggle({

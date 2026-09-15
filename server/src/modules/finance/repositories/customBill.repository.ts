@@ -3,14 +3,15 @@ import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { CustomBill } from '../entities/customBill.entity';
-import type { CustomBillDTO } from '../dto/finance.dto';
+import { PaymentDestinationRepository } from './paymentDestination.repository';
+import type { CustomBillDTO, PaymentDestinationDTO } from '../dto/finance.dto';
 
 /**
  * `total` is `numeric` in Postgres, which the driver hands back as a string
  * so no precision is lost on the way. It becomes a number exactly once,
  * here, at the boundary where a DTO is built.
  */
-function toDTO(row: CustomBill): CustomBillDTO {
+function toDTO(row: CustomBill, accounts: PaymentDestinationDTO[]): CustomBillDTO {
   return {
     id: row.id,
     schoolId: row.schoolId,
@@ -18,10 +19,18 @@ function toDTO(row: CustomBill): CustomBillDTO {
     lines: row.lines,
     total: Number(row.total),
     note: row.note,
-    accounts: row.accounts,
+    accounts,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** Resolved accounts in the order the bill picked them, dangling ids dropped. */
+function accountsFor(
+  ids: string[],
+  resolved: Map<string, PaymentDestinationDTO>,
+): PaymentDestinationDTO[] {
+  return ids.map((id) => resolved.get(id)).filter((account): account is PaymentDestinationDTO => Boolean(account));
 }
 
 export interface CustomBillFilter {
@@ -33,7 +42,7 @@ export interface CustomBillFilter {
 export class CustomBillRepository extends TenantRepository<CustomBill> {
   static Instance = new CustomBillRepository();
 
-  private constructor() {
+  private constructor(private readonly destinations = PaymentDestinationRepository.Instance) {
     super(CustomBill, 'customBill');
   }
 
@@ -55,12 +64,24 @@ export class CustomBillRepository extends TenantRepository<CustomBill> {
       .take(filter.pageSize)
       .getManyAndCount();
 
-    return paginatedResult(rows.map(toDTO), filter.page, filter.pageSize, total);
+    const resolved = await this.destinations.resolveMany(
+      schoolId,
+      rows.flatMap((row) => row.paymentDestinationIds),
+    );
+    return paginatedResult(
+      rows.map((row) => toDTO(row, accountsFor(row.paymentDestinationIds, resolved))),
+      filter.page,
+      filter.pageSize,
+      total,
+    );
   }
 
   async findOneDTO(schoolId: string, id: string): Promise<CustomBillDTO | null> {
     const row = await this.repo.findOne({ where: { schoolId, id } });
-    return row ? toDTO(row) : null;
+    if (!row) return null;
+
+    const resolved = await this.destinations.resolveMany(schoolId, row.paymentDestinationIds);
+    return toDTO(row, accountsFor(row.paymentDestinationIds, resolved));
   }
 
   async create(data: DeepPartial<CustomBill>): Promise<CustomBill> {

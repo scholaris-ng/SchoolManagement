@@ -62,9 +62,14 @@ export class FeeItem extends SoftDeletableEntity {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
-}
 
-// Where families pay this charge into lives in `FeeItemPaymentAccount` — an
-// item can have more than one, so it is a child table rather than a column
-// here. See that entity, and `FeeStructureLine.accountIds` for how a
-// particular structure chooses which of an item's accounts apply.
+  /**
+   * Which of the school's centrally-managed accounts (`PaymentDestination`)
+   * families can pay this charge into — an item may point at more than one.
+   * Referenced by id rather than owned here, so editing an account once, in
+   * one place, updates it everywhere it is picked. `FeeStructureLine.accountIds`
+   * is a particular structure narrowing this list further, never widening it.
+   */
+  @Column({ name: 'payment_destination_ids', type: 'jsonb', default: [] })
+  paymentDestinationIds: string[];
+}

@@ -2,9 +2,9 @@ import { AppError } from '../../../shared/errors/AppError';
 import { paginatedResult } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import type { RequestContext } from '../../../shared/types/context';
-import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditService } from '../../audit/services/audit.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
+import { PaymentDestinationRepository } from '../repositories/paymentDestination.repository';
 import type { FeeItemDTO } from '../dto/finance.dto';
 import type {
   BulkDeleteFeeItemsInput,
@@ -26,6 +26,7 @@ export class FeeItemsService {
 
   private constructor(
     private readonly feeItems = FeeItemRepository.Instance,
+    private readonly destinations = PaymentDestinationRepository.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
 
@@ -45,25 +46,20 @@ export class FeeItemsService {
     const clash = await this.feeItems.findByCode(context.schoolId, input.code);
     if (clash) throw AppError.conflict('A fee item with that code already exists.');
 
-    const created = await AppDataSource.transaction(async (manager) => {
-      const item = await this.feeItems.create(
-        {
-          schoolId: context.schoolId,
-          name: input.name,
-          code: input.code,
-          description: input.description ?? null,
-          amount: input.amount.toFixed(2),
-          category: input.category as FeeCategory,
-          isOptional: input.isOptional,
-          isRecurring: input.isRecurring,
-          isActive: input.isActive,
-        },
-        manager,
-      );
-      if (input.accounts) {
-        await this.feeItems.replaceAccounts(context.schoolId, item.id, input.accounts, manager);
-      }
-      return item;
+    const paymentDestinationIds = input.paymentDestinationIds ?? [];
+    await this.assertDestinationsExist(context.schoolId, paymentDestinationIds);
+
+    const created = await this.feeItems.create({
+      schoolId: context.schoolId,
+      name: input.name,
+      code: input.code,
+      description: input.description ?? null,
+      amount: input.amount.toFixed(2),
+      category: input.category as FeeCategory,
+      isOptional: input.isOptional,
+      isRecurring: input.isRecurring,
+      isActive: input.isActive,
+      paymentDestinationIds,
     });
 
     await this.audit.record(context, {
@@ -75,7 +71,7 @@ export class FeeItemsService {
         code: created.code,
         amount: created.amount,
         category: created.category,
-        accounts: input.accounts?.length ?? 0,
+        accounts: paymentDestinationIds.length,
       },
     });
 
@@ -95,23 +91,18 @@ export class FeeItemsService {
       if (clash) throw AppError.conflict('A fee item with that code already exists.');
     }
 
-    const { accounts, ...fields } = patch;
+    const { paymentDestinationIds, ...fields } = patch;
+    if (paymentDestinationIds !== undefined) {
+      await this.assertDestinationsExist(context.schoolId, paymentDestinationIds);
+    }
 
-    await AppDataSource.transaction(async (manager) => {
-      await this.feeItems.update(
-        id,
-        {
-          ...fields,
-          amount: fields.amount === undefined ? undefined : fields.amount.toFixed(2),
-          category: fields.category as FeeCategory | undefined,
-        },
-        manager,
-      );
+    await this.feeItems.update(id, {
+      ...fields,
+      amount: fields.amount === undefined ? undefined : fields.amount.toFixed(2),
+      category: fields.category as FeeCategory | undefined,
       // Omitted means "leave the accounts as they are" — present, even `[]`,
       // replaces the whole set, the same as a fee structure's `lines`.
-      if (accounts !== undefined) {
-        await this.feeItems.replaceAccounts(context.schoolId, id, accounts, manager);
-      }
+      paymentDestinationIds,
     });
 
     await this.audit.record(context, {
@@ -119,7 +110,7 @@ export class FeeItemsService {
       entityType: 'FeeItem',
       entityId: id,
       entityLabel: `${patch.name ?? existing.name} (${patch.code ?? existing.code})`,
-      after: { ...fields, accounts: accounts?.length },
+      after: { ...fields, accounts: paymentDestinationIds?.length },
     });
 
     return this.requireDTO(context, id);
@@ -147,6 +138,14 @@ export class FeeItemsService {
       entityLabel: `${input.ids.length} fee item${input.ids.length === 1 ? '' : 's'}`,
       after: { ids: input.ids },
     });
+  }
+
+  private async assertDestinationsExist(schoolId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const found = await this.destinations.countExisting(schoolId, ids);
+    if (found !== ids.length) {
+      throw AppError.badRequest('One or more payment accounts could not be found.');
+    }
   }
 
   private async requireDTO(context: RequestContext, id: string): Promise<FeeItemDTO> {

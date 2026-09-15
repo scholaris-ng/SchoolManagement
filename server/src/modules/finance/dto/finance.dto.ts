@@ -12,13 +12,27 @@ import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
  */
 export type InvoiceStatusDTO = 'DRAFT' | 'ISSUED' | 'PART_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 
-/** One of a fee item's payment accounts. Mirrors `FeeItemPaymentAccount` on the client. */
-export interface FeeItemPaymentAccountDTO {
+/** A centrally-managed bank account. Mirrors `PaymentDestination` on the client. */
+export interface PaymentDestinationDTO {
   id: string;
+  schoolId: string;
   label: string | null;
   bankName: string;
   accountNumber: string;
   accountName: string;
+  sortOrder: number;
+}
+
+/**
+ * More than one saved account describing what looks like the same real bank
+ * account — the same bank and account number entered separately more than
+ * once, typically because it predates centralising accounts into one list
+ * (see `PaymentDestination`). Offered so a bursar can fold them into one.
+ */
+export interface PaymentDestinationDuplicateGroupDTO {
+  bankName: string;
+  accountNumber: string;
+  destinations: PaymentDestinationDTO[];
 }
 
 /** Mirrors `client/src/types/finance.ts` — the client's copy is the contract. */
@@ -33,8 +47,8 @@ export interface FeeItemDTO {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
-  /** Where families can pay this charge into — a fee item may have more than one. */
-  accounts: FeeItemPaymentAccountDTO[];
+  /** Where families can pay this charge into — a fee item may have more than one, resolved for display. */
+  accounts: PaymentDestinationDTO[];
 }
 
 /** Mirrors `Discount` in `client/src/types/finance.ts`. */
@@ -58,7 +72,7 @@ export interface FeeStructureLineDTO {
   amount: number;
   isOptional: boolean;
   /** Which of the fee item's own accounts this structure selected, resolved for display. */
-  accounts: FeeItemPaymentAccountDTO[];
+  accounts: PaymentDestinationDTO[];
 }
 
 /** Mirrors `FeeStructure` in `client/src/types/finance.ts`. */
@@ -303,14 +317,6 @@ export interface CustomBillLineDTO {
   amount: number;
 }
 
-/** Where a custom bill's total can be paid. Mirrors `CustomBillAccount` on the client. */
-export interface CustomBillAccountDTO {
-  label: string | null;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 /**
  * Mirrors `CustomBill` in `client/src/types/finance.ts`.
  *
@@ -325,8 +331,8 @@ export interface CustomBillDTO {
   lines: CustomBillLineDTO[];
   total: number;
   note: string | null;
-  /** Any one of these settles the whole total — alternatives, not a split. */
-  accounts: CustomBillAccountDTO[];
+  /** Any one of these settles the whole total — alternatives, not a split. Resolved for display. */
+  accounts: PaymentDestinationDTO[];
   createdAt: string;
   updatedAt: string;
   /** Letterhead details for the printable copy — set only by `fetchOne`. */

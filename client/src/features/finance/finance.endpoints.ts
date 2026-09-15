@@ -10,6 +10,8 @@ import type {
   Invoice,
   Payment,
   PaymentAccount,
+  PaymentDestination,
+  PaymentDestinationDuplicateGroup,
   PaymentMethod,
   PaymentReceiptSubmission,
   Receipt,
@@ -19,19 +21,25 @@ import type {
 /** Type alias so it keeps the implicit index signature the transport needs. */
 export type FinanceOverviewQuery = { termId?: string };
 
-/** One place to pay a fee item into, as posted — no id, the server mints one. */
-export interface FeeItemAccountInput {
+/**
+ * What the server accepts for a payment destination, which is *not* a
+ * `PaymentDestination`: a write here carries no id, where a read coming back
+ * does — the server mints one.
+ */
+export interface PaymentDestinationInput {
   label?: string | null;
   bankName: string;
   accountNumber: string;
   accountName: string;
+  sortOrder?: number;
 }
 
 /**
- * What the server accepts for a fee item, which is *not* a `FeeItem`: an
- * account here carries no id, where one coming back does. Typing the request
- * separately is what stops a screen posting a read model back and being
- * surprised — the same reasoning `FeeStructureInput` gives below.
+ * What the server accepts for a fee item, which is *not* a `FeeItem`: a read
+ * coming back carries the resolved accounts, where a write only sends which
+ * of the school's central accounts (`PaymentDestination`) apply. Typing the
+ * request separately is what stops a screen posting a read model back and
+ * being surprised — the same reasoning `FeeStructureInput` gives below.
  */
 export interface FeeItemInput {
   name: string;
@@ -43,7 +51,7 @@ export interface FeeItemInput {
   isRecurring: boolean;
   isActive: boolean;
   /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
-  accounts?: FeeItemAccountInput[];
+  paymentDestinationIds?: string[];
 }
 
 export interface CreateInvoiceInput {
@@ -121,7 +129,7 @@ export interface CustomBillInput {
   lines: { description: string; amount: number }[];
   note?: string;
   /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
-  accounts?: { label?: string | null; bankName: string; accountNumber: string; accountName: string }[];
+  paymentDestinationIds?: string[];
 }
 
 /**
@@ -179,6 +187,29 @@ export const FinanceEndpoints = {
 
   updateDiscount: (id: string, values: Partial<Discount>) =>
     http.patch<Discount>(`/discounts/${id}`, values),
+
+  /**
+   * The school's own bank accounts, managed once in one place — see
+   * `PaymentDestination`. A fee item and a custom bill each pick from this
+   * list by id rather than owning their own copy.
+   */
+  fetchPaymentDestinations: () => http.get<PaymentDestination[]>('/payment-destinations'),
+
+  createPaymentDestination: (values: PaymentDestinationInput) =>
+    http.post<PaymentDestination>('/payment-destinations', values),
+
+  updatePaymentDestination: (id: string, values: Partial<PaymentDestinationInput>) =>
+    http.patch<PaymentDestination>(`/payment-destinations/${id}`, values),
+
+  deletePaymentDestination: (id: string) => http.delete<void>(`/payment-destinations/${id}`),
+
+  /** Groups of saved accounts sharing a bank and account number, for the "merge" screen. */
+  fetchPaymentDestinationDuplicates: () =>
+    http.get<PaymentDestinationDuplicateGroup[]>('/payment-destinations/duplicates'),
+
+  /** Folds a group of duplicates into `keepId`, deleting the rest. */
+  mergePaymentDestinations: (input: { keepId: string; mergeIds: string[] }) =>
+    http.post<void>('/payment-destinations/merge', input),
 
   /* -- Invoices ------------------------------------------------------------- */
 

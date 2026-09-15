@@ -10,16 +10,6 @@ const customBillLine = z
   })
   .strict();
 
-/** Any one of these settles the whole total — alternatives, not a split. */
-const customBillAccount = z
-  .object({
-    label: z.string().trim().max(80).nullable().optional(),
-    bankName: z.string().trim().min(1, 'Give the bank name').max(80),
-    accountNumber: z.string().trim().min(1, 'Give the account number').max(20),
-    accountName: z.string().trim().min(1, 'Give the account name').max(160),
-  })
-  .strict();
-
 const customBillBody = z.object({
   payerName: z.string().trim().min(1, 'Say who this bill is for').max(200),
   lines: z
@@ -28,8 +18,13 @@ const customBillBody = z.object({
     .max(50),
   /** Printed bold, the same as a generated invoice's note. */
   note: z.string().trim().max(500).optional().or(z.literal('')),
-  /** Omitted on a PATCH leaves the existing accounts alone, as `feeItems.schema.ts` does. */
-  accounts: z.array(customBillAccount).max(10, 'That is a lot of accounts for one bill').optional(),
+  /**
+   * Which of the school's centrally-managed accounts (`PaymentDestination`)
+   * settle this bill — any one of these settles the whole total, not a
+   * split. Omitted on a PATCH leaves the existing accounts alone, as
+   * `feeItems.schema.ts` does.
+   */
+  paymentDestinationIds: z.array(z.string().uuid()).max(10, 'That is a lot of accounts for one bill').optional(),
 });
 
 export const fetchCustomBillsSchema = z.object({

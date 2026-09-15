@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Coins, Copy, Percent, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
+import { Coins, Copy, Landmark, Percent, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
@@ -8,15 +8,18 @@ import { useAuth } from '@/app/providers/auth-provider';
 import {
   useDeleteFeeItems,
   useDeleteFeeStructure,
+  useDeletePaymentDestination,
   useDiscounts,
   useFeeItems,
   useFeeStructures,
   useGenerateInvoices,
+  usePaymentDestinations,
   useSaveDiscount,
   useSaveFeeItem,
   useSaveFeeStructure,
+  useSavePaymentDestination,
 } from './api';
-import type { Discount, FeeItem, FeeStructure } from '@/types/finance';
+import type { Discount, FeeItem, FeeStructure, PaymentDestination } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Badge,
@@ -34,12 +37,14 @@ import {
   DiscountDialog,
   FeeStructureDialog,
   GenerateInvoicesDialog,
+  PaymentDestinationDialog,
+  DuplicatePaymentDestinations,
 } from './fees-page-parts';
 
 
 
 
-type Tab = 'items' | 'structures' | 'discounts';
+type Tab = 'items' | 'structures' | 'discounts' | 'accounts';
 
 /**
  * What the school charges — kept strictly separate from what any family owes.
@@ -55,6 +60,7 @@ export function FeesPage() {
   const feeItems = useFeeItems();
   const structures = useFeeStructures();
   const discounts = useDiscounts();
+  const paymentDestinations = usePaymentDestinations();
 
   const saveFeeItem = useSaveFeeItem();
   const deleteFeeItems = useDeleteFeeItems();
@@ -62,6 +68,8 @@ export function FeesPage() {
   const saveStructure = useSaveFeeStructure();
   const deleteStructure = useDeleteFeeStructure();
   const generateInvoices = useGenerateInvoices();
+  const savePaymentDestination = useSavePaymentDestination();
+  const deletePaymentDestination = useDeletePaymentDestination();
 
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: FeeItem }>({ open: false });
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -79,6 +87,13 @@ export function FeesPage() {
     structure?: FeeStructure;
   }>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<FeeStructure | null>(null);
+  const [destinationDialog, setDestinationDialog] = useState<{
+    open: boolean;
+    destination?: PaymentDestination;
+  }>({ open: false });
+  const [pendingDeleteDestination, setPendingDeleteDestination] = useState<PaymentDestination | null>(
+    null,
+  );
 
   const currency = 'NGN';
   const canManage = can('fee.manage');
@@ -90,7 +105,13 @@ export function FeesPage() {
   const canBill = can('invoice.manage');
 
   const newLabel =
-    tab === 'discounts' ? 'New discount' : tab === 'structures' ? 'New fee structure' : 'New fee item';
+    tab === 'discounts'
+      ? 'New discount'
+      : tab === 'structures'
+        ? 'New fee structure'
+        : tab === 'accounts'
+          ? 'New payment account'
+          : 'New fee item';
 
   const toggleItemSelected = (id: string) =>
     setSelectedItemIds((current) =>
@@ -114,6 +135,7 @@ export function FeesPage() {
               onClick={() => {
                 if (tab === 'discounts') return setDiscountDialog({ open: true });
                 if (tab === 'structures') return setStructureDialog({ open: true });
+                if (tab === 'accounts') return setDestinationDialog({ open: true });
                 return setItemDialog({ open: true });
               }}
             >
@@ -130,6 +152,7 @@ export function FeesPage() {
             { id: 'items' as const, label: 'Fee items' },
             { id: 'structures' as const, label: 'Fee structures' },
             { id: 'discounts' as const, label: 'Discounts' },
+            { id: 'accounts' as const, label: 'Payment accounts' },
           ]
         ).map((option) => (
           <button
@@ -443,6 +466,72 @@ export function FeesPage() {
         </Card>
       )}
 
+      {tab === 'accounts' && (
+        <>
+          <DuplicatePaymentDestinations />
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment accounts</CardTitle>
+              <CardDescription>
+                The school's own bank accounts, kept in one place. A fee item or a custom bill picks
+                from this list rather than owning its own copy, so editing an account here updates it
+                everywhere it is picked — a bill already issued keeps the details it was raised
+                under.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {paymentDestinations.isPending ? (
+                <LoadingState label="Loading payment accounts…" />
+              ) : (paymentDestinations.data?.length ?? 0) === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<Landmark />}
+                  title="No payment accounts yet"
+                  description="Add the school's bank accounts here, then pick from them on a fee item or a custom bill."
+                />
+              ) : (
+                <ul className="divide-y divide-border">
+                  {paymentDestinations.data?.map((destination) => (
+                    <li key={destination.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {destination.label || destination.bankName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {destination.bankName} · {destination.accountNumber} ·{' '}
+                          {destination.accountName}
+                        </p>
+                      </div>
+                      {canManage && (
+                        <>
+                          <Button
+                            data-cy="finance-destination-edit"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDestinationDialog({ open: true, destination })}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            data-cy="finance-destination-delete"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPendingDeleteDestination(destination)}
+                          >
+                            <Trash2 />
+                            Delete
+                          </Button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
       <FeeItemDialog
         key={itemDialog.item?.id ?? 'new-item'}
         state={itemDialog}
@@ -536,6 +625,34 @@ export function FeesPage() {
             .then(() => setDiscountDialog({ open: false }))
         }
         saving={saveDiscount.isPending}
+      />
+
+      <PaymentDestinationDialog
+        key={destinationDialog.destination?.id ?? 'new-destination'}
+        state={destinationDialog}
+        onOpenChange={(open) => setDestinationDialog({ open })}
+        onSave={(values) =>
+          savePaymentDestination
+            .mutateAsync({ id: destinationDialog.destination?.id, values })
+            .then(() => setDestinationDialog({ open: false }))
+        }
+        saving={savePaymentDestination.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteDestination)}
+        onOpenChange={(open) => !open && setPendingDeleteDestination(null)}
+        title="Delete this payment account?"
+        description={`"${pendingDeleteDestination?.label || pendingDeleteDestination?.bankName}" will be removed. Any fee item or custom bill that pointed at it simply shows one fewer account from now on — a bill already issued keeps the details it was raised under.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deletePaymentDestination.isPending}
+        onConfirm={async () => {
+          if (pendingDeleteDestination) {
+            await deletePaymentDestination.mutateAsync(pendingDeleteDestination.id);
+          }
+          setPendingDeleteDestination(null);
+        }}
       />
     </PageContainer>
   );

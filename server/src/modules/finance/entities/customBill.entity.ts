@@ -7,14 +7,6 @@ export interface CustomBillLine {
   amount: number;
 }
 
-/** Where to pay the bill's total — any one of them, not a split across them. */
-export interface CustomBillAccount {
-  label: string | null;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 /**
  * A one-off bill for whoever or whatever a school needs to invoice outside
  * its own enrolled students — a contractor, a visiting examiner, a single
@@ -53,13 +45,14 @@ export class CustomBill extends BaseEntity {
   note: string | null;
 
   /**
-   * Where the total can be paid — a bill-level list, not per line: a custom
-   * bill's charges are freeform text, not fee items with their own accounts,
-   * so there is nothing to attach an account to but the bill as a whole. Any
+   * Which of the school's centrally-managed accounts (`PaymentDestination`)
+   * settle this bill — a bill-level list, not per line: a custom bill's
+   * charges are freeform text, not fee items with their own accounts, so
+   * there is nothing to attach an account to but the bill as a whole. Any
    * one of these settles the full total; they are alternatives, not a split.
    */
-  @Column({ type: 'jsonb', default: [] })
-  accounts: CustomBillAccount[];
+  @Column({ name: 'payment_destination_ids', type: 'jsonb', default: [] })
+  paymentDestinationIds: string[];
 
   @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
   createdByUserId: string | null;
