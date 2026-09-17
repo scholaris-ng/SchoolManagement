@@ -3,9 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
+import { toast } from '@/lib/toast-bus';
 import { useCurrentTerm, useTerms } from '@/features/academics/api';
 import { useStudent, useStudentSearch } from '@/features/students/api';
-import { useCreateInvoice, useFeeItems } from './api';
+import { useCreateInvoice, useFeeItems, useResolveFeeStructure } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Card,
@@ -23,6 +24,8 @@ import { Row } from './invoice-form-page-parts';
 
 interface LineDraft {
   feeItemId: string;
+  /** Only ever editable, or worth more than 1, for a fee item marked `hasQuantity`. */
+  quantity: number;
 }
 
 /**
@@ -36,6 +39,7 @@ export function InvoiceFormPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const createInvoice = useCreateInvoice();
+  const resolveFeeStructure = useResolveFeeStructure();
 
   const currentTerm = useCurrentTerm();
   const terms = useTerms();
@@ -84,7 +88,7 @@ export function InvoiceFormPage() {
     () =>
       lines.reduce((sum, line) => {
         const item = items.find((entry) => entry.id === line.feeItemId);
-        return sum + (item?.amount ?? 0);
+        return sum + (item?.amount ?? 0) * line.quantity;
       }, 0),
     [lines, items],
   );
@@ -92,18 +96,58 @@ export function InvoiceFormPage() {
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
     if (!firstUnused) return;
-    setLines((current) => [...current, { feeItemId: firstUnused.id }]);
+    setLines((current) => [...current, { feeItemId: firstUnused.id, quantity: 1 }]);
   };
 
-  const addMandatoryItems = () => {
-    setLines(
-      items
-        .filter((item) => !item.isOptional && item.isActive)
-        .map((item) => ({ feeItemId: item.id })),
-    );
+  // Reads the actual fee structure written for the student's class this
+  // term, rather than every mandatory item the school has ever defined — a
+  // school with separate Primary and Secondary charges should not see both
+  // added to a Primary pupil's bill.
+  const addMandatoryItems = async () => {
+    if (!student) {
+      toast.error('Choose the student first');
+      return;
+    }
+    if (!effectiveTermId) {
+      toast.error('Choose the term first');
+      return;
+    }
+
+    const result = await resolveFeeStructure.mutateAsync({
+      studentId: student.id,
+      termId: effectiveTermId,
+    });
+
+    if (!result.structureId) {
+      toast.error('No fee structure set up yet', {
+        description: "This student's class has no fee structure for this term. Add items one at a time, or set one up under Fees first.",
+      });
+      return;
+    }
+
+    setLines(result.feeItemIds.map((feeItemId) => ({ feeItemId, quantity: 1 })));
+    toast.success('Standard fees added', { description: result.structureName ?? undefined });
   };
 
   const valid = Boolean(student && effectiveTermId && dueDate && lines.length > 0);
+
+  // Reached from a student's own Fees tab, this should hand the bursar back
+  // to that student rather than dropping them on the general invoices list
+  // they never asked to see.
+  const backTo = preselectedStudentId
+    ? `/students/${preselectedStudentId}?tab=finance`
+    : '/finance/invoices';
+  const breadcrumbs = preselectedStudentId
+    ? [
+        { label: 'Students', to: '/students' },
+        { label: student?.name ?? 'Student', to: backTo },
+        { label: 'New invoice' },
+      ]
+    : [
+        { label: 'Finance', to: '/finance' },
+        { label: 'Invoices', to: '/finance/invoices' },
+        { label: 'New' },
+      ];
 
   const submit = async () => {
     if (!student || !valid) return;
@@ -112,7 +156,7 @@ export function InvoiceFormPage() {
         studentId: student.id,
         termId: effectiveTermId,
         dueDate,
-        lines: lines.map((line) => ({ ...line, quantity: 1, discountAmount: 0 })),
+        lines: lines.map((line) => ({ ...line, discountAmount: 0 })),
         note: note.trim() || undefined,
       });
       navigate(`/finance/invoices/${invoice.id}`);
@@ -126,11 +170,7 @@ export function InvoiceFormPage() {
       <PageHeader
         title="New invoice"
         description="Bill one family for a term. Any unpaid balance from a previous term is carried forward automatically."
-        breadcrumbs={[
-          { label: 'Finance', to: '/finance' },
-          { label: 'Invoices', to: '/finance/invoices' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={breadcrumbs}
       />
 
       <Card>
@@ -238,7 +278,13 @@ export function InvoiceFormPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button data-cy="finance-invoice-form-add-all-standard-fees" variant="outline" size="sm" onClick={addMandatoryItems}>
+              <Button
+                data-cy="finance-invoice-form-add-all-standard-fees"
+                variant="outline"
+                size="sm"
+                onClick={() => void addMandatoryItems()}
+                loading={resolveFeeStructure.isPending}
+              >
                 Add all standard fees
               </Button>
               <Button data-cy="finance-invoice-form-add-a-line" variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
@@ -267,9 +313,14 @@ export function InvoiceFormPage() {
                           id={`line-item-${index}`}
                           value={line.feeItemId}
                           onChange={(event) =>
+                            // A fresh item is a fresh choice — any quantity set
+                            // for the old one should not silently carry over
+                            // and multiply a charge that was never meant to.
                             setLines((current) =>
                               current.map((entry, i) =>
-                                i === index ? { ...entry, feeItemId: event.target.value } : entry,
+                                i === index
+                                  ? { feeItemId: event.target.value, quantity: 1 }
+                                  : entry,
                               ),
                             )
                           }
@@ -282,10 +333,36 @@ export function InvoiceFormPage() {
                           ))}
                         </NativeSelect>
                       </div>
+                      {item?.hasQuantity && (
+                        <div className="w-20 shrink-0 space-y-1.5">
+                          <Label htmlFor={`line-qty-${index}`}>Qty</Label>
+                          <Input
+                            data-cy="finance-invoice-form-quantity"
+                            id={`line-qty-${index}`}
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={line.quantity}
+                            onChange={(event) => {
+                              const quantity = Math.max(
+                                1,
+                                Math.min(100, Math.round(Number(event.target.value)) || 1),
+                              );
+                              setLines((current) =>
+                                current.map((entry, i) => (i === index ? { ...entry, quantity } : entry)),
+                              );
+                            }}
+                          />
+                        </div>
+                      )}
                       <div className="shrink-0 text-right text-sm">
-                        <p className="text-xs text-muted-foreground">Amount</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item?.hasQuantity ? 'Line total' : 'Amount'}
+                        </p>
                         <p className="font-medium tabular-nums">
-                          {formatCurrency(item?.amount ?? 0, 'NGN', { showDecimals: false })}
+                          {formatCurrency((item?.amount ?? 0) * line.quantity, 'NGN', {
+                            showDecimals: false,
+                          })}
                         </p>
                       </div>
                       <Button
@@ -347,7 +424,7 @@ export function InvoiceFormPage() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button data-cy="finance-invoice-form-cancel" variant="outline" onClick={() => navigate('/finance/invoices')}>
+        <Button data-cy="finance-invoice-form-cancel" variant="outline" onClick={() => navigate(backTo)}>
           Cancel
         </Button>
         <Button data-cy="finance-invoice-form-create-invoice" onClick={() => void submit()} loading={createInvoice.isPending} disabled={!valid}>

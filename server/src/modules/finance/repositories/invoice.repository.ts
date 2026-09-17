@@ -45,7 +45,15 @@ const PROJECTION = `
     WHEN i.status IN ('ISSUED', 'PART_PAID') AND i.due_date < CURRENT_DATE THEN 'OVERDUE'
     ELSE i.status
   END AS status,
-  i.note, i.created_at AS "createdAt", i.version
+  i.note, i.created_at AS "createdAt", i.version,
+  -- Hard-delete is refused once any of these hold — see deleteMany() below
+  -- and the note on the Invoice entity. Surfaced here so the list and
+  -- detail screens can grey the option out instead of hitting the refusal.
+  (
+    NOT EXISTS (SELECT 1 FROM payment_allocations pa2 WHERE pa2.invoice_id = i.id)
+    AND jsonb_array_length(COALESCE(i.brought_forward_from, '[]'::jsonb)) = 0
+    AND i.carried_forward_to_invoice_id IS NULL
+  ) AS deletable
 `;
 
 const JOINS = `
@@ -101,6 +109,14 @@ export interface InvoiceBrief {
   status: string;
   termName: string;
   sessionName: string;
+}
+
+/** One charge, for `findLinesForInvoices` — see its doc comment. */
+export interface ReceiptLineRow {
+  invoiceId: string;
+  description: string;
+  isOptional: boolean;
+  amount: number;
 }
 
 /** An earlier bill about to be absorbed into a new one. */
@@ -230,6 +246,25 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   }
 
   /**
+   * The charges behind a set of invoices — what a receipt's optional
+   * itemised breakdown shows per invoice it was applied to. No accounts, no
+   * quantity or discount: a receipt is proof of what was paid, not a second
+   * copy of the bill.
+   */
+  async findLinesForInvoices(schoolId: string, ids: string[]): Promise<ReceiptLineRow[]> {
+    if (ids.length === 0) return [];
+    return this.repo.query(
+      `SELECT il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
+              il.line_total::float AS amount
+         FROM invoice_lines il
+         JOIN invoices i ON i.id = il.invoice_id
+        WHERE i.school_id = $1 AND il.invoice_id = ANY($2::uuid[])
+        ORDER BY il.invoice_id, il.sort_order, il.description`,
+      [schoolId, ids],
+    );
+  }
+
+  /**
    * The same briefs, but with the rows locked for the rest of the transaction.
    *
    * Two payments allocated against one invoice at the same instant would each
@@ -264,6 +299,14 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
    * second one's whole bill.
    *
    * A bulk run takes this lock once and counts upward from what it returns.
+   *
+   * Backed by `invoice_number_counters`, not `MAX(sequence)` — a counter row
+   * only ever increases, where the max over existing rows would go backwards
+   * the moment the invoice holding it is deleted, handing its exact number to
+   * a different bill (see `InvoiceNumberCounters1791900000000`). Seeding the
+   * insert from the current max keeps this correct even for a school whose
+   * counter row does not exist yet — the advisory lock is still taken first
+   * so two callers seeding the same missing row at once cannot race.
    */
   async nextSequence(
     manager: EntityManager,
@@ -274,9 +317,14 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
       `invoice:${schoolId}:${sessionId}`,
     ]);
     const [row] = await manager.query(
-      `SELECT COALESCE(MAX(sequence), 0) + 1 AS next
-         FROM invoices
-        WHERE school_id = $1 AND session_id = $2`,
+      `INSERT INTO invoice_number_counters (school_id, session_id, last_sequence)
+       VALUES (
+         $1, $2,
+         (SELECT COALESCE(MAX(sequence), 0) FROM invoices WHERE school_id = $1 AND session_id = $2) + 1
+       )
+       ON CONFLICT (school_id, session_id)
+       DO UPDATE SET last_sequence = invoice_number_counters.last_sequence + 1, updated_at = now()
+       RETURNING last_sequence AS next`,
       [schoolId, sessionId],
     );
     return Number(row?.next ?? 1);
@@ -453,6 +501,61 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
       [id, reason, userId],
     );
   }
+
+  /* -- Deleting and editing ---------------------------------------------------- */
+
+  /**
+   * The facts `InvoicesService.deleteInvoices` needs to decide, per id,
+   * whether hard-deleting it is safe — see the three conditions on `deletable`
+   * in `PROJECTION`, repeated here as booleans a service can branch on rather
+   * than a single derived column.
+   */
+  async findManyForDeleteCheck(schoolId: string, ids: string[]): Promise<DeleteCheckRow[]> {
+    if (ids.length === 0) return [];
+    return this.repo.query(
+      `SELECT i.id, i.invoice_no AS "invoiceNo",
+              concat_ws(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name) AS "studentName",
+              EXISTS (SELECT 1 FROM payment_allocations pa WHERE pa.invoice_id = i.id) AS "hasAllocations",
+              jsonb_array_length(COALESCE(i.brought_forward_from, '[]'::jsonb)) > 0 AS "hasBroughtForwardFrom",
+              i.carried_forward_to_invoice_id AS "carriedForwardToInvoiceId"
+         FROM invoices i
+         JOIN students s ON s.id = i.student_id
+        WHERE i.school_id = $1 AND i.id = ANY($2::uuid[])`,
+      [schoolId, ids],
+    );
+  }
+
+  /** Cascades to `invoice_lines`; anything still pointing at these is `SET NULL`. */
+  async deleteMany(ids: string[], manager?: EntityManager): Promise<void> {
+    if (ids.length === 0) return;
+    await this.repoFor(manager).delete(ids);
+  }
+
+  async deleteLines(invoiceId: string, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(InvoiceLine) : this.lines;
+    await repo.delete({ invoiceId });
+  }
+
+  async updateFields(
+    id: string,
+    fields: Partial<
+      Pick<Invoice, 'dueDate' | 'note' | 'subtotal' | 'discountTotal' | 'total' | 'status'>
+    >,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (Object.keys(fields).length === 0) return;
+    await this.repoFor(manager).update({ id }, fields);
+  }
+}
+
+/** One invoice's facts for `findManyForDeleteCheck` — see its doc comment. */
+export interface DeleteCheckRow {
+  id: string;
+  invoiceNo: string;
+  studentName: string;
+  hasAllocations: boolean;
+  hasBroughtForwardFrom: boolean;
+  carriedForwardToInvoiceId: string | null;
 }
 
 /**

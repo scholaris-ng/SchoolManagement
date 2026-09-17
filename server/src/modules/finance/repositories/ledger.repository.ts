@@ -87,7 +87,15 @@ export class LedgerRepository {
                 i.invoice_no AS reference,
                 t.name || ' · ' || ses.name || ' fees' AS description,
                 i.subtotal AS debit,
-                0::numeric AS credit
+                0::numeric AS credit,
+                -- Mirrors Invoice.deletable in invoice.repository.ts: hard-delete
+                -- is refused once any of these hold, so the statement can grey
+                -- the option out here too rather than only on the invoice screen.
+                (
+                  NOT EXISTS (SELECT 1 FROM payment_allocations pa2 WHERE pa2.invoice_id = i.id)
+                  AND jsonb_array_length(COALESCE(i.brought_forward_from, '[]'::jsonb)) = 0
+                  AND i.carried_forward_to_invoice_id IS NULL
+                ) AS deletable
            FROM invoices i
            JOIN terms t ON t.id = i.term_id
            JOIN academic_sessions ses ON ses.id = i.session_id
@@ -102,7 +110,8 @@ export class LedgerRepository {
                 i.invoice_no,
                 'Discount — ' || il.description,
                 0::numeric,
-                il.discount_amount
+                il.discount_amount,
+                false
            FROM invoice_lines il
            JOIN invoices i ON i.id = il.invoice_id
           WHERE i.school_id = $1 AND i.student_id = $2 AND ${REAL_INVOICE}
@@ -117,7 +126,8 @@ export class LedgerRepository {
                 p.reference,
                 'Payment received · ' || initcap(replace(p.method, '_', ' ')),
                 0::numeric,
-                p.amount
+                p.amount,
+                false
            FROM payments p
           WHERE p.school_id = $1 AND p.student_id = $2 AND p.status = 'SUCCESSFUL'
        )
@@ -126,6 +136,7 @@ export class LedgerRepository {
               type, reference, description,
               debit::float AS debit,
               credit::float AS credit,
+              deletable,
               SUM(debit - credit) OVER (ORDER BY on_date, rank, id)::float AS "runningBalance"
          FROM entries
         ORDER BY on_date, rank, id`,

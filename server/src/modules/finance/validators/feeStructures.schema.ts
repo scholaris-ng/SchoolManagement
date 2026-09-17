@@ -85,7 +85,18 @@ export const generateInvoicesSchema = z.object({
     .strict(),
 });
 
+/** "Add all standard fees" on a hand-raised invoice — see `resolveForStudent`. */
+export const resolveFeeStructureSchema = z.object({
+  query: z
+    .object({
+      studentId: z.string().uuid(),
+      termId: z.string().uuid(),
+    })
+    .strict(),
+});
+
 export type FetchFeeStructuresQuery = z.infer<typeof fetchFeeStructuresSchema>['query'];
 export type CreateFeeStructureInput = z.infer<typeof createFeeStructureSchema>['body'];
 export type UpdateFeeStructureInput = z.infer<typeof updateFeeStructureSchema>['body'];
 export type GenerateInvoicesInput = z.infer<typeof generateInvoicesSchema>['body'];
+export type ResolveFeeStructureQuery = z.infer<typeof resolveFeeStructureSchema>['query'];

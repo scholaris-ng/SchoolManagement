@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { MessageCircle, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -21,6 +22,7 @@ import { ErrorState, LoadingState } from '@/components/ui/feedback';
 export function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
   const receipt = useReceipt(paymentId);
+  const [showItems, setShowItems] = useState(false);
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -82,6 +84,19 @@ export function ReceiptPage() {
         />
       </div>
 
+      {record.allocations.some((allocation) => allocation.lines.length > 0) && (
+        <label className="no-print flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            data-cy="finance-receipt-show-items"
+            type="checkbox"
+            checked={showItems}
+            onChange={(event) => setShowItems(event.target.checked)}
+            className="size-4 rounded border-input"
+          />
+          Show each invoice's charges on the receipt
+        </label>
+      )}
+
       <Card className="print-page">
         <CardContent className="space-y-5 pt-6">
           <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
@@ -124,13 +139,28 @@ export function ReceiptPage() {
                 <caption className="sr-only">Invoices this payment was applied to</caption>
                 <tbody className="divide-y divide-border">
                   {record.allocations.map((allocation, index) => (
-                    <tr key={index}>
-                      <td className="py-1.5 font-mono text-xs">{allocation.invoiceNo}</td>
-                      <td className="py-1.5">{allocation.description}</td>
-                      <td className="py-1.5 text-right tabular-nums">
-                        {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
-                      </td>
-                    </tr>
+                    <Fragment key={index}>
+                      <tr>
+                        <td className="py-1.5 font-mono text-xs">{allocation.invoiceNo}</td>
+                        <td className="py-1.5">{allocation.description}</td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                        </td>
+                      </tr>
+                      {showItems &&
+                        allocation.lines.map((line, lineIndex) => (
+                          <tr key={lineIndex} className="text-xs text-muted-foreground">
+                            <td className="py-1"></td>
+                            <td className="py-1 pl-4">
+                              {line.description}
+                              {line.isOptional ? ' (optional)' : ''}
+                            </td>
+                            <td className="py-1 text-right tabular-nums">
+                              {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                            </td>
+                          </tr>
+                        ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

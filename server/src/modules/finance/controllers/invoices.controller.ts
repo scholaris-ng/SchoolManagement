@@ -3,10 +3,12 @@ import { ApiResponse } from '../../../shared/response/apiResponse';
 import { contextOf } from '../../../shared/middleware/tenant.middleware';
 import { InvoicesService } from '../services/invoices.service';
 import type {
+  BulkDeleteInvoicesInput,
   CancelInvoiceInput,
   CreateInvoiceInput,
   FetchDebtorsQuery,
   FetchInvoicesQuery,
+  UpdateInvoiceInput,
 } from '../validators/invoices.schema';
 
 const service = () => InvoicesService.Instance;
@@ -50,6 +52,30 @@ export class InvoicesController {
       res
         .status(200)
         .json(ApiResponse.ok(await service().cancelInvoice(contextOf(req), id, reason)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const body = req.validated!.body as UpdateInvoiceInput;
+      res.status(200).json(ApiResponse.ok(await service().updateInvoice(contextOf(req), id, body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * A batch is not all-or-nothing — see `InvoicesService.deleteInvoices`.
+   * `200` with a body, not `204`: the caller needs to know which of several
+   * selected invoices were actually removed.
+   */
+  static async deleteMany(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = req.validated!.body as BulkDeleteInvoicesInput;
+      res.status(200).json(ApiResponse.ok(await service().deleteInvoices(contextOf(req), body)));
     } catch (error) {
       next(error);
     }

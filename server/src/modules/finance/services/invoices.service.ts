@@ -16,14 +16,17 @@ import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
+  DeleteInvoicesResultDTO,
   InvoiceDTO,
   StudentFinanceSummaryDTO,
   StudentLedgerResultDTO,
 } from '../dto/finance.dto';
 import type {
+  BulkDeleteInvoicesInput,
   CreateInvoiceInput,
   FetchDebtorsQuery,
   FetchInvoicesQuery,
+  UpdateInvoiceInput,
 } from '../validators/invoices.schema';
 
 /** One charge, already priced, as `issueInvoice` wants it. */
@@ -400,6 +403,190 @@ export class InvoicesService {
     });
 
     return this.requireDTO(context.schoolId, id);
+  }
+
+  /* -- Editing one --------------------------------------------------------- */
+
+  /**
+   * The student and term are fixed at issuance — only the due date, the
+   * note, and (while nothing has been paid) the charges themselves can move.
+   */
+  async updateInvoice(
+    context: RequestContext,
+    id: string,
+    input: UpdateInvoiceInput,
+  ): Promise<InvoiceDTO> {
+    const existing = await this.invoices.findOneDTO(context.schoolId, id);
+    if (!existing) throw AppError.notFound('Invoice');
+    if (existing.status === 'CANCELLED') {
+      throw AppError.conflict('A cancelled invoice cannot be edited.');
+    }
+
+    const fields: Parameters<typeof this.invoices.updateFields>[1] = {};
+    if (input.dueDate !== undefined) fields.dueDate = input.dueDate;
+    if (input.note !== undefined) fields.note = input.note ? input.note : null;
+
+    let newLines: IssueLine[] | null = null;
+    if (input.lines) {
+      if (Math.round(existing.amountPaid * MONEY_SCALE) > 0) {
+        throw AppError.conflict(
+          'Money has already been received against this invoice, so the amount cannot be changed. Reverse the payment first, or edit only the due date and note.',
+        );
+      }
+
+      const items = await this.feeItems.fetchForSchool(context.schoolId);
+      const byId = new Map(items.map((item) => [item.id, item]));
+
+      let subtotalKobo = 0;
+      let discountKobo = 0;
+      newLines = input.lines.map((line) => {
+        const item = byId.get(line.feeItemId);
+        if (!item) {
+          throw AppError.validation('One of those charges is not a fee item of this school.');
+        }
+
+        const gross = Math.round(item.amount * line.quantity * MONEY_SCALE);
+        const discount = Math.round(line.discountAmount * MONEY_SCALE);
+        if (discount > gross) {
+          throw AppError.validation(`The discount on ${item.name} is more than the charge itself.`);
+        }
+        subtotalKobo += gross;
+        discountKobo += discount;
+
+        return {
+          feeItemId: item.id,
+          description: item.name,
+          category: item.category,
+          quantity: line.quantity,
+          unitAmount: item.amount,
+          discountAmount: line.discountAmount,
+          isOptional: item.isOptional,
+          accounts: item.accounts.map((account) => ({
+            label: account.label,
+            bankName: account.bankName,
+            accountNumber: account.accountNumber,
+            accountName: account.accountName,
+          })),
+        };
+      });
+
+      const broughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
+      const totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
+
+      fields.subtotal = fromKobo(subtotalKobo);
+      fields.discountTotal = fromKobo(discountKobo);
+      fields.total = fromKobo(totalKobo);
+      // Only reachable with nothing paid yet, so the only two states an edit
+      // can land on are the same ones a fresh invoice can — never PART_PAID.
+      fields.status = totalKobo <= 0 ? 'PAID' : 'ISSUED';
+    }
+
+    await AppDataSource.transaction(async (manager) => {
+      if (newLines) {
+        await this.invoices.deleteLines(id, manager);
+        await this.invoices.createLines(
+          newLines!.map((line, index) => ({
+            schoolId: context.schoolId,
+            invoiceId: id,
+            feeItemId: line.feeItemId,
+            description: line.description,
+            category: line.category,
+            quantity: line.quantity,
+            unitAmount: line.unitAmount.toFixed(2),
+            discountAmount: line.discountAmount.toFixed(2),
+            lineTotal: fromKobo(
+              Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
+                Math.round(line.discountAmount * MONEY_SCALE),
+            ),
+            isOptional: line.isOptional,
+            sortOrder: index,
+            accounts: line.accounts,
+          })),
+          manager,
+        );
+      }
+      await this.invoices.updateFields(id, fields, manager);
+    });
+
+    await this.audit.record(context, {
+      action: 'invoice.updated',
+      entityType: 'Invoice',
+      entityId: id,
+      entityLabel: `${existing.invoiceNo} · ${existing.studentName}`,
+      before: { total: existing.total, dueDate: existing.dueDate, note: existing.note },
+      after: {
+        total: fields.total !== undefined ? Number(fields.total) : existing.total,
+        dueDate: input.dueDate ?? existing.dueDate,
+        note: input.note !== undefined ? (input.note || null) : existing.note,
+      },
+    });
+
+    return this.requireDTO(context.schoolId, id);
+  }
+
+  /* -- Deleting many -------------------------------------------------------- */
+
+  /**
+   * Removes every id that is safe to remove and reports the rest with why —
+   * see `Invoice.deletable` for the three conditions and the note on
+   * `InvoiceNumberCounters1791900000000` for why this is safe to hard-delete
+   * at all, unlike everywhere else in this file.
+   */
+  async deleteInvoices(
+    context: RequestContext,
+    input: BulkDeleteInvoicesInput,
+  ): Promise<DeleteInvoicesResultDTO> {
+    const ids = Array.from(new Set(input.ids));
+    const rows = await this.invoices.findManyForDeleteCheck(context.schoolId, ids);
+    const found = new Map(rows.map((row) => [row.id, row]));
+
+    const toDelete: { id: string; invoiceNo: string; studentName: string }[] = [];
+    const skipped: DeleteInvoicesResultDTO['skipped'] = [];
+
+    for (const id of ids) {
+      const row = found.get(id);
+      if (!row) {
+        skipped.push({ id, invoiceNo: '', reason: 'That invoice could not be found.' });
+      } else if (row.hasAllocations) {
+        skipped.push({
+          id,
+          invoiceNo: row.invoiceNo,
+          reason: 'A payment has been recorded against this invoice.',
+        });
+      } else if (row.hasBroughtForwardFrom) {
+        skipped.push({
+          id,
+          invoiceNo: row.invoiceNo,
+          reason: 'This invoice carries forward a balance from an earlier one.',
+        });
+      } else if (row.carriedForwardToInvoiceId) {
+        skipped.push({
+          id,
+          invoiceNo: row.invoiceNo,
+          reason: "This invoice's balance was carried forward to a later invoice.",
+        });
+      } else {
+        toDelete.push(row);
+      }
+    }
+
+    if (toDelete.length > 0) {
+      await AppDataSource.transaction((manager) =>
+        this.invoices.deleteMany(toDelete.map((row) => row.id), manager),
+      );
+
+      for (const row of toDelete) {
+        await this.audit.record(context, {
+          action: 'invoice.deleted',
+          entityType: 'Invoice',
+          entityId: row.id,
+          entityLabel: `${row.invoiceNo} · ${row.studentName}`,
+          severity: 'WARNING',
+        });
+      }
+    }
+
+    return { deletedIds: toDelete.map((row) => row.id), skipped };
   }
 
   private async requireDTO(schoolId: string, id: string): Promise<InvoiceDTO> {

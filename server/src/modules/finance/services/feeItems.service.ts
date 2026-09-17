@@ -59,6 +59,7 @@ export class FeeItemsService {
       isOptional: input.isOptional,
       isRecurring: input.isRecurring,
       isActive: input.isActive,
+      hasQuantity: input.hasQuantity,
       paymentDestinationIds,
     });
 

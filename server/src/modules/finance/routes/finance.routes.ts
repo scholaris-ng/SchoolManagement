@@ -21,16 +21,19 @@ import {
   feeStructureParamSchema,
   fetchFeeStructuresSchema,
   generateInvoicesSchema,
+  resolveFeeStructureSchema,
   updateFeeStructureSchema,
 } from '../validators/feeStructures.schema';
 import { createDiscountSchema, updateDiscountSchema } from '../validators/discounts.schema';
 import {
+  bulkDeleteInvoicesSchema,
   cancelInvoiceSchema,
   createInvoiceSchema,
   fetchDebtorsSchema,
   fetchInvoicesSchema,
   invoiceParamSchema,
   studentLedgerParamSchema,
+  updateInvoiceSchema,
 } from '../validators/invoices.schema';
 import {
   createPaymentAccountSchema,
@@ -127,6 +130,20 @@ router.post(
   authorise('fee.manage'),
   validate(createFeeStructureSchema),
   FeeStructuresController.create,
+);
+
+/**
+ * "Add all standard fees" on a hand-raised invoice, resolved from whichever
+ * structure is written for the chosen student's class this term —
+ * `invoice.manage`, the permission that screen itself requires. Registered
+ * ahead of `/fee-structures/:id` so Express does not read "resolve" as a
+ * structure id.
+ */
+router.get(
+  '/fee-structures/resolve',
+  authorise('invoice.manage'),
+  validate(resolveFeeStructureSchema),
+  FeeStructuresController.resolve,
 );
 
 /** One structure — the printable fee schedule reads this directly by id. */
@@ -254,11 +271,36 @@ router.post(
   InvoicesController.create,
 );
 
+/**
+ * Hard delete, but only where it is safe — see `Invoice.deletable` and
+ * `InvoicesService.deleteInvoices`. `POST`, not `DELETE`, for the same reason
+ * `/fee-items/bulk-delete` is: a `DELETE` carrying a JSON body fights every
+ * layer between the browser and here. Registered ahead of `/invoices/:id` so
+ * Express does not read "bulk-delete" as an invoice id.
+ */
+router.post(
+  '/invoices/bulk-delete',
+  authorise('invoice.manage'),
+  validate(bulkDeleteInvoicesSchema),
+  InvoicesController.deleteMany,
+);
+
 router.get(
   '/invoices/:id',
   authorise('finance.read'),
   validate(invoiceParamSchema),
   InvoicesController.fetchOne,
+);
+
+/**
+ * The student and term are fixed once issued; only the due date, the note,
+ * and — while nothing has been paid — the charges themselves can change.
+ */
+router.patch(
+  '/invoices/:id',
+  authorise('invoice.manage'),
+  validate(updateInvoiceSchema),
+  InvoicesController.update,
 );
 
 /** Cancelling, not deleting: the row survives with a reason on it. */

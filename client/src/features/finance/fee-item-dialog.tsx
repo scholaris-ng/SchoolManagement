@@ -46,6 +46,7 @@ export function FeeItemDialog({
   const [isOptional, setIsOptional] = useState(state.item?.isOptional ?? false);
   const [isRecurring, setIsRecurring] = useState(state.item?.isRecurring ?? true);
   const [isActive, setIsActive] = useState(state.item?.isActive ?? true);
+  const [hasQuantity, setHasQuantity] = useState(state.item?.hasQuantity ?? false);
   const [paymentDestinationIds, setPaymentDestinationIds] = useState<string[]>(
     (state.item?.accounts ?? []).map((account) => account.id),
   );
@@ -176,6 +177,12 @@ export function FeeItemDialog({
               checked={isRecurring}
               onChange={setIsRecurring}
             />
+            <Toggle
+              label="Billed by quantity"
+              description="Lets a bursar set how many units to bill on an invoice, such as a locker or a textbook. Left off, this charge is always billed once."
+              checked={hasQuantity}
+              onChange={setHasQuantity}
+            />
             <Toggle label="Active" checked={isActive} onChange={setIsActive} />
           </fieldset>
         </DialogBody>
@@ -198,6 +205,7 @@ export function FeeItemDialog({
                 isOptional,
                 isRecurring,
                 isActive,
+                hasQuantity,
                 paymentDestinationIds,
               })
             }

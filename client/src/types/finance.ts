@@ -40,6 +40,8 @@ export interface FeeItem {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
+  /** Lets a bursar set a quantity when billing this item by hand — a locker, a textbook, a bus trip. */
+  hasQuantity: boolean;
   /** Where families can pay this charge into, resolved for display. */
   accounts: PaymentDestination[];
 }
@@ -75,6 +77,18 @@ export interface FeeStructure {
   schoolLogoUrl?: string | null;
   schoolPhone?: string;
   schoolEmail?: string;
+}
+
+/**
+ * The standard charges for one pupil's class, for "Add all standard fees" on
+ * a hand-raised invoice. `structureId` is `null` when the school has not set
+ * one up yet for that class and term — worth saying plainly rather than
+ * quietly adding nothing.
+ */
+export interface ResolveFeeStructureResult {
+  structureId: string | null;
+  structureName: string | null;
+  feeItemIds: string[];
 }
 
 /**
@@ -167,6 +181,13 @@ export interface Invoice {
   note?: string | null;
   createdAt: string;
   version: number;
+  /**
+   * Whether this invoice can be hard-deleted right now — no payment ever
+   * landed on it, and it neither absorbed an earlier invoice's balance nor
+   * had its own carried into a later one. The server still enforces this on
+   * the delete call itself; this is only what lets the screen grey it out.
+   */
+  deletable: boolean;
   /** The school's own letterhead details, for the printed copy. */
   schoolName: string;
   schoolLogoUrl: string | null;
@@ -275,6 +296,8 @@ export interface StudentLedgerEntry {
   description: string;
   debit: number;
   credit: number;
+  /** Only meaningful when `type` is `'INVOICE'` — see `Invoice.deletable`. */
+  deletable: boolean;
   runningBalance: number;
 }
 
@@ -354,7 +377,13 @@ export interface Receipt {
   method: PaymentMethod;
   paidAt: string;
   receivedByName: string;
-  allocations: { invoiceNo: string; description: string; amount: number }[];
+  allocations: {
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    /** The invoice's own charges, for the receipt's optional itemised view. */
+    lines: { description: string; isOptional: boolean; amount: number }[];
+  }[];
   balanceAfter: number;
   verificationCode: string;
 }

@@ -6,6 +6,7 @@ import type {
   CreateFeeStructureInput,
   FetchFeeStructuresQuery,
   GenerateInvoicesInput,
+  ResolveFeeStructureQuery,
   UpdateFeeStructureInput,
 } from '../validators/feeStructures.schema';
 
@@ -28,6 +29,17 @@ export class FeeStructuresController {
     try {
       const body = req.validated!.body as CreateFeeStructureInput;
       res.status(201).json(ApiResponse.created(await service().create(contextOf(req), body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** "Add all standard fees" on a hand-raised invoice — see the service. */
+  static async resolve(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { studentId, termId } = req.validated!.query as ResolveFeeStructureQuery;
+      const result = await service().resolveForStudent(contextOf(req), studentId, termId);
+      res.status(200).json(ApiResponse.ok(result));
     } catch (error) {
       next(error);
     }

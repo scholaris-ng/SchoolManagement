@@ -16,6 +16,8 @@ const feeItemBody = z.object({
   isOptional: z.boolean().default(false),
   isRecurring: z.boolean().default(true),
   isActive: z.boolean().default(true),
+  /** Lets a bursar set a quantity when billing this item by hand — a locker, a textbook, a bus trip. */
+  hasQuantity: z.boolean().default(false),
   /**
    * Which of the school's centrally-managed accounts (`PaymentDestination`)
    * families can pay this particular charge into — a school that routes

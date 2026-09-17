@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatCurrency, formatDate, toDateInputValue } from '@/lib/format';
-import { useStudentLedger, useStudentSearch } from '@/features/students/api';
+import { useStudent, useStudentLedger, useStudentSearch } from '@/features/students/api';
 import { useInvoices, useRecordPayment } from './api';
 import type { PaymentMethod } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -37,10 +37,22 @@ export function PaymentFormPage() {
   const [searchParams] = useSearchParams();
   const recordPayment = useRecordPayment();
 
+  const preselectedStudentId = searchParams.get('studentId') ?? '';
   const [studentQuery, setStudentQuery] = useState('');
-  const [studentId, setStudentId] = useState(searchParams.get('studentId') ?? '');
+  const [studentId, setStudentId] = useState(preselectedStudentId);
   const [studentLabel, setStudentLabel] = useState('');
   const results = useStudentSearch(studentQuery, { enabled: studentQuery.length >= 2 });
+
+  // Fills in the name and admission number for whichever student is
+  // currently selected — a `?studentId=` handed in from the student's own
+  // Fees tab, or one just picked from the search below — so the card never
+  // sits blank waiting on this fetch to resolve.
+  const studentDetails = useStudent(studentId || undefined);
+  useEffect(() => {
+    if (studentDetails.data && studentDetails.data.id === studentId) {
+      setStudentLabel(`${studentDetails.data.fullName} · ${studentDetails.data.admissionNo}`);
+    }
+  }, [studentDetails.data, studentId]);
 
   const ledger = useStudentLedger(studentId || undefined);
   const openInvoices = useInvoices({
@@ -106,16 +118,30 @@ export function PaymentFormPage() {
 
   const balance = ledger.data?.summary.balance ?? 0;
 
+  // Reached from a student's own Fees tab, this should hand the bursar back
+  // to that student rather than dropping them on the general payments list
+  // they never asked to see.
+  const backTo = preselectedStudentId
+    ? `/students/${preselectedStudentId}?tab=finance`
+    : '/finance/payments';
+  const breadcrumbs = preselectedStudentId
+    ? [
+        { label: 'Students', to: '/students' },
+        { label: studentLabel || 'Student', to: backTo },
+        { label: 'Record payment' },
+      ]
+    : [
+        { label: 'Finance', to: '/finance' },
+        { label: 'Payments', to: '/finance/payments' },
+        { label: 'Record' },
+      ];
+
   return (
     <PageContainer width="narrow">
       <PageHeader
         title="Record a payment"
         description="For cash, transfer, POS and cheque payments taken at the school."
-        breadcrumbs={[
-          { label: 'Finance', to: '/finance' },
-          { label: 'Payments', to: '/finance/payments' },
-          { label: 'Record' },
-        ]}
+        breadcrumbs={breadcrumbs}
       />
 
       <Card>
@@ -337,7 +363,7 @@ export function PaymentFormPage() {
       )}
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button data-cy="finance-payment-form-cancel" variant="outline" onClick={() => navigate('/finance/payments')}>
+        <Button data-cy="finance-payment-form-cancel" variant="outline" onClick={() => navigate(backTo)}>
           Cancel
         </Button>
         <Button data-cy="finance-payment-form-record-payment" onClick={() => void submit()} loading={recordPayment.isPending} disabled={!valid}>

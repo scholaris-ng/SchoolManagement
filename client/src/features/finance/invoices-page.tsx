@@ -1,17 +1,19 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Plus, Receipt } from 'lucide-react';
+import { Download, Plus, Receipt, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
+import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useTerms } from '@/features/academics/api';
-import { useInvoices } from './api';
+import { useDeleteInvoices, useInvoices } from './api';
 import type { Invoice } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
-import { FilterBar } from '@/components/data/filter-bar';
+import { FilterBar, SelectionBar } from '@/components/data/filter-bar';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/guards/permission-gate';
 
 const STATUS_OPTIONS = [
@@ -24,6 +26,7 @@ const STATUS_OPTIONS = [
 
 export function InvoicesPage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const list = useListQuery({
     filterKeys: ['status', 'termId', 'classId'],
     defaultSortBy: 'issueDate',
@@ -32,6 +35,11 @@ export function InvoicesPage() {
   const invoices = useInvoices(list.query);
   const terms = useTerms();
   const classes = useClasses();
+  const deleteInvoices = useDeleteInvoices();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const canManage = can('invoice.manage');
 
   const currency = 'NGN';
 
@@ -197,6 +205,18 @@ export function InvoicesPage() {
         ]}
       />
 
+      <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+        <Button
+          data-cy="finance-invoices-delete-selected"
+          variant="outline"
+          size="sm"
+          onClick={() => setDeleteConfirmOpen(true)}
+        >
+          <Trash2 />
+          Delete selected
+        </Button>
+      </SelectionBar>
+
       <DataTable
 
         data-cy="finance-invoices-table"
@@ -214,6 +234,8 @@ export function InvoicesPage() {
         sortBy={list.sortBy}
         sortDir={list.sortDir}
         onSortChange={list.setSort}
+        selectedIds={canManage ? selectedIds : undefined}
+        onSelectionChange={canManage ? setSelectedIds : undefined}
         onRowClick={handleRowClick}
         emptyIcon={<Receipt />}
         emptyTitle={list.isFiltered ? 'No invoices match those filters' : 'No invoices yet'}
@@ -222,6 +244,26 @@ export function InvoicesPage() {
             ? 'Try clearing the filters.'
             : 'Create a fee structure, then issue invoices for the term.'
         }
+      />
+
+      <ConfirmDialog
+        data-cy="finance-invoices-delete-confirm"
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        tone="danger"
+        title={
+          selectedIds.length === 1
+            ? 'Delete this invoice?'
+            : `Delete ${selectedIds.length} invoices?`
+        }
+        description="This removes the invoice entirely rather than just cancelling it, so it is refused for any invoice that already has a payment recorded against it, or that carries a balance to or from another invoice. Anything else selected is removed for good."
+        confirmLabel="Delete"
+        loading={deleteInvoices.isPending}
+        onConfirm={async () => {
+          await deleteInvoices.mutateAsync(selectedIds);
+          setSelectedIds([]);
+          setDeleteConfirmOpen(false);
+        }}
       />
     </PageContainer>
   );

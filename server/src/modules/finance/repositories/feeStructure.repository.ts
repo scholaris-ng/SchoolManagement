@@ -196,6 +196,65 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
   }
 
   /**
+   * The other direction from `studentsToBill`: given one pupil and one term,
+   * which structure (if any) is written for their class. The same enrolment-
+   * first, `current_class_id`-fallback resolution as that method, for the
+   * same reason — a promotion should not make last term's structure stop
+   * matching a pupil billed under it.
+   *
+   * A class-specific structure wins over a level-wide one covering the same
+   * pupil, on the assumption that the more specific one is the one meant for
+   * them; beyond that, the most recently edited structure wins, since that
+   * is the one most likely to be current. Ties beyond that are a school's
+   * own configuration overlap to resolve, not this query's to guess at.
+   */
+  async findApplicable(
+    schoolId: string,
+    studentId: string,
+    termId: string,
+  ): Promise<{ id: string; name: string } | null> {
+    const rows: { id: string; name: string }[] = await this.repo.query(
+      `WITH target AS (
+         SELECT s.id AS student_id, t.session_id,
+                COALESCE(en.class_id, s.current_class_id) AS class_id,
+                COALESCE(en.level_id, c.level_id) AS level_id
+           FROM students s
+           JOIN terms t ON t.id = $3
+           LEFT JOIN LATERAL (
+             SELECT en.class_id, en.level_id
+               FROM student_enrollments en
+              WHERE en.school_id = s.school_id
+                AND en.student_id = s.id
+                AND en.session_id = t.session_id
+                AND en.status = 'ACTIVE'
+              ORDER BY en.created_at DESC
+              LIMIT 1
+           ) en ON TRUE
+           LEFT JOIN school_classes c ON c.id = COALESCE(en.class_id, s.current_class_id)
+          WHERE s.id = $2 AND s.school_id = $1
+       )
+       SELECT fs.id, fs.name
+         FROM fee_structures fs, target
+        WHERE fs.school_id = $1
+          AND fs.session_id = target.session_id
+          AND fs.is_active = TRUE
+          AND (fs.term_id IS NULL OR fs.term_id = $3)
+          AND (
+            jsonb_array_length(fs.level_ids) = 0
+            OR (target.level_id IS NOT NULL AND fs.level_ids ? target.level_id::text)
+          )
+          AND (
+            jsonb_array_length(fs.class_ids) = 0
+            OR (target.class_id IS NOT NULL AND fs.class_ids ? target.class_id::text)
+          )
+        ORDER BY (jsonb_array_length(fs.class_ids) > 0) DESC, fs.updated_at DESC
+        LIMIT 1`,
+      [schoolId, studentId, termId],
+    );
+    return rows[0] ?? null;
+  }
+
+  /**
    * Who this structure still has to bill for this term.
    *
    * Enrolment is the authority on where a pupil sits *in a session* — the

@@ -64,6 +64,15 @@ export class FeeItem extends SoftDeletableEntity {
   isActive: boolean;
 
   /**
+   * Whether this charge can be billed by quantity — a locker, a textbook, a
+   * bus trip — rather than always once. Off by default: most charges
+   * (tuition, exam fees) have no unit to count, and showing a quantity field
+   * for those would just invite a bursar to mistype `1` as something else.
+   */
+  @Column({ name: 'has_quantity', type: 'boolean', default: false })
+  hasQuantity: boolean;
+
+  /**
    * Which of the school's centrally-managed accounts (`PaymentDestination`)
    * families can pay this charge into — an item may point at more than one.
    * Referenced by id rather than owned here, so editing an account once, in

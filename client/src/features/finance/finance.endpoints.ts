@@ -15,6 +15,7 @@ import type {
   PaymentMethod,
   PaymentReceiptSubmission,
   Receipt,
+  ResolveFeeStructureResult,
   StudentFinanceSummary,
 } from '@/types/finance';
 
@@ -50,6 +51,7 @@ export interface FeeItemInput {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
+  hasQuantity: boolean;
   /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
   paymentDestinationIds?: string[];
 }
@@ -60,6 +62,23 @@ export interface CreateInvoiceInput {
   dueDate: string;
   lines: { feeItemId: string; quantity: number; discountAmount: number }[];
   note?: string;
+}
+
+/**
+ * The student and term never appear here — those are fixed once an invoice
+ * is issued. `lines`, when sent, is refused server-side once any money has
+ * landed on the invoice.
+ */
+export interface UpdateInvoiceInput {
+  dueDate?: string;
+  note?: string;
+  lines?: { feeItemId: string; quantity: number; discountAmount: number }[];
+}
+
+/** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */
+export interface DeleteInvoicesResult {
+  deletedIds: string[];
+  skipped: { id: string; invoiceNo: string; reason: string }[];
 }
 
 export interface RecordPaymentInput {
@@ -163,6 +182,15 @@ export const FinanceEndpoints = {
   fetchFeeStructures: (query: ListQuery) =>
     http.get<Paginated<FeeStructure>>('/fee-structures', { query }),
 
+  /**
+   * "Add all standard fees" on a hand-raised invoice — whichever structure
+   * is written for this pupil's class this term, resolved server-side so
+   * this screen never has to reason about levels, classes or enrolment
+   * itself.
+   */
+  resolveFeeStructure: (query: { studentId: string; termId: string }) =>
+    http.get<ResolveFeeStructureResult>('/fee-structures/resolve', { query }),
+
   fetchFeeStructure: (id: string) => http.get<FeeStructure>(`/fee-structures/${id}`),
 
   createFeeStructure: (values: Partial<FeeStructureInput>) =>
@@ -218,6 +246,13 @@ export const FinanceEndpoints = {
   fetchInvoice: (id: string) => http.get<Invoice>(`/invoices/${id}`),
 
   createInvoice: (input: CreateInvoiceInput) => http.post<Invoice>('/invoices', input),
+
+  updateInvoice: (id: string, input: UpdateInvoiceInput) =>
+    http.patch<Invoice>(`/invoices/${id}`, input),
+
+  /** One id or a hundred — a single "Delete" button posts an array of one. */
+  deleteInvoices: (ids: string[]) =>
+    http.post<DeleteInvoicesResult>('/invoices/bulk-delete', { ids }),
 
   /* -- Payments ------------------------------------------------------------- */
 

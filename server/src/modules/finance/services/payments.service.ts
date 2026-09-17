@@ -104,11 +104,17 @@ export class PaymentsService {
       ? await this.students.findOneDTO(context.schoolId, payment.studentId)
       : null;
 
-    const briefs = await this.invoices.findManyBrief(
-      context.schoolId,
-      payment.allocations.map((row) => row.invoiceId),
-    );
+    const invoiceIds = payment.allocations.map((row) => row.invoiceId);
+    const briefs = await this.invoices.findManyBrief(context.schoolId, invoiceIds);
     const termOf = new Map(briefs.map((brief) => [brief.id, brief]));
+
+    const lineRows = await this.invoices.findLinesForInvoices(context.schoolId, invoiceIds);
+    const linesByInvoice = new Map<string, typeof lineRows>();
+    for (const row of lineRows) {
+      const existing = linesByInvoice.get(row.invoiceId);
+      if (existing) existing.push(row);
+      else linesByInvoice.set(row.invoiceId, [row]);
+    }
 
     // Money that arrived without being assigned to a bill still gets a
     // receipt: the family paid it, and "on account" is what it is for.
@@ -146,6 +152,11 @@ export class PaymentsService {
           invoiceNo: allocation.invoiceNo,
           description: brief ? `${brief.termName} · ${brief.sessionName} fees` : 'School fees',
           amount: allocation.amount,
+          lines: (linesByInvoice.get(allocation.invoiceId) ?? []).map((line) => ({
+            description: line.description,
+            isOptional: line.isOptional,
+            amount: line.amount,
+          })),
         };
       }),
       balanceAfter,

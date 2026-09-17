@@ -21,6 +21,7 @@ function toDTO(row: FeeItem, accounts: PaymentDestinationDTO[]): FeeItemDTO {
     isOptional: row.isOptional,
     isRecurring: row.isRecurring,
     isActive: row.isActive,
+    hasQuantity: row.hasQuantity,
     accounts,
   };
 }

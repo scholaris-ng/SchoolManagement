@@ -47,6 +47,8 @@ export interface FeeItemDTO {
   isOptional: boolean;
   isRecurring: boolean;
   isActive: boolean;
+  /** Whether a bursar can set a quantity when billing this item by hand. */
+  hasQuantity: boolean;
   /** Where families can pay this charge into — a fee item may have more than one, resolved for display. */
   accounts: PaymentDestinationDTO[];
 }
@@ -100,12 +102,36 @@ export interface FeeStructureDTO {
   schoolEmail?: string;
 }
 
+/**
+ * The standard charges for one pupil's class, for "Add all standard fees" on
+ * a hand-raised invoice — the same charges a bulk run would have billed them
+ * under, read from whichever fee structure is written for their class and
+ * this term. `structureId` is `null` when none is: a school that has not
+ * set one up yet for that class needs telling, not a silently empty list.
+ */
+export interface ResolveFeeStructureResultDTO {
+  structureId: string | null;
+  structureName: string | null;
+  feeItemIds: string[];
+}
+
 /** What one bulk-billing run did. Mirrors `GenerateInvoicesResult` on the client. */
 export interface GenerateInvoicesResultDTO {
   created: number;
   /** Already had a live invoice for this structure and term — not an error. */
   skipped: number;
   invoiceIds: string[];
+}
+
+/**
+ * What one bulk-delete request did. A batch is not all-or-nothing: every
+ * invoice that was safe to remove is removed, and everything else comes back
+ * named with why, so a bursar clearing out ten mistakes does not have the
+ * other nine blocked by the one that already has a payment on it.
+ */
+export interface DeleteInvoicesResultDTO {
+  deletedIds: string[];
+  skipped: { id: string; invoiceNo: string; reason: string }[];
 }
 
 /** A payment account as it stood when an invoice line was raised — a snapshot, no id. */
@@ -163,6 +189,14 @@ export interface InvoiceDTO {
   createdAt: string;
   version: number;
   /**
+   * Whether this invoice can be hard-deleted right now: no payment has ever
+   * been allocated against it, and it neither carried a balance forward from
+   * an earlier invoice nor had its own balance carried into a later one. The
+   * server still enforces this on the delete call itself — this is what lets
+   * the screen grey the option out instead of letting someone hit the refusal.
+   */
+  deletable: boolean;
+  /**
    * The school's own letterhead details, for a printed invoice — assembled
    * the same way `fetchReceipt` builds `ReceiptDTO`'s equivalent fields, from
    * the school record rather than a join, since only the single detail read
@@ -192,6 +226,13 @@ export interface StudentLedgerEntryDTO {
   description: string;
   debit: number;
   credit: number;
+  /**
+   * Whether this row's own invoice can be hard-deleted right now — only
+   * meaningful when `type` is `'INVOICE'`; see `Invoice.deletable` for the
+   * three conditions. The server still enforces this on the delete call
+   * itself; this is only what lets the statement grey the option out.
+   */
+  deletable: boolean;
   runningBalance: number;
 }
 
@@ -232,7 +273,17 @@ export interface ReceiptDTO {
   method: PaymentMethod;
   paidAt: string;
   receivedByName: string;
-  allocations: { invoiceNo: string; description: string; amount: number }[];
+  allocations: {
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    /**
+     * The invoice's own charges — tuition, boarding, exam and so on — for a
+     * receipt's optional itemised view. Whether to show them is the
+     * screen's call, not this endpoint's; they are always sent.
+     */
+    lines: { description: string; isOptional: boolean; amount: number }[];
+  }[];
   balanceAfter: number;
   verificationCode: string;
 }

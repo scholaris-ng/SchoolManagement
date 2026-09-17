@@ -1,18 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Receipt, Wallet } from 'lucide-react';
+import { Receipt, Trash2, Wallet } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useStudentLedger } from '../api';
+import { useDeleteInvoices } from '@/features/finance/api';
 // Raven's collection-account flow (`PaymentAccountsCard`) is disabled — see
 // the note above each commented-out usage below.
 // import { PaymentAccountsCard } from '@/features/finance/payment-accounts-card';
 import { StatCard } from '@/components/data/stat-card';
 import { Card } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/data/data-table';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/guards/permission-gate';
 import type { StudentLedgerEntry } from '@/types/finance';
 
@@ -24,9 +26,12 @@ import type { StudentLedgerEntry } from '@/types/finance';
  * (spec section 26).
  */
 export function StudentFinanceTab({ studentId }: { studentId: string }) {
-  const { membership } = useAuth();
+  const { membership, can } = useAuth();
   const currency = membership?.branding ? 'NGN' : 'NGN';
   const ledger = useStudentLedger(studentId);
+  const deleteInvoices = useDeleteInvoices();
+  const [pendingDelete, setPendingDelete] = useState<StudentLedgerEntry | null>(null);
+  const canManageInvoices = can('invoice.manage');
 
   const columns = useMemo<Column<StudentLedgerEntry>[]>(
     () => [
@@ -82,8 +87,42 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
           </span>
         ),
       },
+      // Only an invoice line in this statement is a document of its own that
+      // can be deleted — a payment or a discount is a consequence of one,
+      // not a separate thing to remove here.
+      ...(canManageInvoices
+        ? [
+            {
+              id: 'actions',
+              header: '',
+              align: 'right' as const,
+              cell: (entry: StudentLedgerEntry) => {
+                if (entry.type !== 'INVOICE') return null;
+                const button = (
+                  <Button
+                    data-cy="tabs-finance-tab-delete-invoice"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete invoice ${entry.reference}`}
+                    disabled={!entry.deletable}
+                    onClick={() => setPendingDelete(entry)}
+                  >
+                    <Trash2 />
+                  </Button>
+                );
+                return entry.deletable ? (
+                  button
+                ) : (
+                  <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
+                    <span className="inline-flex">{button}</span>
+                  </Tooltip>
+                );
+              },
+            },
+          ]
+        : []),
     ],
-    [currency],
+    [currency, canManageInvoices],
   );
 
   // Collecting money works before the ledger does: a Raven account number
@@ -177,6 +216,24 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
           rowKey={(entry) => entry.id}
         />
       )}
+
+      <ConfirmDialog
+        data-cy="tabs-finance-tab-delete-invoice-confirm"
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        tone="danger"
+        title="Delete this invoice?"
+        description={`"${pendingDelete?.reference}" will be removed entirely, not just cancelled. This is refused if it has a payment recorded against it, or carries a balance to or from another invoice.`}
+        confirmLabel="Delete"
+        loading={deleteInvoices.isPending}
+        onConfirm={async () => {
+          if (pendingDelete) {
+            await deleteInvoices.mutateAsync([pendingDelete.id]);
+            void ledger.refetch();
+          }
+          setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

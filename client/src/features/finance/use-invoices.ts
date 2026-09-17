@@ -4,7 +4,7 @@ import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import { FinanceEndpoints } from './finance.endpoints';
-import type { CreateInvoiceInput } from './finance.endpoints';
+import type { CreateInvoiceInput, UpdateInvoiceInput } from './finance.endpoints';
 
 /** What a family owes. */
 
@@ -43,6 +43,63 @@ export function useCreateInvoice() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
       toast.success('Invoice created', { description: invoice.invoiceNo });
+    },
+  });
+}
+
+export function useUpdateInvoice() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateInvoiceInput }) =>
+      FinanceEndpoints.updateInvoice(id, input),
+    onSuccess: (invoice) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoice(schoolId, invoice.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
+      toast.success('Invoice updated', { description: invoice.invoiceNo });
+    },
+  });
+}
+
+/**
+ * A batch is not all-or-nothing: whatever was safe to delete is gone, and
+ * the toast names anything that was not, and why — see `DeleteInvoicesResult`.
+ */
+export function useDeleteInvoices() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => FinanceEndpoints.deleteInvoices(ids),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
+
+      if (result.deletedIds.length > 0) {
+        toast.success(
+          result.deletedIds.length === 1
+            ? 'Invoice deleted'
+            : `${result.deletedIds.length} invoices deleted`,
+        );
+      }
+      if (result.skipped.length > 0) {
+        toast.error(
+          result.skipped.length === 1
+            ? `${result.skipped[0].invoiceNo || 'One invoice'} was not deleted`
+            : `${result.skipped.length} invoices were not deleted`,
+          {
+            description:
+              result.skipped.length === 1
+                ? result.skipped[0].reason
+                : result.skipped
+                    .map((row) => `${row.invoiceNo || 'Unknown'}: ${row.reason}`)
+                    .join(' · '),
+          },
+        );
+      }
     },
   });
 }

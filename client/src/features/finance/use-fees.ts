@@ -68,6 +68,19 @@ export function useDeleteFeeItems() {
   });
 }
 
+/**
+ * "Add all standard fees" on a hand-raised invoice — resolved on demand
+ * rather than kept in the cache, since the answer depends on exactly which
+ * student and term the bursar has picked in the moment they press the
+ * button.
+ */
+export function useResolveFeeStructure() {
+  return useMutation({
+    mutationFn: (query: { studentId: string; termId: string }) =>
+      FinanceEndpoints.resolveFeeStructure(query),
+  });
+}
+
 export function useFeeStructures(query: ListQuery = { page: 1, pageSize: 50 }) {
   const schoolId = useSchoolId();
   return useQuery({

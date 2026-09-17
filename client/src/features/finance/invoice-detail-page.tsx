@@ -1,17 +1,19 @@
-import { Link, useParams } from 'react-router-dom';
-import { CreditCard, Mail, MessageCircle, Phone, Printer, User } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { CreditCard, Mail, MessageCircle, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { contrastingTextColor } from '@/lib/utils';
 import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
-import { useInvoice } from './api';
+import { useDeleteInvoices, useInvoice } from './api';
 import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/data/status-badge';
-import { ErrorState, LoadingState } from '@/components/ui/feedback';
+import { ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
 // Raven's collection-account flow (`PaymentAccountsCard`) is disabled — see
 // the note above its commented-out usage below.
@@ -23,8 +25,11 @@ const DEFAULT_LOGO = '/site/logo.png';
 
 export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const invoice = useInvoice(id);
   const { membership } = useAuth();
+  const deleteInvoices = useDeleteInvoices();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -110,6 +115,38 @@ export function InvoiceDetailPage() {
                 <MessageCircle />
                 Send to WhatsApp
               </Button>
+              {record.status !== 'CANCELLED' && (
+                <PermissionGate require="invoice.manage">
+                  <Button data-cy="finance-invoice-detail-edit" variant="outline" asChild>
+                    <Link to={`/finance/invoices/${record.id}/edit`}>
+                      <Pencil />
+                      Edit
+                    </Link>
+                  </Button>
+                </PermissionGate>
+              )}
+              <PermissionGate require="invoice.manage">
+                {(() => {
+                  const deleteButton = (
+                    <Button
+                      data-cy="finance-invoice-detail-delete"
+                      variant="outline"
+                      disabled={!record.deletable}
+                      onClick={() => setDeleteOpen(true)}
+                    >
+                      <Trash2 />
+                      Delete
+                    </Button>
+                  );
+                  return record.deletable ? (
+                    deleteButton
+                  ) : (
+                    <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
+                      <span className="inline-flex">{deleteButton}</span>
+                    </Tooltip>
+                  );
+                })()}
+              </PermissionGate>
             </>
           }
         />
@@ -182,6 +219,11 @@ export function InvoiceDetailPage() {
                   <tr key={line.id}>
                     <td className="px-3 py-2">
                       {line.description}
+                      {line.quantity > 1 && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          × {line.quantity} ({formatCurrency(line.unitAmount, currency, { showDecimals: false })} each)
+                        </span>
+                      )}
                       {line.isOptional && (
                         <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
                       )}
@@ -295,6 +337,22 @@ export function InvoiceDetailPage() {
           </div>
         </PermissionGate>
       )} */}
+
+      <ConfirmDialog
+        data-cy="finance-invoice-detail-delete-confirm"
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        tone="danger"
+        title="Delete this invoice?"
+        description={`"${record.invoiceNo}" will be removed entirely, not just cancelled. This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteInvoices.isPending}
+        onConfirm={async () => {
+          const result = await deleteInvoices.mutateAsync([record.id]);
+          setDeleteOpen(false);
+          if (result.deletedIds.includes(record.id)) navigate('/finance/invoices');
+        }}
+      />
     </PageContainer>
   );
 }

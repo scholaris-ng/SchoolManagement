@@ -18,7 +18,11 @@ import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import { InvoicesService, type IssueLine } from './invoices.service';
 import type { FeeCategory } from '../entities/feeItem.entity';
-import type { FeeStructureDTO, GenerateInvoicesResultDTO } from '../dto/finance.dto';
+import type {
+  FeeStructureDTO,
+  GenerateInvoicesResultDTO,
+  ResolveFeeStructureResultDTO,
+} from '../dto/finance.dto';
 import type {
   CreateFeeStructureInput,
   FetchFeeStructuresQuery,
@@ -98,6 +102,30 @@ export class FeeStructuresService {
       schoolLogoUrl: school.branding?.logoUrl ?? null,
       schoolPhone: website.contactPhone || school.phone,
       schoolEmail: website.contactEmail || school.email,
+    };
+  }
+
+  /**
+   * "Add all standard fees" on a hand-raised invoice, resolved from whatever
+   * structure is written for this pupil's class this term rather than the
+   * whole school's fee-item list — see `ResolveFeeStructureResultDTO`.
+   */
+  async resolveForStudent(
+    context: RequestContext,
+    studentId: string,
+    termId: string,
+  ): Promise<ResolveFeeStructureResultDTO> {
+    const term = await this.terms.findOneDTO(context.schoolId, termId);
+    if (!term) throw AppError.notFound('Term');
+
+    const match = await this.structures.findApplicable(context.schoolId, studentId, termId);
+    if (!match) return { structureId: null, structureName: null, feeItemIds: [] };
+
+    const definitions = await this.structures.lineDefinitions(context.schoolId, match.id);
+    return {
+      structureId: match.id,
+      structureName: match.name,
+      feeItemIds: definitions.filter((line) => !line.isOptional).map((line) => line.feeItemId),
     };
   }
 
