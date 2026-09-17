@@ -24,6 +24,8 @@ interface LineDraft {
   feeItemId: string;
   /** Only ever editable, or worth more than 1, for a fee item marked `hasQuantity`. */
   quantity: number;
+  /** Which of the fee item's own accounts this charge is billed under. */
+  accountIds: string[];
   /** The line's own snapshot at billing time — shown only if the fee item has since been deleted, so it can still be identified and removed. */
   description: string;
 }
@@ -51,21 +53,52 @@ export function InvoiceEditPage() {
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [initialised, setInitialised] = useState(false);
 
+  // Waits on both the invoice and the fee item list: reconstructing which
+  // accounts a line was billed under (see below) needs the item's current
+  // accounts to match the line's snapshot against.
   useEffect(() => {
-    if (!invoice.data || initialised) return;
+    if (!invoice.data || !feeItems.data || initialised) return;
     setDueDate(toDateInputValue(invoice.data.dueDate));
     setNote(invoice.data.note ?? '');
     setLines(
-      invoice.data.lines.map((line) => ({
-        feeItemId: line.feeItemId,
-        quantity: line.quantity,
-        description: line.description,
-      })),
+      invoice.data.lines.map((line) => {
+        const item = feeItems.data.items.find((entry) => entry.id === line.feeItemId);
+        // The line's snapshot has no id of its own to match by — only the
+        // bank and account number, the same key the duplicate-accounts
+        // screen uses to recognise "the same real account" elsewhere. If
+        // none of the item's current accounts match at all (every one it
+        // had has since been replaced), falling back to all of them beats
+        // leaving the line with nowhere to pay into shown.
+        const matched =
+          item?.accounts
+            .filter((account) =>
+              line.accounts.some(
+                (snapshot) =>
+                  snapshot.bankName === account.bankName &&
+                  snapshot.accountNumber === account.accountNumber,
+              ),
+            )
+            .map((account) => account.id) ?? [];
+        return {
+          feeItemId: line.feeItemId,
+          quantity: line.quantity,
+          accountIds: matched.length > 0 ? matched : (item?.accounts.map((a) => a.id) ?? []),
+          description: line.description,
+        };
+      }),
     );
     setInitialised(true);
-  }, [invoice.data, initialised]);
+  }, [invoice.data, feeItems.data, initialised]);
 
   const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
+  // A fee item's own "(optional)" is its school-wide default; a resolved
+  // structure can override that per item (boarding marked optional
+  // everywhere except the one structure it is compulsory under). Filled in
+  // once "Add all standard fees" has resolved a structure, so the dropdown
+  // stops showing a default that this student's actual bill does not use.
+  const [structureOptional, setStructureOptional] = useState<Map<string, boolean>>(new Map());
+  const isOptionalFor = (feeItemId: string) =>
+    structureOptional.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.isOptional ?? false;
 
   const subtotal = useMemo(
     () =>
@@ -81,9 +114,28 @@ export function InvoiceEditPage() {
     if (!firstUnused) return;
     setLines((current) => [
       ...current,
-      { feeItemId: firstUnused.id, quantity: 1, description: firstUnused.name },
+      {
+        feeItemId: firstUnused.id,
+        quantity: 1,
+        accountIds: firstUnused.accounts.map((account) => account.id),
+        description: firstUnused.name,
+      },
     ]);
   };
+
+  const toggleLineAccount = (index: number, accountId: string) =>
+    setLines((current) =>
+      current.map((entry, i) =>
+        i === index
+          ? {
+              ...entry,
+              accountIds: entry.accountIds.includes(accountId)
+                ? entry.accountIds.filter((id) => id !== accountId)
+                : [...entry.accountIds, accountId],
+            }
+          : entry,
+      ),
+    );
 
   // Reads the actual fee structure written for the student's class this
   // term, rather than every mandatory item the school has ever defined.
@@ -102,14 +154,43 @@ export function InvoiceEditPage() {
       return;
     }
 
-    setLines(
-      result.feeItemIds.map((feeItemId) => ({
-        feeItemId,
-        quantity: 1,
-        description: items.find((item) => item.id === feeItemId)?.name ?? '',
-      })),
-    );
-    toast.success('Standard fees added', { description: result.structureName ?? undefined });
+    // The structure's own call on each item, which can disagree with that
+    // fee item's school-wide default — applied to the dropdown labels below
+    // so the screen never keeps showing "(optional)" on a charge this
+    // particular structure actually bills to everyone.
+    setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
+
+    const mandatoryIds = result.lines.filter((line) => !line.isOptional).map((line) => line.feeItemId);
+
+    // Adds whatever is missing rather than replacing the list outright — an
+    // optional item already on this invoice (from the original bulk run, or
+    // added by hand since) must not vanish just because the standard set
+    // was pulled in on top of it.
+    let added = 0;
+    setLines((current) => {
+      const existingIds = new Set(current.map((line) => line.feeItemId));
+      const missing = mandatoryIds
+        .filter((feeItemId) => !existingIds.has(feeItemId))
+        .map((feeItemId) => {
+          const item = items.find((entry) => entry.id === feeItemId);
+          return {
+            feeItemId,
+            quantity: 1,
+            accountIds: item?.accounts.map((account) => account.id) ?? [],
+            description: item?.name ?? '',
+          };
+        });
+      added = missing.length;
+      return [...current, ...missing];
+    });
+
+    if (added === 0) {
+      toast.info('Already up to date', {
+        description: `Every standard charge from ${result.structureName} is already on this invoice.`,
+      });
+    } else {
+      toast.success('Standard fees added', { description: result.structureName ?? undefined });
+    }
   };
 
   if (invoice.isPending) {
@@ -172,6 +253,7 @@ export function InvoiceEditPage() {
                   feeItemId: line.feeItemId,
                   quantity: line.quantity,
                   discountAmount: 0,
+                  accountIds: line.accountIds,
                 })),
               }),
         },
@@ -291,8 +373,8 @@ export function InvoiceEditPage() {
                             disabled={amountLocked}
                             onChange={(event) => {
                               // A fresh item is a fresh choice — any quantity
-                              // set for the old one should not silently carry
-                              // over and multiply a charge that never meant it.
+                              // or account set for the old one should not
+                              // silently carry over onto a different charge.
                               const next = items.find((option) => option.id === event.target.value);
                               setLines((current) =>
                                 current.map((entry, i) =>
@@ -300,6 +382,7 @@ export function InvoiceEditPage() {
                                     ? {
                                         feeItemId: event.target.value,
                                         quantity: 1,
+                                        accountIds: next?.accounts.map((a) => a.id) ?? [],
                                         description: next?.name ?? entry.description,
                                       }
                                     : entry,
@@ -310,7 +393,7 @@ export function InvoiceEditPage() {
                             {items.map((option) => (
                               <option key={option.id} value={option.id}>
                                 {option.name}
-                                {option.isOptional ? ' (optional)' : ''}
+                                {isOptionalFor(option.id) ? ' (optional)' : ''}
                               </option>
                             ))}
                           </NativeSelect>
@@ -364,20 +447,37 @@ export function InvoiceEditPage() {
                         </Button>
                       )}
                     </div>
-                    {item && item.accounts.length > 0 && (
-                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <Landmark className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                        <span>
-                          Pay into{' '}
-                          {item.accounts.map((account, i) => (
-                            <span key={i}>
-                              {i > 0 ? ' or ' : ''}
-                              {account.label ? `${account.label} — ` : ''}
-                              {account.bankName} · {account.accountNumber} · {account.accountName}
-                            </span>
-                          ))}
-                        </span>
+                    {item && item.accounts.length === 1 && (
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
+                        Pay into {item.accounts[0].bankName} · {item.accounts[0].accountNumber} ·{' '}
+                        {item.accounts[0].accountName}
                       </p>
+                    )}
+                    {item && item.accounts.length > 1 && (
+                      <fieldset className="space-y-1">
+                        <legend className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
+                          Pay into
+                        </legend>
+                        {item.accounts.map((account) => (
+                          <label
+                            key={account.id}
+                            className="flex items-center gap-2 pl-5 text-xs text-muted-foreground"
+                          >
+                            <input
+                              data-cy="finance-invoice-edit-line-account"
+                              type="checkbox"
+                              className="size-3.5 rounded border-input"
+                              checked={line.accountIds.includes(account.id)}
+                              disabled={amountLocked}
+                              onChange={() => toggleLineAccount(index, account.id)}
+                            />
+                            {account.label ? `${account.label} — ` : ''}
+                            {account.bankName} · {account.accountNumber} · {account.accountName}
+                          </label>
+                        ))}
+                      </fieldset>
                     )}
                   </li>
                 );

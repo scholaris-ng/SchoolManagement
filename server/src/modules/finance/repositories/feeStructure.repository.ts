@@ -103,11 +103,19 @@ export interface FeeStructureLineDefinition {
   accounts: { label: string | null; bankName: string; accountNumber: string; accountName: string }[];
 }
 
-/** A pupil a bulk run is about to bill. */
+/**
+ * One pupil in a structure's scope, considered for a bulk run.
+ *
+ * `alreadyBilled` is true the moment *any* non-cancelled invoice already
+ * covers this student for this term — not only one this same structure
+ * raised. A student billed once for a term, by any structure or by hand,
+ * should not be billed again for it by a second run.
+ */
 export interface BillableStudent {
   studentId: string;
   classId: string | null;
   boardingStatus: 'DAY' | 'BOARDING';
+  alreadyBilled: boolean;
 }
 
 export class FeeStructureRepository extends TenantRepository<FeeStructure> {
@@ -255,7 +263,8 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
   }
 
   /**
-   * Who this structure still has to bill for this term.
+   * Every pupil this structure's scope covers, with whether this term is
+   * already spoken for.
    *
    * Enrolment is the authority on where a pupil sits *in a session* — the
    * class on the student row is a denormalised pointer that promotion moves —
@@ -263,13 +272,17 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
    * session, and fall back to `current_class_id` for a pupil admitted before
    * the enrolment was written.
    *
-   * The `NOT EXISTS` is what makes a second run of the same button a no-op
-   * rather than a second bill. The partial unique index on `invoices` catches
-   * the same thing a millisecond later if two bursars press it at once.
+   * `alreadyBilled` looks at every non-cancelled invoice for the term, not
+   * only ones this structure itself raised — a pupil already billed by hand,
+   * or by a different overlapping structure, is just as covered as one this
+   * structure billed on an earlier run. That is also what makes pressing the
+   * button twice safe: the second run finds everyone already billed and
+   * raises nothing. The partial unique index on `invoices` catches the
+   * narrower race where two people press it at the same moment.
    */
   async studentsToBill(
     schoolId: string,
-    structure: { id: string; sessionId: string; levelIds: string[]; classIds: string[] },
+    structure: { sessionId: string; levelIds: string[]; classIds: string[] },
     termId: string,
     manager?: EntityManager,
   ): Promise<BillableStudent[]> {
@@ -277,7 +290,14 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
     return runner.query(
       `SELECT s.id AS "studentId",
               COALESCE(e.class_id, s.current_class_id) AS "classId",
-              s.boarding_status AS "boardingStatus"
+              s.boarding_status AS "boardingStatus",
+              EXISTS (
+                SELECT 1 FROM invoices i
+                 WHERE i.school_id = $1
+                   AND i.student_id = s.id
+                   AND i.term_id = $5
+                   AND i.status <> 'CANCELLED'
+              ) AS "alreadyBilled"
          FROM students s
          LEFT JOIN LATERAL (
            SELECT en.class_id, en.level_id
@@ -301,38 +321,9 @@ export class FeeStructureRepository extends TenantRepository<FeeStructure> {
             COALESCE(array_length($4::uuid[], 1), 0) = 0
             OR COALESCE(e.class_id, s.current_class_id) = ANY($4::uuid[])
           )
-          AND NOT EXISTS (
-            SELECT 1 FROM invoices i
-             WHERE i.fee_structure_id = $5
-               AND i.student_id = s.id
-               AND i.term_id = $6
-               AND i.status <> 'CANCELLED'
-          )
         ORDER BY s.last_name, s.first_name, s.id`,
-      [schoolId, structure.sessionId, structure.levelIds, structure.classIds, structure.id, termId],
+      [schoolId, structure.sessionId, structure.levelIds, structure.classIds, termId],
     );
-  }
-
-  /**
-   * How many pupils this structure has *already* billed for a term — the
-   * "skipped" half of a generate run's answer, counted before the run so the
-   * office is told what happened rather than just what changed.
-   */
-  async countAlreadyBilled(
-    schoolId: string,
-    structureId: string,
-    termId: string,
-    manager?: EntityManager,
-  ): Promise<number> {
-    const runner = manager ?? this.repo.manager;
-    const [row] = await runner.query(
-      `SELECT COUNT(DISTINCT i.student_id)::int AS total
-         FROM invoices i
-        WHERE i.school_id = $1 AND i.fee_structure_id = $2 AND i.term_id = $3
-          AND i.status <> 'CANCELLED'`,
-      [schoolId, structureId, termId],
-    );
-    return Number(row?.total ?? 0);
   }
 
   /**

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Receipt, Trash2, Wallet } from 'lucide-react';
+import { Pencil, Receipt, Trash2, Wallet } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
@@ -98,7 +98,7 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
               align: 'right' as const,
               cell: (entry: StudentLedgerEntry) => {
                 if (entry.type !== 'INVOICE') return null;
-                const button = (
+                const deleteButton = (
                   <Button
                     data-cy="tabs-finance-tab-delete-invoice"
                     variant="ghost"
@@ -110,12 +110,27 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
                     <Trash2 />
                   </Button>
                 );
-                return entry.deletable ? (
-                  button
-                ) : (
-                  <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
-                    <span className="inline-flex">{button}</span>
-                  </Tooltip>
+                return (
+                  <span className="inline-flex items-center gap-1">
+                    <Button
+                      data-cy="tabs-finance-tab-edit-invoice"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Edit invoice ${entry.reference}`}
+                      asChild
+                    >
+                      <Link to={`/finance/invoices/${entry.id}/edit`}>
+                        <Pencil />
+                      </Link>
+                    </Button>
+                    {entry.deletable ? (
+                      deleteButton
+                    ) : (
+                      <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
+                        <span className="inline-flex">{deleteButton}</span>
+                      </Tooltip>
+                    )}
+                  </span>
                 );
               },
             },

@@ -17,6 +17,7 @@ import type { InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity'
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
   DeleteInvoicesResultDTO,
+  FeeItemDTO,
   InvoiceDTO,
   StudentFinanceSummaryDTO,
   StudentLedgerResultDTO,
@@ -212,14 +213,10 @@ export class InvoicesService {
         unitAmount: item.amount,
         discountAmount: line.discountAmount,
         isOptional: item.isOptional,
-        // A bill raised by hand has no structure line to have narrowed this
-        // down, so it names everywhere the item can be paid into.
-        accounts: item.accounts.map((account) => ({
-          label: account.label,
-          bankName: account.bankName,
-          accountNumber: account.accountNumber,
-          accountName: account.accountName,
-        })),
+        // Narrowed to whichever accounts the bursar picked for this charge,
+        // same as a fee structure line — everywhere the item can be paid
+        // into, unless told otherwise.
+        accounts: accountsFor(item, line.accountIds),
       };
     });
 
@@ -461,12 +458,7 @@ export class InvoicesService {
           unitAmount: item.amount,
           discountAmount: line.discountAmount,
           isOptional: item.isOptional,
-          accounts: item.accounts.map((account) => ({
-            label: account.label,
-            bankName: account.bankName,
-            accountNumber: account.accountNumber,
-            accountName: account.accountName,
-          })),
+          accounts: accountsFor(item, line.accountIds),
         };
       });
 
@@ -620,4 +612,24 @@ function fromKobo(kobo: number): string {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Which of a fee item's own accounts one invoice line is billed under.
+ * Omitted `accountIds` means every account the item has — the same default
+ * `FeeStructuresService`'s line-pricing gives a structure line that never
+ * narrowed it down. An id that is not actually one of the item's own is
+ * silently dropped, the same leniency `feeItems.schema.ts` documents for a
+ * fee item's own account list.
+ */
+function accountsFor(item: FeeItemDTO, accountIds?: string[]): InvoiceLineAccountSnapshot[] {
+  const selected = accountIds
+    ? item.accounts.filter((account) => accountIds.includes(account.id))
+    : item.accounts;
+  return selected.map((account) => ({
+    label: account.label,
+    bankName: account.bankName,
+    accountNumber: account.accountNumber,
+    accountName: account.accountName,
+  }));
 }

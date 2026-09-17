@@ -84,11 +84,17 @@ export interface FeeStructure {
  * a hand-raised invoice. `structureId` is `null` when the school has not set
  * one up yet for that class and term — worth saying plainly rather than
  * quietly adding nothing.
+ *
+ * `isOptional` is the structure's own per-line setting, which can disagree
+ * with a fee item's global default (boarding, say, marked optional
+ * school-wide but written as mandatory on the one structure it is never
+ * actually optional under) — the full line list lets a screen correct that
+ * item's own "(optional)" label rather than only the add/skip decision.
  */
 export interface ResolveFeeStructureResult {
   structureId: string | null;
   structureName: string | null;
-  feeItemIds: string[];
+  lines: { feeItemId: string; isOptional: boolean }[];
 }
 
 /**

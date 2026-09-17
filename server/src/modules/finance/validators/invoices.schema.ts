@@ -47,6 +47,15 @@ const invoiceLine = z
     feeItemId: z.string().uuid(),
     quantity: z.coerce.number().int().min(1).max(100).default(1),
     discountAmount: z.coerce.number().min(0, 'A discount cannot be negative').default(0),
+    /**
+     * Which of the fee item's own accounts (`fee-item-dialog.tsx`) this
+     * charge is billed under. Omitted means every account the item has, the
+     * same default `fee-structure-dialog.tsx` uses; an id that is not
+     * actually one of the item's accounts is silently dropped rather than
+     * rejected, the same leniency `feeItems.schema.ts` documents for that
+     * screen.
+     */
+    accountIds: z.array(z.string().uuid()).max(10).optional(),
   })
   .strict();
 

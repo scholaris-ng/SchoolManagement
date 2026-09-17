@@ -26,6 +26,8 @@ interface LineDraft {
   feeItemId: string;
   /** Only ever editable, or worth more than 1, for a fee item marked `hasQuantity`. */
   quantity: number;
+  /** Which of the fee item's own accounts this charge is billed under. */
+  accountIds: string[];
 }
 
 /**
@@ -78,11 +80,19 @@ export function InvoiceFormPage() {
   );
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([]);
+  // A fee item's own "(optional)" is its school-wide default; a resolved
+  // structure can override that per item (boarding marked optional
+  // everywhere except the one structure it is compulsory under). Filled in
+  // once "Add all standard fees" has resolved a structure, so the dropdown
+  // stops showing a default that this student's actual bill does not use.
+  const [structureOptional, setStructureOptional] = useState<Map<string, boolean>>(new Map());
 
   const effectiveTermId = termId || currentTerm.data?.id || '';
   // Memoised so the totals below are not recomputed on every keystroke just
   // because the fallback array is a new reference.
   const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
+  const isOptionalFor = (feeItemId: string) =>
+    structureOptional.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.isOptional ?? false;
 
   const subtotal = useMemo(
     () =>
@@ -96,7 +106,14 @@ export function InvoiceFormPage() {
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
     if (!firstUnused) return;
-    setLines((current) => [...current, { feeItemId: firstUnused.id, quantity: 1 }]);
+    setLines((current) => [
+      ...current,
+      {
+        feeItemId: firstUnused.id,
+        quantity: 1,
+        accountIds: firstUnused.accounts.map((account) => account.id),
+      },
+    ]);
   };
 
   // Reads the actual fee structure written for the student's class this
@@ -125,9 +142,54 @@ export function InvoiceFormPage() {
       return;
     }
 
-    setLines(result.feeItemIds.map((feeItemId) => ({ feeItemId, quantity: 1 })));
-    toast.success('Standard fees added', { description: result.structureName ?? undefined });
+    // The structure's own call on each item, which can disagree with that
+    // fee item's school-wide default — applied to the dropdown labels below
+    // so the screen never keeps showing "(optional)" on a charge this
+    // particular structure actually bills to everyone.
+    setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
+
+    const mandatoryIds = result.lines.filter((line) => !line.isOptional).map((line) => line.feeItemId);
+
+    // Adds whatever is missing rather than replacing the list outright — a
+    // line already on the invoice (an optional item the bursar added by
+    // hand, say) must not vanish just because the standard set was pulled
+    // in on top of it.
+    let added = 0;
+    setLines((current) => {
+      const existingIds = new Set(current.map((line) => line.feeItemId));
+      const missing = mandatoryIds
+        .filter((feeItemId) => !existingIds.has(feeItemId))
+        .map((feeItemId) => ({
+          feeItemId,
+          quantity: 1,
+          accountIds: items.find((item) => item.id === feeItemId)?.accounts.map((a) => a.id) ?? [],
+        }));
+      added = missing.length;
+      return [...current, ...missing];
+    });
+
+    if (added === 0) {
+      toast.info('Already up to date', {
+        description: `Every standard charge from ${result.structureName} is already on this invoice.`,
+      });
+    } else {
+      toast.success('Standard fees added', { description: result.structureName ?? undefined });
+    }
   };
+
+  const toggleLineAccount = (index: number, accountId: string) =>
+    setLines((current) =>
+      current.map((entry, i) =>
+        i === index
+          ? {
+              ...entry,
+              accountIds: entry.accountIds.includes(accountId)
+                ? entry.accountIds.filter((id) => id !== accountId)
+                : [...entry.accountIds, accountId],
+            }
+          : entry,
+      ),
+    );
 
   const valid = Boolean(student && effectiveTermId && dueDate && lines.length > 0);
 
@@ -312,23 +374,28 @@ export function InvoiceFormPage() {
                           data-cy="finance-invoice-form-fee-item-id"
                           id={`line-item-${index}`}
                           value={line.feeItemId}
-                          onChange={(event) =>
-                            // A fresh item is a fresh choice — any quantity set
-                            // for the old one should not silently carry over
-                            // and multiply a charge that was never meant to.
+                          onChange={(event) => {
+                            // A fresh item is a fresh choice — any quantity or
+                            // account picked for the old one should not
+                            // silently carry over onto a different charge.
+                            const next = items.find((option) => option.id === event.target.value);
                             setLines((current) =>
                               current.map((entry, i) =>
                                 i === index
-                                  ? { feeItemId: event.target.value, quantity: 1 }
+                                  ? {
+                                      feeItemId: event.target.value,
+                                      quantity: 1,
+                                      accountIds: next?.accounts.map((a) => a.id) ?? [],
+                                    }
                                   : entry,
                               ),
-                            )
-                          }
+                            );
+                          }}
                         >
                           {items.map((option) => (
                             <option key={option.id} value={option.id}>
                               {option.name}
-                              {option.isOptional ? ' (optional)' : ''}
+                              {isOptionalFor(option.id) ? ' (optional)' : ''}
                             </option>
                           ))}
                         </NativeSelect>
@@ -375,20 +442,39 @@ export function InvoiceFormPage() {
                         <Trash2 />
                       </Button>
                     </div>
-                    {item && item.accounts.length > 0 && (
-                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <Landmark className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                        <span>
-                          Pay into{' '}
-                          {item.accounts.map((account, i) => (
-                            <span key={i}>
-                              {i > 0 ? ' or ' : ''}
-                              {account.label ? `${account.label} — ` : ''}
-                              {account.bankName} · {account.accountNumber} · {account.accountName}
-                            </span>
-                          ))}
-                        </span>
+                    {/* One account is shown, not chosen — there is nothing to
+                        narrow down; two or more need an actual pick, and
+                        default to all of them, same as a fee structure line. */}
+                    {item && item.accounts.length === 1 && (
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
+                        Pay into {item.accounts[0].bankName} · {item.accounts[0].accountNumber} ·{' '}
+                        {item.accounts[0].accountName}
                       </p>
+                    )}
+                    {item && item.accounts.length > 1 && (
+                      <fieldset className="space-y-1">
+                        <legend className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
+                          Pay into
+                        </legend>
+                        {item.accounts.map((account) => (
+                          <label
+                            key={account.id}
+                            className="flex items-center gap-2 pl-5 text-xs text-muted-foreground"
+                          >
+                            <input
+                              data-cy="finance-invoice-form-line-account"
+                              type="checkbox"
+                              className="size-3.5 rounded border-input"
+                              checked={line.accountIds.includes(account.id)}
+                              onChange={() => toggleLineAccount(index, account.id)}
+                            />
+                            {account.label ? `${account.label} — ` : ''}
+                            {account.bankName} · {account.accountNumber} · {account.accountName}
+                          </label>
+                        ))}
+                      </fieldset>
                     )}
                   </li>
                 );

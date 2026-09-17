@@ -108,11 +108,20 @@ export interface FeeStructureDTO {
  * under, read from whichever fee structure is written for their class and
  * this term. `structureId` is `null` when none is: a school that has not
  * set one up yet for that class needs telling, not a silently empty list.
+ *
+ * `isOptional` here is the *structure's* own per-line setting, which can
+ * disagree with the fee item's own global default — a fee item marked
+ * optional school-wide (boarding, say) can still be written as mandatory on
+ * one particular structure, for the cohort it is never actually optional
+ * for. The full line list is returned, not just the mandatory ones, so a
+ * screen can also correct a fee item's own "(optional)" label for whichever
+ * of these items it is currently showing, rather than only the add/skip
+ * decision.
  */
 export interface ResolveFeeStructureResultDTO {
   structureId: string | null;
   structureName: string | null;
-  feeItemIds: string[];
+  lines: { feeItemId: string; isOptional: boolean }[];
 }
 
 /** What one bulk-billing run did. Mirrors `GenerateInvoicesResult` on the client. */

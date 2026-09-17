@@ -119,13 +119,16 @@ export class FeeStructuresService {
     if (!term) throw AppError.notFound('Term');
 
     const match = await this.structures.findApplicable(context.schoolId, studentId, termId);
-    if (!match) return { structureId: null, structureName: null, feeItemIds: [] };
+    if (!match) return { structureId: null, structureName: null, lines: [] };
 
     const definitions = await this.structures.lineDefinitions(context.schoolId, match.id);
     return {
       structureId: match.id,
       structureName: match.name,
-      feeItemIds: definitions.filter((line) => !line.isOptional).map((line) => line.feeItemId),
+      lines: definitions.map((line) => ({
+        feeItemId: line.feeItemId,
+        isOptional: line.isOptional,
+      })),
     };
   }
 
@@ -248,8 +251,10 @@ export class FeeStructuresService {
   /* -- Billing the cohort ----------------------------------------------------- */
 
   /**
-   * One invoice per pupil in scope who has not already been billed from this
-   * structure for this term.
+   * One invoice per pupil in scope who has not already been billed for this
+   * term — by this structure, an earlier run, a different overlapping
+   * structure, or a bill raised by hand. See `studentsToBill` for why "any
+   * invoice", not only this structure's own.
    *
    * The whole run is one transaction and takes the session's numbering lock
    * once, counting upward from what it returns — four hundred separate
@@ -258,8 +263,11 @@ export class FeeStructuresService {
    *
    * Pressing the button twice is safe and is not an error: the second run
    * reports everybody as skipped. `studentsToBill` filters them out, and the
-   * partial unique index on `invoices` catches the narrower race where two
-   * people press it at the same moment.
+   * partial unique index on `invoices` catches the same-structure version of
+   * that race, where two people press it at the same moment — it does not
+   * cover two different structures racing to bill the same overlapping
+   * pupil, which is narrower still and left as a configuration hazard for
+   * the school to avoid rather than a race this schema forecloses.
    */
   async generateInvoices(
     context: RequestContext,
@@ -295,21 +303,19 @@ export class FeeStructuresService {
       throw AppError.validation('That structure has no charges on it yet.');
     }
 
-    const alreadyBilled = await this.structures.countAlreadyBilled(
-      context.schoolId,
-      structure.id,
-      termId,
-    );
-    const students = await this.structures.studentsToBill(
+    const eligible = await this.structures.studentsToBill(
       context.schoolId,
       {
-        id: structure.id,
         sessionId: structure.sessionId,
         levelIds: structure.levelIds,
         classIds: structure.classIds,
       },
       termId,
     );
+    // Already covered for this term — by this structure, an earlier run, a
+    // different overlapping structure, or a bill raised by hand — is just as
+    // settled either way, so none of them get a second invoice here.
+    const students = eligible.filter((student) => !student.alreadyBilled);
 
     if (students.length > MAX_PER_RUN) {
       throw AppError.validation(
@@ -317,7 +323,7 @@ export class FeeStructuresService {
       );
     }
 
-    let skipped = alreadyBilled;
+    let skipped = eligible.length - students.length;
     const invoiceIds: string[] = [];
 
     await AppDataSource.transaction(async (manager) => {

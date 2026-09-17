@@ -56,11 +56,24 @@ export interface FeeItemInput {
   paymentDestinationIds?: string[];
 }
 
+/**
+ * One charge on a hand-raised invoice. `accountIds`, when sent, narrows
+ * which of the fee item's own accounts this charge is billed under — the
+ * same choice `FeeStructureInput`'s lines make; omitted means every account
+ * the item has.
+ */
+export interface InvoiceLineInput {
+  feeItemId: string;
+  quantity: number;
+  discountAmount: number;
+  accountIds?: string[];
+}
+
 export interface CreateInvoiceInput {
   studentId: string;
   termId: string;
   dueDate: string;
-  lines: { feeItemId: string; quantity: number; discountAmount: number }[];
+  lines: InvoiceLineInput[];
   note?: string;
 }
 
@@ -72,7 +85,7 @@ export interface CreateInvoiceInput {
 export interface UpdateInvoiceInput {
   dueDate?: string;
   note?: string;
-  lines?: { feeItemId: string; quantity: number; discountAmount: number }[];
+  lines?: InvoiceLineInput[];
 }
 
 /** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */
