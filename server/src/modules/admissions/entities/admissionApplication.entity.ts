@@ -53,7 +53,15 @@ export interface ApplicationContact {
   firstName: string;
   lastName: string;
   relationship: ContactRelationship;
-  email: string;
+  /**
+   * Optional — a phone-only contact is still reachable. One consequence: a
+   * contact with no address here receives none of the emailed updates
+   * (`sendApplicationReceivedEmail`, `sendApplicationStatusEmail`,
+   * `sendInterviewScheduledEmail`), and `AdmissionsService.convert` refuses to
+   * promote one into a `Guardian` — that table's `email` is required and
+   * unique, so an address must be added before enrollment.
+   */
+  email: string | null;
   phone: string;
   occupation: string | null;
   address: string | null;

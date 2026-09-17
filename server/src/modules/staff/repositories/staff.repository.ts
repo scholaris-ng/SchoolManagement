@@ -24,6 +24,13 @@ export interface StaffRosterRow {
  *
  * `teachingAssignments` is sent as the real pairs, not as two flat lists the
  * client would have to cross-product — the client type says exactly why.
+ *
+ * `classIds`/`classNames` read from both `teaching_assignments` (a class
+ * paired with a subject) and `staff_class_assignments` (a class with none) —
+ * the union of everywhere a class is on record for this person at all. Only
+ * `subjectIds`/`subjectNames`/`teachingAssignments` stay sourced from
+ * `teaching_assignments` alone, since a subject-scoped pairing is the one
+ * thing `staff_class_assignments` never carries.
  */
 const PROJECTION = `
   s.id, s.school_id AS "schoolId", s.user_id AS "userId",
@@ -39,8 +46,8 @@ const PROJECTION = `
   COALESCE(r.names,  '{}') AS "roleNames",
   COALESCE(t.subject_ids,   '{}') AS "subjectIds",
   COALESCE(t.subject_names, '{}') AS "subjectNames",
-  COALESCE(t.class_ids,     '{}') AS "classIds",
-  COALESCE(t.class_names,   '{}') AS "classNames",
+  COALESCE(allc.class_ids,   '{}') AS "classIds",
+  COALESCE(allc.class_names, '{}') AS "classNames",
   COALESCE(t.pairs, '[]'::json) AS "teachingAssignments",
   COALESCE(ft.total, 0) > 0 AS "isFormTeacher",
   s.created_at AS "createdAt", s.version
@@ -67,8 +74,6 @@ const JOINS = `
     SELECT
       array_agg(DISTINCT ta.subject_id)  AS subject_ids,
       array_agg(DISTINCT sub.name)       AS subject_names,
-      array_agg(DISTINCT ta.class_id)    AS class_ids,
-      array_agg(DISTINCT cl.name)        AS class_names,
       json_agg(DISTINCT jsonb_build_object('classId', ta.class_id, 'subjectId', ta.subject_id))
                                          AS pairs
     FROM teaching_assignments ta
@@ -76,6 +81,27 @@ const JOINS = `
     JOIN school_classes cl  ON cl.id  = ta.class_id   AND cl.deleted_at IS NULL
     WHERE ta.staff_id = s.id AND ta.school_id = s.school_id
   ) t ON TRUE
+  LEFT JOIN LATERAL (
+    /*
+      "Classes taught" is a wider question than "class/subject pairs on
+      record" — a class picked for this teacher with no subject yet still
+      belongs on the list. One combined query rather than merging two arrays
+      afterwards, so a class named by both tables is not counted twice and its
+      name always comes from the same join that named its id.
+    */
+    SELECT
+      array_agg(DISTINCT cl.id)   AS class_ids,
+      array_agg(DISTINCT cl.name) AS class_names
+    FROM school_classes cl
+    WHERE cl.deleted_at IS NULL
+      AND cl.id IN (
+        SELECT class_id FROM teaching_assignments
+          WHERE staff_id = s.id AND school_id = s.school_id
+        UNION
+        SELECT class_id FROM staff_class_assignments
+          WHERE staff_id = s.id AND school_id = s.school_id
+      )
+  ) allc ON TRUE
   LEFT JOIN LATERAL (
     SELECT COUNT(*) AS total
     FROM class_form_teachers cft
@@ -228,8 +254,14 @@ export class StaffRepository extends TenantRepository<Staff> {
                   WHERE ta.staff_id = s.id AND ta.class_id = $${classIndex} AND ta.subject_id = $${subjectIndex})`,
       );
     } else if (filter.classId) {
+      // A class alone, unlike the pairing above, is satisfied by either
+      // table — a subject-less attachment still means this teacher is on
+      // record for that class.
       add(
-        (i) => `EXISTS (SELECT 1 FROM teaching_assignments ta WHERE ta.staff_id = s.id AND ta.class_id = $${i})`,
+        (i) => `(
+          EXISTS (SELECT 1 FROM teaching_assignments ta WHERE ta.staff_id = s.id AND ta.class_id = $${i})
+          OR EXISTS (SELECT 1 FROM staff_class_assignments sca WHERE sca.staff_id = s.id AND sca.class_id = $${i})
+        )`,
         filter.classId,
       );
     } else if (filter.subjectId) {

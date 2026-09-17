@@ -341,7 +341,7 @@ export function AdmissionFormPage() {
                           name={`contacts.${index}.email`}
                           label="Email"
                           type="email"
-                          required
+                          description="Optional — used for emailed updates on this application."
                         />
                         <TextField
                           control={form.control}

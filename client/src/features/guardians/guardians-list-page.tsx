@@ -10,6 +10,7 @@ import { DataTable, type Column } from '@/components/data/data-table';
 import { FilterBar } from '@/components/data/filter-bar';
 import { Avatar, Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
 
 const PORTAL_OPTIONS = [
@@ -64,10 +65,12 @@ export function GuardiansListPage() {
               <Phone className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
               {guardian.phone}
             </p>
-            <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-              <Mail className="size-3 shrink-0" aria-hidden="true" />
-              {guardian.email}
-            </p>
+            {guardian.email && (
+              <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                <Mail className="size-3 shrink-0" aria-hidden="true" />
+                {guardian.email}
+              </p>
+            )}
           </div>
         ),
       },
@@ -100,19 +103,26 @@ export function GuardiansListPage() {
         hideOnMobile: true,
         cell: (guardian) => (
           <PermissionGate require="guardian.manage">
-            <Button
-              variant="ghost"
-              size="sm"
-              data-cy={`guardians-list-invite-${guardian.id}`}
-              loading={invite.isPending && invite.variables === guardian.id}
-              onClick={(event) => {
-                event.stopPropagation();
-                invite.mutate(guardian.id);
-              }}
+            <Tooltip
+              content={guardian.email ? undefined : 'Add an email address on their profile first.'}
             >
-              <Send />
-              {guardian.hasPortalAccess ? 'Resend invite' : 'Invite'}
-            </Button>
+              <span className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-cy={`guardians-list-invite-${guardian.id}`}
+                  loading={invite.isPending && invite.variables === guardian.id}
+                  disabled={!guardian.email}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    invite.mutate(guardian.id);
+                  }}
+                >
+                  <Send />
+                  {guardian.hasPortalAccess ? 'Resend invite' : 'Invite'}
+                </Button>
+              </span>
+            </Tooltip>
           </PermissionGate>
         ),
       },

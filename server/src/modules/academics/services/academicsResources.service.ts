@@ -80,8 +80,7 @@ export class AcademicsResourcesService {
     input: CreateSubjectInput,
   ): Promise<SubjectDTO> {
     const code = input.code.trim().toUpperCase();
-    const clash = await this.subjects.findByCode(context.schoolId, code);
-    if (clash) throw AppError.conflict('A subject with that code already exists.');
+    await this.freeUpCode(context.schoolId, code);
 
     const subject = await this.subjects.create({
       schoolId: context.schoolId,
@@ -120,8 +119,7 @@ export class AcademicsResourcesService {
 
     const code = patch.code ? patch.code.trim().toUpperCase() : undefined;
     if (code && code !== subject.code) {
-      const clash = await this.subjects.findByCode(context.schoolId, code);
-      if (clash) throw AppError.conflict('A subject with that code already exists.');
+      await this.freeUpCode(context.schoolId, code);
     }
 
     const { levelIds, ...columns } = patch;
@@ -146,27 +144,83 @@ export class AcademicsResourcesService {
   }
 
   /**
-   * Deactivates rather than deletes.
+   * Makes sure `code` is actually free before a create or a rename claims it.
    *
-   * A subject is referenced by past results and report cards, so removing the
-   * row would rewrite history. Hiding it from pickers is what the school
-   * actually means by "delete this subject".
+   * The unique index on `(school_id, code)` is not partial on `deleted_at` —
+   * it has to see every archived subject too, or two of them collide the
+   * moment either is undeleted. That is also what makes an archived subject's
+   * code look "taken" forever to a plain, deleted-aware lookup, which is
+   * exactly backwards: the whole reason `removeSubject` archives rather than
+   * deletes is that *something else* depends on the row, not that its code
+   * deserves to stay reserved. So an archived clash is checked the same way a
+   * delete is — if nothing depends on it either, it is quietly cleared out of
+   * the way rather than making the school invent a different code to work
+   * around debris of its own deleting.
    */
-  async removeSubject(context: RequestContext, id: string): Promise<void> {
+  private async freeUpCode(schoolId: string, code: string): Promise<void> {
+    const clash = await this.subjects.findByCodeIncludingArchived(schoolId, code);
+    if (!clash) return;
+
+    if (!clash.deletedAt) {
+      throw AppError.conflict('A subject with that code already exists.');
+    }
+
+    if (await this.subjects.isReferenced(schoolId, clash.id)) {
+      throw AppError.conflict(
+        'That code belongs to an archived subject that is still referenced elsewhere, so it cannot be freed. Choose a different code.',
+      );
+    }
+
+    await this.subjects.remove(clash.id);
+  }
+
+  /**
+   * A genuine delete when nothing depends on the subject; an archive when
+   * something does.
+   *
+   * A subject with a teacher assigned, a scheme of work, a timetable slot or
+   * — above all — an already-entered result cannot be removed without
+   * rewriting history, so that case is unchanged from before: it is hidden
+   * from pickers rather than erased. A subject nobody has ever touched has no
+   * history to rewrite, so this is the one case the row itself goes, freeing
+   * its code for reuse rather than blocking it forever.
+   */
+  async removeSubject(context: RequestContext, id: string): Promise<{ deleted: boolean }> {
     const subject = await this.subjects.findByIdScoped(context.schoolId, id);
     if (!subject) throw AppError.notFound('Subject');
+
+    // Checked again here rather than trusted from the list the caller saw —
+    // a teacher could have been assigned to it in the moment since.
+    const referenced = await this.subjects.isReferenced(context.schoolId, id);
+
+    if (!referenced) {
+      await this.subjects.remove(subject.id);
+
+      await this.audit.record(context, {
+        action: 'academics.subject_deleted',
+        entityType: 'Subject',
+        entityId: subject.id,
+        entityLabel: subject.name,
+        before: { name: subject.name, code: subject.code },
+        severity: 'WARNING',
+      });
+
+      return { deleted: true };
+    }
 
     await this.subjects.update(subject.id, { isActive: false });
     await this.subjects.softDeleteScoped(context.schoolId, subject.id);
 
     await this.audit.record(context, {
-      action: 'academics.subject_deleted',
+      action: 'academics.subject_archived',
       entityType: 'Subject',
       entityId: subject.id,
       entityLabel: subject.name,
       before: { name: subject.name },
       severity: 'WARNING',
     });
+
+    return { deleted: false };
   }
 
   // ─── Rooms ─────────────────────────────────────────────────────────────────

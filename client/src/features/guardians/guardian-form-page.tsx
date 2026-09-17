@@ -25,7 +25,7 @@ const emptyValues: GuardianFormValues = {
   altPhone: '',
   occupation: '',
   address: '',
-  grantPortalAccess: true,
+  grantPortalAccess: false,
 };
 
 export function GuardianFormPage() {
@@ -50,7 +50,7 @@ export function GuardianFormPage() {
       title: guardian.title ?? '',
       firstName: guardian.firstName,
       lastName: guardian.lastName,
-      email: guardian.email,
+      email: guardian.email ?? '',
       phone: guardian.phone,
       altPhone: guardian.altPhone ?? '',
       occupation: guardian.occupation ?? '',
@@ -117,7 +117,7 @@ export function GuardianFormPage() {
 
             <FormSection
               title="Contact"
-              description="The email address is what they will sign in with, so it must be one they actually use."
+              description="The email address is optional — only needed if this guardian wants a parent-portal account, now or later."
               columns={2}
             >
               <TextField
@@ -125,7 +125,6 @@ export function GuardianFormPage() {
                 name="email"
                 label="Email address"
                 type="email"
-                required
                 autoComplete="email"
               />
               <TextField
@@ -150,7 +149,7 @@ export function GuardianFormPage() {
                 control={form.control}
                 name="grantPortalAccess"
                 label="Invite this guardian to the parent portal"
-                description="They receive an email to set their own password. One sign-in shows every child linked to them, at this school."
+                description="They receive an email to set their own password. One sign-in shows every child linked to them, at this school. Needs an email address above — leave this off if they don't want an account yet; it can always be turned on later from their profile."
               />
             </FormSection>
           </CardContent>

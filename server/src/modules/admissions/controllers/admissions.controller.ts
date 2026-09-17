@@ -11,6 +11,7 @@ import type {
   RespondToOfferInput,
   ScheduleInterviewInput,
   TransitionAdmissionInput,
+  UpdateScreeningScoreInput,
 } from '../validators/admissions.schema';
 
 const service = () => AdmissionsService.Instance;
@@ -72,6 +73,20 @@ export class AdmissionsController {
         req.validated!.body as ScheduleInterviewInput,
       );
       res.status(200).json(ApiResponse.ok(application, 'Interview details saved'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateScreeningScore(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const application = await service().updateScreeningScore(
+        contextOf(req),
+        id,
+        req.validated!.body as UpdateScreeningScoreInput,
+      );
+      res.status(200).json(ApiResponse.ok(application, 'Screening score saved'));
     } catch (error) {
       next(error);
     }

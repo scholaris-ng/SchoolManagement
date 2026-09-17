@@ -25,7 +25,7 @@ import {
   CardTitle,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
 import { Detail } from './guardian-detail-page-parts';
 
@@ -102,15 +102,26 @@ export function GuardianDetailPage() {
         }
         actions={
           <PermissionGate require="guardian.manage">
-            <Button
-              variant="outline"
-              data-cy="guardian-detail-invite"
-              loading={invite.isPending}
-              onClick={() => invite.mutate(record.id)}
+            <Tooltip
+              content={
+                record.email
+                  ? undefined
+                  : 'Add an email address on this guardian’s profile first.'
+              }
             >
-              <Send />
-              {record.hasPortalAccess ? 'Resend invitation' : 'Invite to portal'}
-            </Button>
+              <span className="inline-flex">
+                <Button
+                  variant="outline"
+                  data-cy="guardian-detail-invite"
+                  loading={invite.isPending}
+                  disabled={!record.email}
+                  onClick={() => invite.mutate(record.id)}
+                >
+                  <Send />
+                  {record.hasPortalAccess ? 'Resend invitation' : 'Invite to portal'}
+                </Button>
+              </span>
+            </Tooltip>
             <Button data-cy="guardians-guardian-detail-edit" onClick={() => navigate(`/guardians/${record.id}/edit`)}>
               <Pencil />
               Edit
@@ -144,9 +155,13 @@ export function GuardianDetailPage() {
               )}
             </Detail>
             <Detail icon={<Mail />} label="Email">
-              <a href={`mailto:${record.email}`} className="break-all hover:underline">
-                {record.email}
-              </a>
+              {record.email ? (
+                <a href={`mailto:${record.email}`} className="break-all hover:underline">
+                  {record.email}
+                </a>
+              ) : (
+                <span className="text-muted-foreground">Not provided</span>
+              )}
             </Detail>
             {record.occupation && (
               <Detail icon={<Briefcase />} label="Occupation">

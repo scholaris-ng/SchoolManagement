@@ -89,6 +89,14 @@ export interface SubjectDTO {
   teacherCount: number;
   isActive: boolean;
   schedule: SubjectScheduleSlotDTO[];
+  /**
+   * Whether anything beyond the subject's own level list depends on it — a
+   * teaching assignment, a timetable entry, a scheme of work or lesson note, a
+   * result, a CBT question or assessment. Deleting it is only ever genuinely
+   * destructive when this is true; the settings screen uses it to say which
+   * one deleting will do before the school commits to it.
+   */
+  isReferenced: boolean;
 }
 
 export interface RoomDTO {

@@ -56,7 +56,7 @@ export interface AdmissionApplicationGuardianLinkDTO {
   guardianId: string;
   guardianName: string;
   guardianPhone: string;
-  guardianEmail: string;
+  guardianEmail: string | null;
   guardianHasPortalAccess: boolean;
   relationship: ContactRelationship;
   isPrimaryContact: boolean;

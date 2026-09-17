@@ -16,6 +16,7 @@ import { RoleRepository } from '../../rbac/repositories/role.repository';
 import { ClassRepository } from '../../academics/repositories/class.repository';
 import { SubjectRepository } from '../../academics/repositories/subject.repository';
 import { TeachingAssignment } from '../entities/teachingAssignment.entity';
+import { StaffClassAssignment } from '../entities/staffClassAssignment.entity';
 import { ClassFormTeacher } from '../../academics/entities/classFormTeacher.entity';
 import { StaffRepository } from '../repositories/staff.repository';
 import { Staff } from '../entities/staff.entity';
@@ -174,6 +175,14 @@ export class StaffService {
           input.classIds,
           input.subjectIds,
         );
+        // Recorded unconditionally — unlike the subject-paired write above,
+        // this one does not wait on a subject existing to mean something.
+        await this.writeClassAssignments(
+          manager,
+          context.schoolId,
+          staffMember.id,
+          input.classIds,
+        );
 
         if (input.isFormTeacher && input.classIds.length > 0) {
           await manager.save(
@@ -317,14 +326,14 @@ export class StaffService {
       }
 
       // Whichever side of the pairing was left out of a partial patch keeps
-      // its current value rather than being emptied out from under it.
-      let effectiveClassIds = classIds;
+      // its current value rather than being emptied out from under it. This
+      // is the subject-scoped write only — a class named here without a
+      // subject to pair it with is never implied to have one.
       if (subjectIds || classIds) {
         const [resolvedClassIds, resolvedSubjectIds] = await Promise.all([
           classIds ?? this.currentClassIds(manager, context.schoolId, id),
           subjectIds ?? this.currentSubjectIds(manager, context.schoolId, id),
         ]);
-        effectiveClassIds = resolvedClassIds;
         await manager.delete(TeachingAssignment, { schoolId: context.schoolId, staffId: id });
         await this.writeTeachingAssignments(
           manager,
@@ -335,10 +344,20 @@ export class StaffService {
         );
       }
 
-      if (isFormTeacher !== undefined || effectiveClassIds) {
+      // Independent of the above: recorded whenever "Classes taught" is part
+      // of this patch at all, whether or not any subject came with it.
+      if (classIds !== undefined) {
+        await manager.delete(StaffClassAssignment, { schoolId: context.schoolId, staffId: id });
+        await this.writeClassAssignments(manager, context.schoolId, id, classIds);
+      }
+
+      if (isFormTeacher !== undefined || classIds !== undefined) {
         const nextIsFormTeacher = isFormTeacher ?? (await this.currentlyFormTeacher(manager, id));
+        // Falls back to every class this person is on record for at all —
+        // subject-paired or not — not only the subject-paired subset, since a
+        // class attached with no subject is still theirs to be form teacher of.
         const nextClassIds =
-          effectiveClassIds ?? (await this.currentClassIds(manager, context.schoolId, id));
+          classIds ?? (await this.currentAllClassIds(manager, context.schoolId, id));
         await manager.delete(ClassFormTeacher, { staffId: id });
         if (nextIsFormTeacher && nextClassIds.length > 0) {
           await manager.save(
@@ -440,6 +459,29 @@ export class StaffService {
     await manager.save(rows);
   }
 
+  /**
+   * "This person is attached to this class" — with no subject required.
+   *
+   * Where `writeTeachingAssignments` waits on a subject to mean anything, this
+   * is the write that makes picking a class for a teacher take effect the same
+   * day, before the school has entered a single subject. See
+   * `StaffClassAssignment` for why this is a separate table rather than
+   * `TeachingAssignment` with a nullable subject.
+   */
+  private async writeClassAssignments(
+    manager: EntityManager,
+    schoolId: string,
+    staffId: string,
+    classIds: string[],
+  ): Promise<void> {
+    if (classIds.length === 0) return;
+    await manager.save(
+      classIds.map((classId) =>
+        manager.create(StaffClassAssignment, { schoolId, staffId, classId }),
+      ),
+    );
+  }
+
   private async currentlyFormTeacher(
     manager: EntityManager,
     staffId: string,
@@ -448,6 +490,7 @@ export class StaffService {
     return count > 0;
   }
 
+  /** Subject-paired classes only — feeds `writeTeachingAssignments`'s own preservation, nothing else. */
   private async currentClassIds(
     manager: EntityManager,
     schoolId: string,
@@ -456,6 +499,21 @@ export class StaffService {
     const rows: { classId: string }[] = await manager.query(
       `SELECT DISTINCT class_id AS "classId" FROM teaching_assignments
         WHERE school_id = $1 AND staff_id = $2`,
+      [schoolId, staffId],
+    );
+    return rows.map((row) => row.classId);
+  }
+
+  /** Every class this person is on record for at all, paired with a subject or not. */
+  private async currentAllClassIds(
+    manager: EntityManager,
+    schoolId: string,
+    staffId: string,
+  ): Promise<string[]> {
+    const rows: { classId: string }[] = await manager.query(
+      `SELECT class_id AS "classId" FROM teaching_assignments WHERE school_id = $1 AND staff_id = $2
+       UNION
+       SELECT class_id AS "classId" FROM staff_class_assignments WHERE school_id = $1 AND staff_id = $2`,
       [schoolId, staffId],
     );
     return rows.map((row) => row.classId);

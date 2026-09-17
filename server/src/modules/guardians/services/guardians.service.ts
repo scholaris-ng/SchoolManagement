@@ -74,11 +74,15 @@ export class GuardiansService {
     context: RequestContext,
     input: CreateGuardianInput,
   ): Promise<GuardianDTO> {
-    const clash = await this.guardians.findByEmail(context.schoolId, input.email);
-    if (clash) {
-      throw AppError.conflict(
-        'A guardian with that email address already exists. Link the existing record instead of creating a second one.',
-      );
+    const email = nullIfBlank(input.email);
+
+    if (email) {
+      const clash = await this.guardians.findByEmail(context.schoolId, email);
+      if (clash) {
+        throw AppError.conflict(
+          'A guardian with that email address already exists. Link the existing record instead of creating a second one.',
+        );
+      }
     }
 
     const guardian = await this.guardians.create({
@@ -86,7 +90,7 @@ export class GuardiansService {
       title: nullIfBlank(input.title),
       firstName: input.firstName,
       lastName: input.lastName,
-      email: input.email,
+      email,
       phone: input.phone,
       altPhone: nullIfBlank(input.altPhone),
       occupation: nullIfBlank(input.occupation),
@@ -126,11 +130,23 @@ export class GuardiansService {
     for (const [key, value] of Object.entries(rest)) {
       if (value === undefined) continue;
       columns[key] =
-        key === 'firstName' || key === 'lastName' || key === 'email' || key === 'phone'
+        key === 'firstName' || key === 'lastName' || key === 'phone'
           ? value
           : nullIfBlank(value as string);
     }
     if (grantPortalAccess !== undefined) columns.hasPortalAccess = grantPortalAccess;
+
+    // Whichever of this call's own patch or the existing record has the last
+    // word on each: a request granting access without ever mentioning email
+    // still needs one on file, and a request clearing the email of a guardian
+    // already granted access can't leave them with none.
+    const effectiveEmail = 'email' in columns ? (columns.email as string | null) : existing.email;
+    const effectiveHasPortalAccess = grantPortalAccess ?? existing.hasPortalAccess;
+    if (effectiveHasPortalAccess && !effectiveEmail) {
+      throw AppError.validation('Add an email address before granting this guardian portal access.', [
+        { field: 'email', message: 'Add an email address before granting portal access.' },
+      ]);
+    }
 
     if (expectedVersion !== undefined) {
       const applied = await this.guardians.updateIfVersionMatches(id, expectedVersion, columns);
@@ -272,6 +288,12 @@ export class GuardiansService {
   ): Promise<{ invited: boolean; email: string }> {
     const guardian = await this.guardians.findByIdScoped(context.schoolId, guardianId);
     if (!guardian) throw AppError.notFound('Guardian');
+
+    if (!guardian.email) {
+      throw AppError.conflict(
+        'Add an email address for this guardian before inviting them to the parent portal.',
+      );
+    }
 
     // An `invite:` prefixed uid is this method's own former placeholder, from
     // before a real credential was provisioned here — never a real Firebase

@@ -19,7 +19,8 @@ export const AcademicsResourceEndpoints = {
   updateSubject: (id: string, values: Partial<Subject>) =>
     http.patch<Subject>(`/academics/subjects/${id}`, values),
 
-  removeSubject: (id: string) => http.delete<void>(`/academics/subjects/${id}`),
+  /** `deleted` is false when the subject was archived rather than removed outright — see `useDeleteSubject`. */
+  removeSubject: (id: string) => http.delete<{ deleted: boolean }>(`/academics/subjects/${id}`),
 
   createHouse: (values: Partial<House>) => http.post<House>('/academics/houses', values),
 

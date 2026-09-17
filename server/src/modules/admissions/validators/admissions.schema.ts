@@ -59,6 +59,25 @@ export const applicationContactSchema = z.object({
   isPrimaryContact: z.boolean().default(false),
 });
 
+/**
+ * The office's own version of a contact — a phone-only contact is still
+ * reachable, so email is not required the way it is on the public form,
+ * which has no other channel to fall back on. A contact recorded this way
+ * gets none of the emailed updates, and `AdmissionsService.convert` will ask
+ * for an email before promoting it into a `Guardian`, whose own email is
+ * required and unique.
+ */
+export const officeApplicationContactSchema = applicationContactSchema.extend({
+  email: z
+    .string()
+    .trim()
+    .email('Enter a valid email address')
+    .max(160)
+    .toLowerCase()
+    .optional()
+    .or(z.literal('')),
+});
+
 export const applicantSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(60),
   middleName: optionalText(60),
@@ -100,7 +119,7 @@ const contacts = z
   .max(4, 'Four contacts is the most an application can carry');
 
 const officeContacts = z
-  .array(applicationContactSchema)
+  .array(officeApplicationContactSchema)
   .max(4, 'Four contacts is the most an application can carry');
 
 export const fetchAdmissionsSchema = z.object({
@@ -166,6 +185,22 @@ export const scheduleInterviewSchema = z.object({
       (body) => Object.values(body).some((value) => value !== undefined),
       'Provide at least one detail to update',
     ),
+});
+
+/**
+ * Correcting a screening score after the fact — separate from `transition`
+ * for the same reason interviews are: a typo, or a rescore, is not a status
+ * change, and forcing one through a decision the office isn't actually making
+ * again would be the wrong tool. `transition` still sets the score too, for
+ * the common case of recording it in the same breath as moving to
+ * `SCREENING` or `SHORTLISTED`.
+ */
+export const updateScreeningScoreSchema = z.object({
+  params: admissionIdParamSchema.shape.params,
+  body: z.object({
+    /** `null` clears a score entered in error; omit is not offered — there is nothing else on this call to update instead. */
+    screeningScore: z.coerce.number().min(0).max(100).nullable(),
+  }),
 });
 
 export const convertAdmissionSchema = z.object({
@@ -257,9 +292,11 @@ export type FetchAdmissionsQuery = z.infer<typeof fetchAdmissionsSchema>['query'
 export type CreateAdmissionInput = z.infer<typeof createAdmissionSchema>['body'];
 export type TransitionAdmissionInput = z.infer<typeof transitionAdmissionSchema>['body'];
 export type ScheduleInterviewInput = z.infer<typeof scheduleInterviewSchema>['body'];
+export type UpdateScreeningScoreInput = z.infer<typeof updateScreeningScoreSchema>['body'];
 export type ConvertAdmissionInput = z.infer<typeof convertAdmissionSchema>['body'];
 export type LinkApplicationGuardianInput = z.infer<typeof linkApplicationGuardianSchema>['body'];
 export type PublicApplicationInput = z.infer<typeof publicApplicationSchema>['body'];
 export type RespondToOfferInput = z.infer<typeof respondToOfferSchema>['body'];
 export type ApplicationContactInput = z.infer<typeof applicationContactSchema>;
+export type OfficeApplicationContactInput = z.infer<typeof officeApplicationContactSchema>;
 export type ApplicantInput = z.infer<typeof applicantSchema>;

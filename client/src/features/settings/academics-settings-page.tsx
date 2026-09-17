@@ -5,15 +5,18 @@ import {
   GraduationCap,
   Layers,
   Plus,
+  Trash2,
   Trophy,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useAcademicSessions,
+  useBulkDeleteSubjects,
   useClasses,
   useDeletePeriod,
   useDeleteSession,
+  useDeleteSubject,
   useHouses,
   useLevels,
   usePeriods,
@@ -25,6 +28,8 @@ import type { AcademicSession, House, SchoolClass, SchoolLevel, Subject, Term } 
 import type { TimetablePeriod } from '@/types/curriculum';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
+import { SelectionBar } from '@/components/data/filter-bar';
 import { SettingsTabs } from './settings-tabs';
 import { AcademicsDialogs } from './academics/academics-dialogs';
 import { SessionsPanel } from './academics/sessions-panel';
@@ -57,6 +62,8 @@ export function AcademicsSettingsPage() {
   const setCurrentTerm = useSetCurrentTerm();
   const deleteSession = useDeleteSession();
   const deletePeriod = useDeletePeriod();
+  const deleteSubject = useDeleteSubject();
+  const bulkDeleteSubjects = useBulkDeleteSubjects();
 
   const [sessionDialog, setSessionDialog] = useState<{ open: boolean; session?: AcademicSession }>({
     open: false,
@@ -72,6 +79,9 @@ export function AcademicsSettingsPage() {
   });
   const [pendingDeleteSession, setPendingDeleteSession] = useState<AcademicSession | null>(null);
   const [pendingDeletePeriod, setPendingDeletePeriod] = useState<TimetablePeriod | null>(null);
+  const [pendingDeleteSubject, setPendingDeleteSubject] = useState<Subject | null>(null);
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
+  const [bulkDeleteSubjectsOpen, setBulkDeleteSubjectsOpen] = useState(false);
   const [levelDialog, setLevelDialog] = useState<{ open: boolean; level?: SchoolLevel }>({
     open: false,
   });
@@ -92,6 +102,15 @@ export function AcademicsSettingsPage() {
     { id: 'subjects', label: 'Subjects', singular: 'subject', icon: GraduationCap },
     { id: 'houses', label: 'Houses', singular: 'house', icon: Trophy },
   ];
+
+  // What confirming the bulk-delete button will actually do to each selected
+  // subject — the same split `removeSubject` itself decides on, read here from
+  // the list the page already has so the dialog can say it before anyone commits.
+  const selectedSubjects = (subjects.data ?? []).filter((subject) =>
+    selectedSubjectIds.includes(subject.id),
+  );
+  const subjectsToDelete = selectedSubjects.filter((subject) => !subject.isReferenced).length;
+  const subjectsToArchive = selectedSubjects.filter((subject) => subject.isReferenced).length;
 
   const newAction = {
     sessions: () => setSessionDialog({ open: true }),
@@ -182,10 +201,27 @@ export function AcademicsSettingsPage() {
       )}
 
       {tab === 'subjects' && (
-        <SubjectsPanel
-          subjects={subjects}
-          onEdit={(subject) => setSubjectDialog({ open: true, subject })}
-        />
+        <>
+          <SelectionBar count={selectedSubjectIds.length} onClear={() => setSelectedSubjectIds([])}>
+            <Button
+              data-cy="settings-academics-subjects-bulk-delete"
+              variant="outline"
+              size="sm"
+              className="text-danger hover:text-danger"
+              onClick={() => setBulkDeleteSubjectsOpen(true)}
+            >
+              <Trash2 />
+              Delete
+            </Button>
+          </SelectionBar>
+          <SubjectsPanel
+            subjects={subjects}
+            onEdit={(subject) => setSubjectDialog({ open: true, subject })}
+            onDelete={setPendingDeleteSubject}
+            selectedIds={selectedSubjectIds}
+            onSelectionChange={setSelectedSubjectIds}
+          />
+        </>
       )}
 
       {tab === 'houses' && (
@@ -202,6 +238,7 @@ export function AcademicsSettingsPage() {
           houseDialog,
           pendingDeleteSession,
           pendingDeletePeriod,
+          pendingDeleteSubject,
         }}
         close={(key) => {
           if (key === 'sessionDialog') setSessionDialog({ open: false });
@@ -213,6 +250,7 @@ export function AcademicsSettingsPage() {
           if (key === 'houseDialog') setHouseDialog({ open: false });
           if (key === 'pendingDeleteSession') setPendingDeleteSession(null);
           if (key === 'pendingDeletePeriod') setPendingDeletePeriod(null);
+          if (key === 'pendingDeleteSubject') setPendingDeleteSubject(null);
         }}
         levels={levels.data ?? []}
         periods={periods.data ?? []}
@@ -227,8 +265,35 @@ export function AcademicsSettingsPage() {
           await deletePeriod.mutateAsync(period.id);
           setPendingDeletePeriod(null);
         }}
+        onDeleteSubject={async (subject) => {
+          await deleteSubject.mutateAsync(subject.id);
+          setPendingDeleteSubject(null);
+        }}
         isDeletingSession={deleteSession.isPending}
         isDeletingPeriod={deletePeriod.isPending}
+        isDeletingSubject={deleteSubject.isPending}
+      />
+
+      <ConfirmDialog
+        data-cy="settings-academics-subjects-bulk-delete-confirm"
+        open={bulkDeleteSubjectsOpen}
+        onOpenChange={setBulkDeleteSubjectsOpen}
+        tone="danger"
+        title={`Delete ${selectedSubjects.length} subject${selectedSubjects.length === 1 ? '' : 's'}?`}
+        description={
+          subjectsToArchive === 0
+            ? 'None of these are used anywhere yet, so this permanently deletes them and frees their codes for reuse.'
+            : subjectsToDelete === 0
+              ? 'These have a teacher assigned, a timetable entry, a scheme of work or recorded results, so deleting them would rewrite history. They will be archived instead — hidden from pickers, with everything already on record kept exactly as it is.'
+              : `${subjectsToDelete} of these are not used anywhere and will be permanently deleted; ${subjectsToArchive} are still in use elsewhere and will be archived instead.`
+        }
+        confirmLabel={subjectsToArchive === 0 ? 'Delete' : subjectsToDelete === 0 ? 'Archive' : 'Continue'}
+        loading={bulkDeleteSubjects.isPending}
+        onConfirm={async () => {
+          await bulkDeleteSubjects.mutateAsync(selectedSubjectIds);
+          setSelectedSubjectIds([]);
+          setBulkDeleteSubjectsOpen(false);
+        }}
       />
     </PageContainer>
   );

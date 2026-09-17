@@ -7,7 +7,7 @@ export interface GuardianDTO {
   firstName: string;
   lastName: string;
   fullName: string;
-  email: string;
+  email: string | null;
   phone: string;
   altPhone: string | null;
   occupation: string | null;
@@ -35,7 +35,7 @@ export interface StudentGuardianLinkDTO {
   guardianId: string;
   guardianName: string;
   guardianPhone: string;
-  guardianEmail: string;
+  guardianEmail: string | null;
   relationship: string;
   isPrimaryContact: boolean;
   isEmergencyContact: boolean;

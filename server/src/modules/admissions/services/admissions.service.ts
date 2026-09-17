@@ -40,15 +40,16 @@ import type {
 } from '../dto/admissions.dto';
 import type {
   ApplicantInput,
-  ApplicationContactInput,
   ConvertAdmissionInput,
   CreateAdmissionInput,
   FetchAdmissionsQuery,
   LinkApplicationGuardianInput,
+  OfficeApplicationContactInput,
   PublicApplicationInput,
   RespondToOfferInput,
   ScheduleInterviewInput,
   TransitionAdmissionInput,
+  UpdateScreeningScoreInput,
 } from '../validators/admissions.schema';
 
 /** Empty strings from an optional form field mean "not provided", not "set to blank". */
@@ -300,16 +301,20 @@ export class AdmissionsService {
 
     // A genuine family files a handful; anything beyond that is somebody
     // testing the form. The rate limiter on the route bounds the burst, this
-    // bounds the total against one address across sessions of the day.
-    const already = await this.applications.countForContactEmail(
-      schoolId,
-      session.id,
-      primary.email,
-    );
-    if (already + input.applicants.length > MAX_APPLICATIONS_PER_CONTACT) {
-      throw AppError.conflict(
-        'That email address already has several applications for this session. Please contact the school office instead.',
+    // bounds the total against one address across sessions of the day. Only
+    // meaningful when the primary contact gave an email — a phone-only
+    // contact has no address for this to key on.
+    if (primary.email) {
+      const already = await this.applications.countForContactEmail(
+        schoolId,
+        session.id,
+        primary.email,
       );
+      if (already + input.applicants.length > MAX_APPLICATIONS_PER_CONTACT) {
+        throw AppError.conflict(
+          'That email address already has several applications for this session. Please contact the school office instead.',
+        );
+      }
     }
 
     for (const applicant of input.applicants) {
@@ -401,14 +406,17 @@ export class AdmissionsService {
 
     // The on-screen receipt is easy to lose — a closed tab, a form filled in
     // on a borrowed phone — and a bounced confirmation must never undo a
-    // submission that has already been recorded.
-    void sendApplicationReceivedEmail({
-      to: primary.email,
-      firstName: primary.firstName,
-      schoolName: school.name,
-      applications,
-      contactEmail,
-    });
+    // submission that has already been recorded. Only sent where there is an
+    // address to send it to — a phone-only contact has none.
+    if (primary.email) {
+      void sendApplicationReceivedEmail({
+        to: primary.email,
+        firstName: primary.firstName,
+        schoolName: school.name,
+        applications,
+        contactEmail,
+      });
+    }
 
     return {
       submittedAt: submittedAt.toISOString(),
@@ -521,7 +529,7 @@ export class AdmissionsService {
       entityId: application.id,
     });
 
-    if (primary) {
+    if (primary?.email) {
       const school = await this.schools.findById(application.schoolId);
       void sendApplicationStatusEmail({
         to: primary.email,
@@ -530,7 +538,7 @@ export class AdmissionsService {
         applicantName: `${application.firstName} ${application.lastName}`,
         applicationNo: application.applicationNo,
         status,
-        contactEmail: school?.email ?? primary.email,
+        contactEmail: school?.email || primary.email,
       });
     }
 
@@ -647,7 +655,8 @@ export class AdmissionsService {
     const primary = application.contacts.find((c) => c.isPrimaryContact) ?? application.contacts[0];
     // `DRAFT` never actually reaches here — nothing in `ALLOWED_NEXT` targets
     // it — but the check keeps that guarantee explicit rather than assumed.
-    if (primary && input.status !== 'DRAFT') {
+    // A phone-only primary contact has no address for this to reach.
+    if (primary?.email && input.status !== 'DRAFT') {
       const school = await this.schools.findById(context.schoolId);
       void sendApplicationStatusEmail({
         to: primary.email,
@@ -660,7 +669,7 @@ export class AdmissionsService {
         offerExpiresOn: dto.offerExpiresOn,
         offerUrl: offerToken ? `${env.appUrl}/offers/${offerToken}` : undefined,
         note: nullIfBlank(input.note),
-        contactEmail: school?.email ?? primary.email,
+        contactEmail: school?.email || primary.email,
       });
     }
 
@@ -722,7 +731,8 @@ export class AdmissionsService {
     // note with nothing for them to act on.
     if (input.interviewDate) {
       const primary = application.contacts.find((c) => c.isPrimaryContact) ?? application.contacts[0];
-      if (primary) {
+      // A phone-only primary contact has no address for this to reach.
+      if (primary?.email) {
         const school = await this.schools.findById(context.schoolId);
         void sendInterviewScheduledEmail({
           to: primary.email,
@@ -733,12 +743,65 @@ export class AdmissionsService {
           interviewDate: input.interviewDate,
           interviewVenue: dto.interviewVenue,
           note: nullIfBlank(input.interviewNote),
-          contactEmail: school?.email ?? primary.email,
+          contactEmail: school?.email || primary.email,
         });
       }
     }
 
     return dto;
+  }
+
+  /**
+   * Correcting a screening score after the fact — a typo caught later, or a
+   * rescore — without re-running a status decision the office isn't actually
+   * making again. `transition` still sets it too, for recording a score in
+   * the same breath as moving to `SCREENING` or `SHORTLISTED`; this is the
+   * only way to change one afterward, including once the application has
+   * moved past both of those stages.
+   */
+  async updateScreeningScore(
+    context: RequestContext,
+    id: string,
+    input: UpdateScreeningScoreInput,
+  ): Promise<AdmissionApplicationDTO> {
+    const application = await this.applications.findByIdScoped(context.schoolId, id);
+    if (!application) throw AppError.notFound('Application');
+
+    if (application.convertedStudentId) {
+      throw AppError.conflict(
+        'This applicant has already been enrolled, so the application can no longer be changed.',
+      );
+    }
+
+    // `numeric` columns take a string over the TypeORM driver — see the
+    // comment on `screeningScore` in the entity.
+    const columns: Record<string, unknown> = {
+      screeningScore: input.screeningScore !== null ? String(input.screeningScore) : null,
+    };
+
+    await AppDataSource.transaction(async (manager) => {
+      await manager.update(AdmissionApplication, { id: application.id }, columns);
+      await this.appendStageEvent(manager, application, {
+        status: application.status,
+        actorUserId: context.user.id,
+        actorName: context.user.displayName,
+        note:
+          input.screeningScore !== null
+            ? `Screening score updated to ${input.screeningScore}.`
+            : 'Screening score cleared.',
+      });
+    });
+
+    await this.audit.record(context, {
+      action: 'admission.screening_score_updated',
+      entityType: 'AdmissionApplication',
+      entityId: application.id,
+      entityLabel: application.applicationNo,
+      before: { screeningScore: application.screeningScore },
+      after: { screeningScore: input.screeningScore },
+    });
+
+    return this.requireDTO(context.schoolId, application.id);
   }
 
   /* -- Guardians linked before enrollment ------------------------------------ */
@@ -874,6 +937,19 @@ export class AdmissionsService {
     if (application.contacts.length === 0 && linkedGuardians.length === 0) {
       throw AppError.conflict(
         'Add a parent, guardian or next of kin to this application before enrolling the applicant.',
+      );
+    }
+
+    // A contact's email is optional up to this point — a phone-only contact
+    // can still be held on the application — but `Guardian.email` is required
+    // and unique, so one is needed before this contact can become a real
+    // guardian record with a portal account.
+    const contactsMissingEmail = application.contacts.filter((contact) => !contact.email);
+    if (contactsMissingEmail.length > 0) {
+      throw AppError.conflict(
+        `Add an email address for ${contactsMissingEmail
+          .map((contact) => `${contact.firstName} ${contact.lastName}`)
+          .join(', ')} before enrolling the applicant — every guardian needs one for their portal account.`,
       );
     }
 
@@ -1187,7 +1263,7 @@ export class AdmissionsService {
    * two means the second quietly wins wherever the code takes the first. The
    * caller's first choice is honoured and the rest are cleared.
    */
-  private normaliseContacts(contacts: ApplicationContactInput[]): ApplicationContact[] {
+  private normaliseContacts(contacts: OfficeApplicationContactInput[]): ApplicationContact[] {
     const primaryIndex = Math.max(
       0,
       contacts.findIndex((contact) => contact.isPrimaryContact),
@@ -1198,7 +1274,7 @@ export class AdmissionsService {
       firstName: contact.firstName,
       lastName: contact.lastName,
       relationship: contact.relationship,
-      email: contact.email,
+      email: nullIfBlank(contact.email),
       phone: contact.phone,
       occupation: nullIfBlank(contact.occupation),
       address: nullIfBlank(contact.address),
@@ -1283,6 +1359,10 @@ export class AdmissionsService {
     }
 
     for (const contact of contacts) {
+      // `convert` already refuses to reach this point with a contact missing
+      // an email, so this is a type narrowing rather than a real check.
+      if (!contact.email) throw AppError.internal();
+
       const existing = await manager.findOne(Guardian, {
         where: { schoolId, email: contact.email },
       });

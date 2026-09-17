@@ -72,6 +72,12 @@ describe('createAdmissionSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.body.contacts[0].email).toBe('ngozi@example.com');
   });
+
+  it('accepts an office contact with no email, since a phone number still reaches them', () => {
+    const { email: _email, ...phoneOnly } = contact;
+    const result = createAdmissionSchema.safeParse(wrap({ ...valid, contacts: [phoneOnly] }));
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('publicApplicationSchema', () => {
@@ -126,6 +132,14 @@ describe('publicApplicationSchema', () => {
     expect(
       publicApplicationSchema.safeParse(wrap(valid, { slug: '../../etc/passwd' })).success,
     ).toBe(false);
+  });
+
+  it('still requires a contact email — unlike the office form, a visitor has no other channel the school can confirm', () => {
+    const { email: _email, ...phoneOnly } = contact;
+    const result = publicApplicationSchema.safeParse(
+      wrap({ ...valid, contacts: [phoneOnly] }, params),
+    );
+    expect(result.success).toBe(false);
   });
 
   it('still requires an adult when the applicant applies for themselves', () => {

@@ -12,7 +12,12 @@ const guardianBody = z.object({
   title: optionalText(16),
   firstName: z.string().trim().min(1, 'First name is required').max(60),
   lastName: z.string().trim().min(1, 'Surname is required').max(60),
-  email: z.string().trim().toLowerCase().email('Enter a valid email address').max(160),
+  /**
+   * Optional — a guardian who doesn't want a parent-portal account has no use
+   * for one. It can be added later, whenever they do; `grantPortalAccess`
+   * below refuses to be set without it.
+   */
+  email: z.string().trim().toLowerCase().email('Enter a valid email address').max(160).optional().or(z.literal('')),
   phone,
   altPhone: phone.optional().or(z.literal('')),
   occupation: optionalText(120),
@@ -21,7 +26,7 @@ const guardianBody = z.object({
    * The account belongs to the person, not to a child, so one login covers
    * every child they have at the school.
    */
-  grantPortalAccess: z.boolean().default(true),
+  grantPortalAccess: z.boolean().default(false),
 });
 
 export const fetchGuardiansSchema = z.object({
@@ -36,7 +41,17 @@ export const fetchGuardiansSchema = z.object({
   }),
 });
 
-export const createGuardianSchema = z.object({ body: guardianBody.strict() });
+export const createGuardianSchema = z.object({
+  body: guardianBody.strict().superRefine((body, ctx) => {
+    if (body.grantPortalAccess && !body.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['email'],
+        message: 'Add an email address to invite this guardian to the parent portal.',
+      });
+    }
+  }),
+});
 
 export const updateGuardianSchema = z.object({
   params: z.object({ id: z.string().uuid() }),

@@ -41,9 +41,13 @@ export class Guardian extends SoftDeletableEntity {
   @Column({ type: 'varchar', name: 'last_name', length: 60 })
   lastName: string;
 
-  /** Unique within the school — it is how an invitation finds the right person. */
-  @Column({ type: 'varchar', length: 160 })
-  email: string;
+  /**
+   * Unique within the school, and how an invitation finds the right person —
+   * but optional, since a guardian who doesn't want a parent-portal account
+   * has no use for one. `GuardiansService.invite` refuses to run without it.
+   */
+  @Column({ type: 'varchar', length: 160, nullable: true })
+  email: string | null;
 
   @Column({ type: 'varchar', length: 20 })
   phone: string;

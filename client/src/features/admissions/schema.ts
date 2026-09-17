@@ -56,6 +56,24 @@ export const applicationContactSchema = z.object({
   isPrimaryContact: z.boolean().default(false),
 });
 
+/**
+ * The office's own version of a contact — a phone-only contact is still
+ * reachable, so unlike the public form (which has no other channel to fall
+ * back on), email is optional here. A contact recorded this way gets none of
+ * the emailed updates, and enrolling the applicant will ask for an email
+ * before this contact can become a guardian record.
+ */
+export const officeApplicationContactSchema = applicationContactSchema.extend({
+  email: z
+    .string()
+    .trim()
+    .email('Enter a valid email address')
+    .max(160)
+    .toLowerCase()
+    .optional()
+    .or(z.literal('')),
+});
+
 export const applicantSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(60),
   middleName: optional(60),
@@ -123,7 +141,9 @@ export const admissionFormSchema = z.object({
   sessionId: z.string().min(1, 'Choose the session being applied for'),
   classId: z.string().min(1, 'Choose the class being applied for'),
   applicant: applicantSchema,
-  contacts: z.array(applicationContactSchema).max(4, 'Four contacts is the most an application can carry'),
+  contacts: z
+    .array(officeApplicationContactSchema)
+    .max(4, 'Four contacts is the most an application can carry'),
 });
 
 export type AdmissionFormValues = z.infer<typeof admissionFormSchema>;

@@ -32,6 +32,11 @@ export interface ScheduleInterviewInput {
   interviewNote?: string | null;
 }
 
+/** `null` clears a score entered in error. */
+export interface UpdateScreeningScoreInput {
+  screeningScore: number | null;
+}
+
 export interface ConversionResult {
   student: Student;
   applicationId: string;
@@ -61,6 +66,14 @@ export const AdmissionEndpoints = {
 
   scheduleInterview: (id: string, input: ScheduleInterviewInput) =>
     http.patch<AdmissionApplication>(`/admissions/${id}/interview`, input),
+
+  /**
+   * Corrects a screening score after the fact — a typo, or a rescore —
+   * without re-running a status decision. Works at any stage, including
+   * after the application has moved past `SCREENING`/`SHORTLISTED`.
+   */
+  updateScreeningScore: (id: string, input: UpdateScreeningScoreInput) =>
+    http.patch<AdmissionApplication>(`/admissions/${id}/score`, input),
 
   /**
    * Turns an accepted applicant into an enrolled student in one transaction —

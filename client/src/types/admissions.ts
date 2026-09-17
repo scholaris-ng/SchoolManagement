@@ -57,7 +57,8 @@ export interface ApplicationContact {
   firstName: string;
   lastName: string;
   relationship: 'FATHER' | 'MOTHER' | 'GUARDIAN' | 'SPONSOR' | 'OTHER';
-  email: string;
+  /** Optional — a phone-only contact is still reachable, just not by email. */
+  email?: string | null;
   phone: string;
   occupation?: string | null;
   address?: string | null;
@@ -98,7 +99,7 @@ export interface AdmissionApplicationGuardianLink {
   guardianId: string;
   guardianName: string;
   guardianPhone: string;
-  guardianEmail: string;
+  guardianEmail?: string | null;
   guardianHasPortalAccess: boolean;
   relationship: 'FATHER' | 'MOTHER' | 'GUARDIAN' | 'SPONSOR' | 'OTHER';
   isPrimaryContact: boolean;

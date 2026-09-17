@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   Unlink,
   UserPlus,
@@ -34,6 +35,7 @@ import {
   useScheduleInterview,
   useTransitionAdmission,
   useUnlinkApplicationGuardian,
+  useUpdateScreeningScore,
 } from './api';
 import { ConvertApplicantDialog } from './convert-applicant-dialog';
 import {
@@ -141,6 +143,7 @@ export function AdmissionDetailPage() {
   const application = useAdmission(id);
   const transition = useTransitionAdmission(id ?? '');
   const scheduleInterview = useScheduleInterview(id ?? '');
+  const updateScreeningScore = useUpdateScreeningScore(id ?? '');
   const unlinkGuardian = useUnlinkApplicationGuardian(id ?? '');
   const classOptions = useClassOptions();
 
@@ -152,6 +155,8 @@ export function AdmissionDetailPage() {
   const [convertOpen, setConvertOpen] = useState(false);
   const [linkGuardianOpen, setLinkGuardianOpen] = useState(false);
   const [pendingUnlinkGuardian, setPendingUnlinkGuardian] = useState<string | null>(null);
+  const [scoreEditOpen, setScoreEditOpen] = useState(false);
+  const [scoreEditValue, setScoreEditValue] = useState('');
 
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [interviewDate, setInterviewDate] = useState('');
@@ -235,6 +240,18 @@ export function AdmissionDetailPage() {
       interviewNote: interviewNote.trim() || undefined,
     });
     setInterviewOpen(false);
+  };
+
+  const openScore = () => {
+    setScoreEditValue(record.screeningScore != null ? String(record.screeningScore) : '');
+    setScoreEditOpen(true);
+  };
+
+  const submitScore = async () => {
+    await updateScreeningScore.mutateAsync({
+      screeningScore: scoreEditValue ? Number(scoreEditValue) : null,
+    });
+    setScoreEditOpen(false);
   };
 
   const canManage = can('admission.manage');
@@ -425,10 +442,12 @@ export function AdmissionDetailPage() {
                           <Phone className="size-3" aria-hidden="true" />
                           {contact.phone}
                         </span>
-                        <span className="flex items-center gap-1.5">
-                          <Mail className="size-3" aria-hidden="true" />
-                          {contact.email}
-                        </span>
+                        {contact.email && (
+                          <span className="flex items-center gap-1.5">
+                            <Mail className="size-3" aria-hidden="true" />
+                            {contact.email}
+                          </span>
+                        )}
                       </p>
                       {contact.occupation && (
                         <p className="text-xs text-muted-foreground">{contact.occupation}</p>
@@ -494,10 +513,12 @@ export function AdmissionDetailPage() {
                             <Phone className="size-3" aria-hidden="true" />
                             {link.guardianPhone}
                           </span>
-                          <span className="flex items-center gap-1.5">
-                            <Mail className="size-3" aria-hidden="true" />
-                            {link.guardianEmail}
-                          </span>
+                          {link.guardianEmail && (
+                            <span className="flex items-center gap-1.5">
+                              <Mail className="size-3" aria-hidden="true" />
+                              {link.guardianEmail}
+                            </span>
+                          )}
                         </p>
                       </div>
                       {canManage && !record.convertedStudentId && (
@@ -572,7 +593,20 @@ export function AdmissionDetailPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Decision</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Decision</CardTitle>
+                {canManage && !record.convertedStudentId && (
+                  <Button
+                    data-cy="admissions-admission-detail-edit-score"
+                    variant="ghost"
+                    size="sm"
+                    onClick={openScore}
+                  >
+                    <Pencil />
+                    Edit score
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <Field
@@ -814,6 +848,53 @@ export function AdmissionDetailPage() {
               data-cy="admissions-admission-detail-interview-save"
               onClick={() => void submitInterview()}
               loading={scheduleInterview.isPending}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scoreEditOpen} onOpenChange={setScoreEditOpen}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Screening score</DialogTitle>
+            <DialogDescription>
+              Recorded against the application on its own — it doesn't change the status or notify
+              the family.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogBody>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-screening-score">Score</Label>
+              <Input
+                data-cy="edit-screening-score"
+                id="edit-screening-score"
+                type="number"
+                min={0}
+                max={100}
+                value={scoreEditValue}
+                onChange={(event) => setScoreEditValue(event.target.value)}
+                placeholder="Out of 100"
+              />
+              <p className="text-xs text-muted-foreground">Leave blank to clear a score entered in error.</p>
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            <Button
+              data-cy="admissions-admission-detail-score-cancel"
+              type="button"
+              variant="outline"
+              onClick={() => setScoreEditOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-cy="admissions-admission-detail-score-save"
+              onClick={() => void submitScore()}
+              loading={updateScreeningScore.isPending}
             >
               Save
             </Button>

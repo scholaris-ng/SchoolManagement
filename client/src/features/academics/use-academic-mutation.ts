@@ -12,18 +12,23 @@ import { useSchoolId } from '@/app/providers/auth-provider';
 export function useAcademicMutation<TInput, TResult>(config: {
   request: (input: TInput) => Promise<TResult>;
   invalidate: (schoolId: string | null) => unknown[][];
-  successMessage: string;
+  /** Fixed wording for the common case; a function for the rare write whose result changes what happened. */
+  successMessage: string | ((result: TResult) => string);
 }) {
   const schoolId = useSchoolId();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: config.request,
-    onSuccess: () => {
+    onSuccess: (result) => {
       config.invalidate(schoolId).forEach((key) => {
         void queryClient.invalidateQueries({ queryKey: key });
       });
-      toast.success(config.successMessage);
+      toast.success(
+        typeof config.successMessage === 'function'
+          ? config.successMessage(result)
+          : config.successMessage,
+      );
     },
   });
 }

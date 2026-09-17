@@ -71,7 +71,8 @@ export interface Guardian {
   firstName: string;
   lastName: string;
   fullName: string;
-  email: string;
+  /** Optional — a guardian who doesn't want a parent-portal account has no use for one. */
+  email?: string | null;
   phone: string;
   altPhone?: string | null;
   occupation?: string | null;
@@ -94,7 +95,7 @@ export interface StudentGuardianLink {
   guardianId: string;
   guardianName: string;
   guardianPhone: string;
-  guardianEmail: string;
+  guardianEmail?: string | null;
   relationship: GuardianRelationship;
   isPrimaryContact: boolean;
   isEmergencyContact: boolean;

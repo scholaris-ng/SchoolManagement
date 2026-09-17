@@ -148,7 +148,7 @@ export class GuardianRepository extends TenantRepository<Guardian> {
 
   async create(data: DeepPartial<Guardian>, manager?: EntityManager): Promise<Guardian> {
     const repo = this.repoFor(manager);
-    return repo.save(repo.create({ ...data, email: data.email?.toLowerCase() }));
+    return repo.save(repo.create({ ...data, email: data.email ? data.email.toLowerCase() : null }));
   }
 
   async update(

@@ -92,13 +92,15 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
                         <Phone className="size-3.5" aria-hidden="true" />
                         {link.guardianPhone}
                       </a>
-                      <a
-                        href={`mailto:${link.guardianEmail}`}
-                        className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground"
-                      >
-                        <Mail className="size-3.5 shrink-0" aria-hidden="true" />
-                        <span className="truncate">{link.guardianEmail}</span>
-                      </a>
+                      {link.guardianEmail && (
+                        <a
+                          href={`mailto:${link.guardianEmail}`}
+                          className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground"
+                        >
+                          <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{link.guardianEmail}</span>
+                        </a>
+                      )}
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-1.5">

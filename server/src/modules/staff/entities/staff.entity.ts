@@ -3,6 +3,7 @@ import { SoftDeletableEntity } from '../../../shared/entities/baseEntity';
 import { School } from '../../school/entities/school.entity';
 import { User } from '../../auth/entities/user.entity';
 import { TeachingAssignment } from './teachingAssignment.entity';
+import { StaffClassAssignment } from './staffClassAssignment.entity';
 
 /**
  * An employee of the school (spec section 51 item 15).
@@ -78,6 +79,9 @@ export class Staff extends SoftDeletableEntity {
 
   @OneToMany(() => TeachingAssignment, (assignment) => assignment.staff)
   teachingAssignments?: TeachingAssignment[];
+
+  @OneToMany(() => StaffClassAssignment, (assignment) => assignment.staff)
+  classAssignments?: StaffClassAssignment[];
 
   @VersionColumn()
   version: number;

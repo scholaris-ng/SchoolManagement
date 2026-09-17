@@ -4,6 +4,30 @@ import { Subject } from '../entities/subject.entity';
 import { SubjectLevel } from '../entities/subjectLevel.entity';
 import type { SubjectDTO } from '../dto/academics.dto';
 
+/**
+ * Everywhere a subject id can be depended on, besides `subject_levels` — that
+ * table is the subject's own configuration (which levels take it), cleaned up
+ * along with the row rather than a reason to keep it. Every table below has an
+ * `ON DELETE CASCADE` foreign key to `subjects`, which is exactly the danger: a
+ * hard delete would succeed silently and take a teacher's assignment, a term's
+ * timetable slot, a scheme of work, or — worst — an already-entered result down
+ * with it. This is the check that decides whether that is ever allowed to run.
+ */
+function referenceExistsFor(alias: string): string {
+  return `(
+    EXISTS (SELECT 1 FROM teaching_assignments WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM timetable_entries  WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM curricula          WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM schemes_of_work    WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM lesson_notes       WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM score_sheets       WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM questions          WHERE subject_id = ${alias}.id)
+    OR EXISTS (SELECT 1 FROM cbt_assessments    WHERE subject_id = ${alias}.id)
+  )`;
+}
+
+const REFERENCE_EXISTS = referenceExistsFor('sub');
+
 const PROJECTION = `
   sub.id, sub.school_id AS "schoolId", sub.name, sub.code, sub.category,
   sub.is_core AS "isCore", sub.is_active AS "isActive", sub.schedule,
@@ -11,7 +35,8 @@ const PROJECTION = `
   COALESCE(lv.names, '{}') AS "levelNames",
   COALESCE(t.ids,   '{}') AS "teacherIds",
   COALESCE(t.names, '{}') AS "teacherNames",
-  COALESCE(array_length(t.ids, 1), 0) AS "teacherCount"
+  COALESCE(array_length(t.ids, 1), 0) AS "teacherCount",
+  ${REFERENCE_EXISTS} AS "isReferenced"
 `;
 
 const LEVEL_JOIN = `
@@ -112,6 +137,18 @@ export class SubjectRepository extends TenantRepository<Subject> {
     return this.repoFor(manager).findOne({ where: { schoolId, code } });
   }
 
+  /**
+   * The same lookup, but also seeing an archived subject — the unique index
+   * on `(school_id, code)` is not partial on `deleted_at`, so a code still
+   * held by a soft-deleted row is not actually free at the database, whatever
+   * this plain `findByCode` says. A caller creating or renaming a subject
+   * needs to know that before it reaches the database as a raw constraint
+   * violation instead of a message the school can act on.
+   */
+  async findByCodeIncludingArchived(schoolId: string, code: string): Promise<Subject | null> {
+    return this.repo.findOne({ where: { schoolId, code }, withDeleted: true });
+  }
+
   /** Looks up a whole spreadsheet's worth of subject codes at once. */
   async findManyByCode(
     schoolId: string,
@@ -133,6 +170,32 @@ export class SubjectRepository extends TenantRepository<Subject> {
 
   async update(id: string, patch: DeepPartial<Subject>, manager?: EntityManager): Promise<void> {
     await this.repoFor(manager).update(id, patch as never);
+  }
+
+  /**
+   * Answered fresh at delete time rather than trusted from whatever the
+   * caller's list happened to show — a teacher could have been assigned to it
+   * in the moment between the screen loading and the button being clicked.
+   */
+  async isReferenced(schoolId: string, id: string): Promise<boolean> {
+    const [row] = await this.repo.query(
+      `SELECT ${referenceExistsFor('sub')} AS referenced
+       FROM subjects sub WHERE sub.school_id = $1 AND sub.id = $2`,
+      [schoolId, id],
+    );
+    return Boolean(row?.referenced);
+  }
+
+  /**
+   * A genuine, permanent delete — the one case `softDeleteScoped` is not used
+   * for on this entity. Only ever called once `isReferenced` above has said
+   * no: nothing depends on the row, so nothing is lost by it disappearing
+   * outright, and its code is freed for reuse rather than blocked forever by
+   * a soft-deleted row the school can no longer see (the unique index on
+   * `(school_id, code)` is not partial on `deleted_at`).
+   */
+  async remove(id: string): Promise<void> {
+    await this.repo.delete(id);
   }
 
   /**

@@ -150,7 +150,14 @@ export function SelectionBar({
       data-cy="selection-bar"
       className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary-subtle px-3 py-2"
     >
-      <p className="text-sm font-medium text-primary" data-cy="selection-count">
+      {/*
+        White in dark mode rather than the plain `text-primary` this used to
+        be — a school's own brand colour lands here as `--primary`, and a
+        darker brand colour (a forest green, say) sat almost unreadably close
+        to `--primary-subtle`'s own dark-mode background right behind it. The
+        same fix as the tab strip's active item, for the same reason.
+      */}
+      <p className="text-sm font-medium text-primary dark:text-white" data-cy="selection-count">
         {count} selected
       </p>
       <div className="flex flex-wrap items-center gap-2">{children}</div>

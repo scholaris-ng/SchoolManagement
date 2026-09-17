@@ -52,6 +52,7 @@ import { AdmissionApplicationGuardian } from '../../modules/admissions/entities/
 import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
+import { StaffClassAssignment } from '../../modules/staff/entities/staffClassAssignment.entity';
 import { FeeItem } from '../../modules/finance/entities/feeItem.entity';
 import { PaymentDestination } from '../../modules/finance/entities/paymentDestination.entity';
 import { Discount } from '../../modules/finance/entities/discount.entity';
@@ -96,6 +97,7 @@ export const entities = [
   TimetablePeriod,
   Staff,
   TeachingAssignment,
+  StaffClassAssignment,
   Student,
   StudentEnrollment,
   StudentDocument,

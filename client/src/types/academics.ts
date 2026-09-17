@@ -75,6 +75,13 @@ export interface Subject {
   isActive: boolean;
   /** When this subject is normally taught, independent of any one class's timetable. */
   schedule: SubjectScheduleSlot[];
+  /**
+   * Whether a teacher, a timetable entry, a scheme of work, a result or a CBT
+   * question depends on this subject. Deleting it only ever removes the row
+   * when this is false; otherwise it is archived instead, the way it always
+   * has been.
+   */
+  isReferenced: boolean;
 }
 
 export interface Room {

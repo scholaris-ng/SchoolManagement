@@ -19,6 +19,7 @@ export interface AcademicsDialogState {
   houseDialog: { open: boolean; house?: House };
   pendingDeleteSession: AcademicSession | null;
   pendingDeletePeriod: TimetablePeriod | null;
+  pendingDeleteSubject: Subject | null;
 }
 
 /**
@@ -36,8 +37,10 @@ export function AcademicsDialogs({
   periodCount,
   onDeleteSession,
   onDeletePeriod,
+  onDeleteSubject,
   isDeletingSession,
   isDeletingPeriod,
+  isDeletingSubject,
 }: {
   state: AcademicsDialogState;
   close: (key: keyof AcademicsDialogState) => void;
@@ -48,8 +51,10 @@ export function AcademicsDialogs({
   periodCount: number;
   onDeleteSession: (session: AcademicSession) => Promise<void>;
   onDeletePeriod: (period: TimetablePeriod) => Promise<void>;
+  onDeleteSubject: (subject: Subject) => Promise<void>;
   isDeletingSession: boolean;
   isDeletingPeriod: boolean;
+  isDeletingSubject: boolean;
 }) {
   return (
     <>
@@ -113,6 +118,26 @@ export function AcademicsDialogs({
           levels={levels}
           periods={periods}
           onClose={() => close('subjectDialog')}
+        />
+        <ConfirmDialog
+          open={Boolean(state.pendingDeleteSubject)}
+          onOpenChange={(open) => !open && close('pendingDeleteSubject')}
+          title={
+            state.pendingDeleteSubject?.isReferenced
+              ? 'Archive this subject?'
+              : 'Delete this subject?'
+          }
+          description={
+            state.pendingDeleteSubject?.isReferenced
+              ? `"${state.pendingDeleteSubject?.name}" has a teacher assigned, a timetable entry, a scheme of work or recorded results, so deleting it would rewrite history. It will be hidden from pickers instead — everything already on record stays exactly as it is.`
+              : `"${state.pendingDeleteSubject?.name}" is not used anywhere yet, so this permanently removes it and frees its code for reuse.`
+          }
+          confirmLabel={state.pendingDeleteSubject?.isReferenced ? 'Archive' : 'Delete'}
+          tone="danger"
+          loading={isDeletingSubject}
+          onConfirm={async () => {
+            if (state.pendingDeleteSubject) await onDeleteSubject(state.pendingDeleteSubject);
+          }}
         />
         <HouseDialog
           key={state.houseDialog.house?.id ?? 'new-house'}

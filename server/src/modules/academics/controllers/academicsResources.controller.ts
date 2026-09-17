@@ -55,8 +55,17 @@ export class AcademicsResourcesController {
   static async removeSubject(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.validated!.params as { id: string };
-      await service().removeSubject(contextOf(req), id);
-      res.status(204).send();
+      const result = await service().removeSubject(contextOf(req), id);
+      res
+        .status(200)
+        .json(
+          ApiResponse.ok(
+            result,
+            result.deleted
+              ? 'Subject deleted'
+              : 'This subject is still in use, so it was archived instead of deleted',
+          ),
+        );
     } catch (error) {
       next(error);
     }

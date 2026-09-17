@@ -10,6 +10,7 @@ import {
   scheduleInterviewSchema,
   transitionAdmissionSchema,
   unlinkApplicationGuardianSchema,
+  updateScreeningScoreSchema,
 } from '../validators/admissions.schema';
 import { AdmissionsController } from '../controllers/admissions.controller';
 
@@ -70,6 +71,19 @@ router.patch(
   authorise('admission.manage'),
   validate(scheduleInterviewSchema),
   AdmissionsController.scheduleInterview,
+);
+
+/**
+ * Correcting a screening score after the fact — kept separate from
+ * `transition` for the same reason the interview is: it never moves `status`
+ * by itself, so a typo or a rescore doesn't need to re-run a decision the
+ * office isn't actually making again.
+ */
+router.patch(
+  '/admissions/:id/score',
+  authorise('admission.manage'),
+  validate(updateScreeningScoreSchema),
+  AdmissionsController.updateScreeningScore,
 );
 
 /**

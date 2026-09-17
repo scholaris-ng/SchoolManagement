@@ -10,9 +10,16 @@ import type {
   ConversionResult,
   LinkApplicationGuardianInput,
   ScheduleInterviewInput,
+  UpdateScreeningScoreInput,
 } from './admissions.endpoints';
 
-export type { TransitionInput, ConversionResult, ScheduleInterviewInput, LinkApplicationGuardianInput };
+export type {
+  TransitionInput,
+  ConversionResult,
+  ScheduleInterviewInput,
+  LinkApplicationGuardianInput,
+  UpdateScreeningScoreInput,
+};
 
 export function useAdmissions(query: ListQuery) {
   const schoolId = useSchoolId();
@@ -82,6 +89,20 @@ export function useScheduleInterview(id: string) {
     onSuccess: (application) => {
       queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
       toast.success('Interview details saved');
+    },
+  });
+}
+
+/** Corrects a screening score after the fact — never touches `status`. */
+export function useUpdateScreeningScore(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: UpdateScreeningScoreInput) => AdmissionEndpoints.updateScreeningScore(id, input),
+    onSuccess: (application) => {
+      queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
+      toast.success('Screening score saved');
     },
   });
 }
