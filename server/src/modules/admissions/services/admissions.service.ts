@@ -983,7 +983,7 @@ export class AdmissionsService {
         studentId: student.id,
         admissionNo: student.admissionNo,
         classId: schoolClass.id,
-        guardiansCreated: application.contacts.length,
+        guardiansAttached: application.contacts.length + linkedGuardians.length,
       },
       // Creating guardian records grants people access to a child's file.
       severity: 'WARNING',

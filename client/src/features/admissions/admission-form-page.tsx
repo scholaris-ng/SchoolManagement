@@ -51,10 +51,11 @@ const emptyContact = {
  * Entering an application on someone's behalf — a walk-in at the office, or a
  * paper form typed up later.
  *
- * The same shape the public website submits, down to the applicant-type
- * question at the top, so both paths converge on one record and one workflow.
- * Whichever is chosen, the people named here are held on the application and
- * are not guardian records: enrolling the child is what creates those.
+ * Staff are always the one typing, so unlike the public website there is no
+ * "who is applying" question here. The people named under contacts are held
+ * on the application and are not guardian records: enrolling the applicant is
+ * what creates those, or an existing guardian record can be linked directly
+ * from the application's own page once one is known.
  */
 export function AdmissionFormPage() {
   const navigate = useNavigate();
@@ -65,7 +66,6 @@ export function AdmissionFormPage() {
   const form = useForm<AdmissionFormValues>({
     resolver: zodResolver(admissionFormSchema),
     defaultValues: {
-      applicantType: 'GUARDIAN',
       sessionId: '',
       classId: '',
       applicant: {
@@ -84,16 +84,12 @@ export function AdmissionFormPage() {
         previousClass: '',
         bloodGroup: '',
         medicalNotes: '',
-        email: '',
-        phone: '',
       },
       contacts: [],
     },
   });
 
   const contacts = useFieldArray({ control: form.control, name: 'contacts' });
-  const applicantType = useWatch({ control: form.control, name: 'applicantType' });
-  const isSelf = applicantType === 'SELF';
 
   // City belongs to whichever state was picked, for the applicant and for
   // each contact — `watchedContacts` follows the whole array so a list keyed
@@ -135,20 +131,6 @@ export function AdmissionFormPage() {
           <CardContent className="space-y-8 pt-5">
             <FormError error={createAdmission.error} />
 
-            <FormSection
-              title="Who is applying"
-              description="This decides who the school corresponds with, and what the form asks for."
-              columns={1}
-            >
-              <RadioCardField
-                control={form.control}
-                name="applicantType"
-                label="Application filed by"
-                required
-                options={APPLICANT_TYPE_OPTIONS}
-              />
-            </FormSection>
-
             <FormSection title="Applying for" columns={2}>
               <SelectField
                 control={form.control}
@@ -170,7 +152,7 @@ export function AdmissionFormPage() {
               />
             </FormSection>
 
-            <FormSection title={isSelf ? 'The applicant' : 'The child'} columns={2}>
+            <FormSection title="The applicant" columns={2}>
               <TextField
                 control={form.control}
                 name="applicant.firstName"
@@ -288,32 +270,10 @@ export function AdmissionFormPage() {
                 className="sm:col-span-2"
                 description="Anything the school must know if the applicant is offered a place."
               />
-
-              {/* Only an applicant applying for themselves is written to
-                  directly. On a parent-filed application these would end up
-                  holding the parent's details on the child's record. */}
-              {isSelf && (
-                <>
-                  <TextField
-                    control={form.control}
-                    name="applicant.email"
-                    label="Their email"
-                    type="email"
-                    required
-                  />
-                  <TextField
-                    control={form.control}
-                    name="applicant.phone"
-                    label="Their phone"
-                    type="tel"
-                    required
-                  />
-                </>
-              )}
             </FormSection>
 
             <FormSection
-              title={isSelf ? 'Parent, guardian or next of kin' : 'Parents and guardians'}
+              title="Parents and guardians"
               description="Optional here — an existing guardian record can be linked from the application's own page once one is known, and a contact can still be typed in now if one already is."
               columns={1}
             >
