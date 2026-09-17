@@ -26,26 +26,12 @@ import {
   CheckboxField,
   DateField,
   FormSection,
-  RadioCardField,
   SelectField,
   TextField,
   TextareaField,
 } from '@/components/forms/form-field';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/feedback';
-
-const APPLICANT_TYPE_OPTIONS = [
-  {
-    value: 'GUARDIAN',
-    label: 'A parent or guardian is applying',
-    description: 'For a child. The school writes to the parent about the decision.',
-  },
-  {
-    value: 'SELF',
-    label: 'The applicant is applying for themselves',
-    description: 'An older student. The school writes to them, and still needs a next of kin.',
-  },
-];
 
 const emptyContact = {
   title: '',
@@ -101,7 +87,7 @@ export function AdmissionFormPage() {
         email: '',
         phone: '',
       },
-      contacts: [{ ...emptyContact, isPrimaryContact: true }],
+      contacts: [],
     },
   });
 
@@ -328,20 +314,23 @@ export function AdmissionFormPage() {
 
             <FormSection
               title={isSelf ? 'Parent, guardian or next of kin' : 'Parents and guardians'}
-              description={
-                isSelf
-                  ? 'At least one adult the school can reach about this application.'
-                  : 'At least one. The primary contact receives the admission decision.'
-              }
+              description="Optional here — an existing guardian record can be linked from the application's own page once one is known, and a contact can still be typed in now if one already is."
               columns={1}
             >
               <Alert tone="info" title="Held with the application, not the parent register">
                 Nobody added here becomes a guardian record, gets portal access or is billed for
                 fees. That happens when the applicant is offered a place, accepts it and is
-                enrolled.
+                enrolled. The school still needs at least one adult on record — a contact here, or
+                a guardian linked afterwards — before that can happen.
               </Alert>
 
               <div className="space-y-4">
+                {contacts.fields.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No contact added yet. Add one now, or leave this for later.
+                  </p>
+                )}
+
                 {contacts.fields.map((field, index) => {
                   const contactState = watchedContacts?.[index]?.state;
                   const contactCityOptions = citiesOfNigeriaState(contactState);
@@ -350,18 +339,16 @@ export function AdmissionFormPage() {
                     <div key={field.id} className="rounded-lg border border-border p-4">
                       <div className="mb-3 flex items-center justify-between">
                         <p className="text-sm font-medium">Contact {index + 1}</p>
-                        {contacts.fields.length > 1 && (
-                          <Button
-                            data-cy="admissions-admission-form-remove"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => contacts.remove(index)}
-                          >
-                            <Trash2 />
-                            Remove
-                          </Button>
-                        )}
+                        <Button
+                          data-cy="admissions-admission-form-remove"
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => contacts.remove(index)}
+                        >
+                          <Trash2 />
+                          Remove
+                        </Button>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <TextField
@@ -454,10 +441,15 @@ export function AdmissionFormPage() {
                   data-cy="admissions-admission-form-add-another-guardian"
                   type="button"
                   variant="outline"
-                  onClick={() => contacts.append({ ...emptyContact })}
+                  onClick={() =>
+                    contacts.append({
+                      ...emptyContact,
+                      isPrimaryContact: contacts.fields.length === 0,
+                    })
+                  }
                 >
                   <Plus />
-                  Add another contact
+                  {contacts.fields.length === 0 ? 'Add a contact' : 'Add another contact'}
                 </Button>
 
                 {form.formState.errors.contacts?.message && (

@@ -3,6 +3,7 @@ import type {
   ApplicationContact,
   ApplicationSource,
   ApplicationStatus,
+  ContactRelationship,
   InterviewOutcome,
 } from '../entities/admissionApplication.entity';
 
@@ -44,6 +45,23 @@ export interface AdmissionStageEventDTO {
   note: string | null;
 }
 
+/**
+ * A real `Guardian` record attached to the application before enrollment,
+ * carrying enough of their details to show without a second lookup. See
+ * `AdmissionApplicationGuardian` for why this is kept apart from `contacts`.
+ */
+export interface AdmissionApplicationGuardianLinkDTO {
+  id: string;
+  applicationId: string;
+  guardianId: string;
+  guardianName: string;
+  guardianPhone: string;
+  guardianEmail: string;
+  guardianHasPortalAccess: boolean;
+  relationship: ContactRelationship;
+  isPrimaryContact: boolean;
+}
+
 export interface AdmissionApplicationDTO {
   id: string;
   schoolId: string;
@@ -63,6 +81,12 @@ export interface AdmissionApplicationDTO {
    * `ApplicationContact`.
    */
   contacts: ApplicationContact[];
+  /**
+   * Existing guardian records attached directly to the application, before
+   * enrollment. Attaching one grants nothing by itself — see
+   * `AdmissionApplicationGuardian`.
+   */
+  linkedGuardians: AdmissionApplicationGuardianLinkDTO[];
   /**
    * Always empty for now. No table backs admission documents yet, and the
    * field is present rather than omitted so the client's parser never meets a

@@ -85,14 +85,22 @@ export const applicantSchema = z.object({
 });
 
 /**
- * An application must have at least one adult on it, whoever filed it. A
- * student applying for themselves still names a parent, guardian or next of
- * kin, because a school with nobody to call about a child has a safeguarding
- * problem rather than a tidy record.
+ * An application must eventually have at least one adult on it, whoever filed
+ * it — a school with nobody to call about a child has a safeguarding problem
+ * rather than a tidy record. The public form has no other way to name one, so
+ * it is required there. The office may instead attach an existing `Guardian`
+ * record once one is known (a sibling's parent, say) — see
+ * `linkApplicationGuardianSchema` — so typed-in contacts are optional there;
+ * `AdmissionsService.convert` is what actually enforces that at least one
+ * adult, of either kind, is on record before enrolling.
  */
 const contacts = z
   .array(applicationContactSchema)
   .min(1, 'Add at least one parent or guardian')
+  .max(4, 'Four contacts is the most an application can carry');
+
+const officeContacts = z
+  .array(applicationContactSchema)
   .max(4, 'Four contacts is the most an application can carry');
 
 export const fetchAdmissionsSchema = z.object({
@@ -119,7 +127,7 @@ export const createAdmissionSchema = z.object({
     sessionId: z.string().uuid('Choose the session being applied for'),
     classId: z.string().uuid('Choose the class being applied for'),
     applicant: applicantSchema,
-    contacts,
+    contacts: officeContacts.default([]),
   }),
 });
 
@@ -164,6 +172,30 @@ export const convertAdmissionSchema = z.object({
   params: admissionIdParamSchema.shape.params,
   body: z.object({
     classId: z.string().uuid('Choose the class they will join'),
+  }),
+});
+
+/**
+ * Attaching an existing `Guardian` record to an application before
+ * enrollment — a family the office already knows. Only the relationship and
+ * who is primary are asked here; everything else about the pairing (portal
+ * access, billing, pickup) still waits for enrollment, the same as `contacts`.
+ */
+export const linkApplicationGuardianSchema = z.object({
+  params: admissionIdParamSchema.shape.params,
+  body: z
+    .object({
+      guardianId: z.string().uuid('Choose a guardian'),
+      relationship: z.enum(['FATHER', 'MOTHER', 'GUARDIAN', 'SPONSOR', 'OTHER']),
+      isPrimaryContact: z.boolean().default(false),
+    })
+    .strict(),
+});
+
+export const unlinkApplicationGuardianSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('That is not an application reference'),
+    linkId: z.string().uuid(),
   }),
 });
 
@@ -226,6 +258,7 @@ export type CreateAdmissionInput = z.infer<typeof createAdmissionSchema>['body']
 export type TransitionAdmissionInput = z.infer<typeof transitionAdmissionSchema>['body'];
 export type ScheduleInterviewInput = z.infer<typeof scheduleInterviewSchema>['body'];
 export type ConvertAdmissionInput = z.infer<typeof convertAdmissionSchema>['body'];
+export type LinkApplicationGuardianInput = z.infer<typeof linkApplicationGuardianSchema>['body'];
 export type PublicApplicationInput = z.infer<typeof publicApplicationSchema>['body'];
 export type RespondToOfferInput = z.infer<typeof respondToOfferSchema>['body'];
 export type ApplicationContactInput = z.infer<typeof applicationContactSchema>;

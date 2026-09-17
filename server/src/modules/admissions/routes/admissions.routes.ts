@@ -6,8 +6,10 @@ import {
   convertAdmissionSchema,
   createAdmissionSchema,
   fetchAdmissionsSchema,
+  linkApplicationGuardianSchema,
   scheduleInterviewSchema,
   transitionAdmissionSchema,
+  unlinkApplicationGuardianSchema,
 } from '../validators/admissions.schema';
 import { AdmissionsController } from '../controllers/admissions.controller';
 
@@ -80,6 +82,27 @@ router.post(
   authoriseAll('student.create', 'guardian.manage'),
   validate(convertAdmissionSchema),
   AdmissionsController.convert,
+);
+
+/**
+ * Attaching an existing guardian record before enrollment — for a family the
+ * office already knows. `admission.manage` alone is enough: this only
+ * associates the application with a `Guardian` row that already exists, and
+ * grants nothing on its own — no portal access, no billing, no directory
+ * listing — the way editing the application's own `contacts` doesn't either.
+ */
+router.post(
+  '/admissions/:id/guardians',
+  authorise('admission.manage'),
+  validate(linkApplicationGuardianSchema),
+  AdmissionsController.linkGuardian,
+);
+
+router.delete(
+  '/admissions/:id/guardians/:linkId',
+  authorise('admission.manage'),
+  validate(unlinkApplicationGuardianSchema),
+  AdmissionsController.unlinkGuardian,
 );
 
 export default router;

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useParams } from 'react-router-dom';
 import {
   CalendarClock,
@@ -10,7 +12,9 @@ import {
   Mail,
   MapPin,
   Phone,
+  Unlink,
   UserPlus,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -23,11 +27,24 @@ import {
 import { humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClassOptions } from '@/features/academics/api';
-import { useAdmission, useScheduleInterview, useTransitionAdmission } from './api';
+import { useGuardianOptions } from '@/features/guardians/api';
+import {
+  useAdmission,
+  useLinkApplicationGuardian,
+  useScheduleInterview,
+  useTransitionAdmission,
+  useUnlinkApplicationGuardian,
+} from './api';
 import { ConvertApplicantDialog } from './convert-applicant-dialog';
+import {
+  admissionGuardianLinkSchema,
+  RELATIONSHIP_OPTIONS,
+  type AdmissionGuardianLinkValues,
+} from './schema';
 import type { ApplicationStatus, InterviewOutcome } from '@/types/admissions';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
+  Avatar,
   Badge,
   Card,
   CardContent,
@@ -39,6 +56,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/data/status-badge';
 import { Alert, EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import {
+  ConfirmDialog,
   Dialog,
   DialogBody,
   DialogContent,
@@ -46,9 +64,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Sheet,
 } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
+import { CheckboxField, SelectField } from '@/components/forms/form-field';
+import { FormError } from '@/components/forms/form-actions';
 import { Field } from './admission-detail-page-parts';
 
 /**
@@ -120,6 +141,7 @@ export function AdmissionDetailPage() {
   const application = useAdmission(id);
   const transition = useTransitionAdmission(id ?? '');
   const scheduleInterview = useScheduleInterview(id ?? '');
+  const unlinkGuardian = useUnlinkApplicationGuardian(id ?? '');
   const classOptions = useClassOptions();
 
   const [pendingStatus, setPendingStatus] = useState<ApplicationStatus | null>(null);
@@ -128,6 +150,8 @@ export function AdmissionDetailPage() {
   const [offeredClassId, setOfferedClassId] = useState('');
   const [offerExpiresOn, setOfferExpiresOn] = useState('');
   const [convertOpen, setConvertOpen] = useState(false);
+  const [linkGuardianOpen, setLinkGuardianOpen] = useState(false);
+  const [pendingUnlinkGuardian, setPendingUnlinkGuardian] = useState<string | null>(null);
 
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [interviewDate, setInterviewDate] = useState('');
@@ -377,39 +401,120 @@ export function AdmissionDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <ul className="divide-y divide-border">
-                {record.contacts.map((contact, index) => (
-                  <li key={index} className="space-y-1 px-5 py-3 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">
-                        {contact.title ? `${contact.title} ` : ''}
-                        {contact.firstName} {contact.lastName}
+              {record.contacts.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<Phone />}
+                  title="No contact recorded yet"
+                  description="Add one from the office, or link an existing guardian record below."
+                />
+              ) : (
+                <ul className="divide-y divide-border">
+                  {record.contacts.map((contact, index) => (
+                    <li key={index} className="space-y-1 px-5 py-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">
+                          {contact.title ? `${contact.title} ` : ''}
+                          {contact.firstName} {contact.lastName}
+                        </p>
+                        <Badge tone="neutral">{humanizeEnum(contact.relationship)}</Badge>
+                        {contact.isPrimaryContact && <Badge tone="primary">Primary contact</Badge>}
+                      </div>
+                      <p className="flex flex-wrap items-center gap-3 text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <Phone className="size-3" aria-hidden="true" />
+                          {contact.phone}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Mail className="size-3" aria-hidden="true" />
+                          {contact.email}
+                        </span>
                       </p>
-                      <Badge tone="neutral">{humanizeEnum(contact.relationship)}</Badge>
-                      {contact.isPrimaryContact && <Badge tone="primary">Primary contact</Badge>}
-                    </div>
-                    <p className="flex flex-wrap items-center gap-3 text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <Phone className="size-3" aria-hidden="true" />
-                        {contact.phone}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Mail className="size-3" aria-hidden="true" />
-                        {contact.email}
-                      </span>
-                    </p>
-                    {contact.occupation && (
-                      <p className="text-xs text-muted-foreground">{contact.occupation}</p>
-                    )}
-                    {(contact.address || contact.city || contact.state) && (
-                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-                        {[contact.address, contact.city, contact.state].filter(Boolean).join(', ')}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                      {contact.occupation && (
+                        <p className="text-xs text-muted-foreground">{contact.occupation}</p>
+                      )}
+                      {(contact.address || contact.city || contact.state) && (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <MapPin className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                          {[contact.address, contact.city, contact.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Guardian records</CardTitle>
+                  <CardDescription>
+                    Existing guardian records attached to this application — a family the office
+                    already knows, such as a sibling already on roll. Linking one grants nothing by
+                    itself; portal access, billing and pickup rights still wait for enrollment.
+                  </CardDescription>
+                </div>
+                {canManage && !record.convertedStudentId && (
+                  <Button
+                    data-cy="admissions-admission-detail-link-guardian"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLinkGuardianOpen(true)}
+                  >
+                    <UserPlus />
+                    Link a guardian
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {record.linkedGuardians.length === 0 ? (
+                <EmptyState compact icon={<Users />} title="No guardian records linked" />
+              ) : (
+                <ul className="divide-y divide-border">
+                  {record.linkedGuardians.map((link) => (
+                    <li key={link.id} className="flex items-center gap-3 px-5 py-3 text-sm">
+                      <Avatar name={link.guardianName} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            to={`/guardians/${link.guardianId}`}
+                            className="font-medium hover:text-primary hover:underline"
+                          >
+                            {link.guardianName}
+                          </Link>
+                          <Badge tone="neutral">{humanizeEnum(link.relationship)}</Badge>
+                          {link.isPrimaryContact && <Badge tone="primary">Primary contact</Badge>}
+                        </div>
+                        <p className="flex flex-wrap items-center gap-3 text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <Phone className="size-3" aria-hidden="true" />
+                            {link.guardianPhone}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Mail className="size-3" aria-hidden="true" />
+                            {link.guardianEmail}
+                          </span>
+                        </p>
+                      </div>
+                      {canManage && !record.convertedStudentId && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          data-cy={`admission-guardian-unlink-${link.id}`}
+                          onClick={() => setPendingUnlinkGuardian(link.id)}
+                          aria-label={`Unlink ${link.guardianName}`}
+                        >
+                          <Unlink />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 
@@ -721,6 +826,115 @@ export function AdmissionDetailPage() {
         open={convertOpen}
         onOpenChange={setConvertOpen}
       />
+
+      <LinkApplicationGuardianSheet
+        applicationId={record.id}
+        open={linkGuardianOpen}
+        onOpenChange={setLinkGuardianOpen}
+        excludeIds={record.linkedGuardians.map((link) => link.guardianId)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingUnlinkGuardian)}
+        onOpenChange={(open) => !open && setPendingUnlinkGuardian(null)}
+        title="Unlink this guardian?"
+        description="Removes the association with this application. The guardian record itself is not deleted."
+        confirmLabel="Unlink"
+        tone="danger"
+        loading={unlinkGuardian.isPending}
+        onConfirm={async () => {
+          if (pendingUnlinkGuardian) await unlinkGuardian.mutateAsync(pendingUnlinkGuardian);
+          setPendingUnlinkGuardian(null);
+        }}
+      />
     </PageContainer>
+  );
+}
+
+function LinkApplicationGuardianSheet({
+  applicationId,
+  open,
+  onOpenChange,
+  excludeIds,
+}: {
+  applicationId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  excludeIds: string[];
+}) {
+  const link = useLinkApplicationGuardian(applicationId);
+  const guardianOptions = useGuardianOptions().filter(
+    (option) => !excludeIds.includes(option.value),
+  );
+
+  const form = useForm<AdmissionGuardianLinkValues>({
+    resolver: zodResolver(admissionGuardianLinkSchema),
+    defaultValues: {
+      guardianId: '',
+      relationship: 'GUARDIAN',
+      isPrimaryContact: false,
+    },
+  });
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    await link.mutateAsync(values);
+    form.reset();
+    onOpenChange(false);
+  });
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Link a guardian"
+      description="Pick an existing guardian record already known to the school — a sibling's parent, say. This does not grant them portal access or bill them; that still happens at enrollment."
+      footer={
+        <>
+          <Button
+            data-cy="admissions-admission-detail-link-guardian-cancel"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            data-cy="admissions-admission-detail-link-guardian-submit"
+            onClick={onSubmit}
+            loading={link.isPending}
+          >
+            Link guardian
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        <FormError error={link.error} />
+
+        <SelectField
+          control={form.control}
+          name="guardianId"
+          label="Guardian"
+          required
+          options={guardianOptions}
+          placeholder="Search guardians…"
+        />
+
+        <SelectField
+          control={form.control}
+          name="relationship"
+          label="Relationship to the applicant"
+          required
+          options={[...RELATIONSHIP_OPTIONS]}
+          native
+        />
+
+        <CheckboxField
+          control={form.control}
+          name="isPrimaryContact"
+          label="Primary contact"
+          description="Receives the admission decision, and is billed for fees once enrolled."
+        />
+      </form>
+    </Sheet>
   );
 }

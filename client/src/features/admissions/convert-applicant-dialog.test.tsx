@@ -60,6 +60,7 @@ function application(over: Partial<AdmissionApplication> = {}): AdmissionApplica
         isPrimaryContact: true,
       },
     ],
+    linkedGuardians: [],
     documents: [],
     status: 'ACCEPTED',
     offeredClassId: null,

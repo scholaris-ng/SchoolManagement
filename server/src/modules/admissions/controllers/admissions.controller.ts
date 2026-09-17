@@ -6,6 +6,7 @@ import type {
   ConvertAdmissionInput,
   CreateAdmissionInput,
   FetchAdmissionsQuery,
+  LinkApplicationGuardianInput,
   PublicApplicationInput,
   RespondToOfferInput,
   ScheduleInterviewInput,
@@ -85,6 +86,30 @@ export class AdmissionsController {
         req.validated!.body as ConvertAdmissionInput,
       );
       res.status(201).json(ApiResponse.created(result, 'Applicant enrolled'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async linkGuardian(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const link = await service().linkGuardian(
+        contextOf(req),
+        id,
+        req.validated!.body as LinkApplicationGuardianInput,
+      );
+      res.status(201).json(ApiResponse.created(link, 'Guardian linked'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async unlinkGuardian(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id, linkId } = req.validated!.params as { id: string; linkId: string };
+      await service().unlinkGuardian(contextOf(req), id, linkId);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

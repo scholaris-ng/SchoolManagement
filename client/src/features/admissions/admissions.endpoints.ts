@@ -2,6 +2,7 @@ import { http } from '@/lib/http';
 import type { ListQuery, Paginated } from '@/types/api';
 import type {
   AdmissionApplication,
+  AdmissionApplicationGuardianLink,
   AdmissionFunnel,
   ApplicationStatus,
   InterviewOutcome,
@@ -15,6 +16,12 @@ export interface TransitionInput {
   screeningScore?: number;
   offeredClassId?: string;
   offerExpiresOn?: string;
+}
+
+export interface LinkApplicationGuardianInput {
+  guardianId: string;
+  relationship: string;
+  isPrimaryContact: boolean;
 }
 
 /** Any field left out is left alone; send `null` to clear one that was set. */
@@ -62,4 +69,16 @@ export const AdmissionEndpoints = {
    */
   convert: (id: string, values: ConversionValues) =>
     http.post<ConversionResult>(`/admissions/${id}/convert`, values),
+
+  /**
+   * Attaches an existing guardian record to the application, before
+   * enrollment — for a family the office already knows. Grants nothing by
+   * itself; portal access, billing and pickup rights still wait for
+   * `convert`.
+   */
+  linkGuardian: (id: string, values: LinkApplicationGuardianInput) =>
+    http.post<AdmissionApplicationGuardianLink>(`/admissions/${id}/guardians`, values),
+
+  unlinkGuardian: (id: string, linkId: string) =>
+    http.delete<void>(`/admissions/${id}/guardians/${linkId}`),
 };

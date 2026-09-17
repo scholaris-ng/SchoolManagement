@@ -106,25 +106,25 @@ export function requireOwnContactDetails(
   }
 }
 
-/** What the office form posts — one applicant, filed by whoever is at the desk. */
-export const admissionFormSchema = z
-  .object({
-    applicantType: z.enum(['GUARDIAN', 'SELF']),
-    sessionId: z.string().min(1, 'Choose the session being applied for'),
-    classId: z.string().min(1, 'Choose the class being applied for'),
-    applicant: applicantSchema,
-    /**
-     * At least one adult, whoever applied. An application with nobody the
-     * school can call is unusable, and an applicant applying for themselves
-     * still names a parent, guardian or next of kin.
-     */
-    contacts: z.array(applicationContactSchema).min(1, 'Add at least one parent or guardian'),
-  })
-  .superRefine((values, context) => {
-    if (values.applicantType === 'SELF') {
-      requireOwnContactDetails(values.applicant, context, ['applicant']);
-    }
-  });
+/**
+ * What the office form posts — one applicant, filed by whoever is at the desk.
+ *
+ * Unlike the public website, staff are always the ones typing this in, on
+ * somebody else's behalf, so there is no "who is applying" question here —
+ * every office application is filed the same way, and always as `GUARDIAN`
+ * server-side. Contacts are optional: the office may open an application
+ * before a family is fully known, and add one or attach an existing guardian
+ * afterwards from the application's own page. The public website's form is
+ * not this one — it has no other way to name an adult, so it still requires
+ * at least one, and still asks who is applying since there it genuinely
+ * varies.
+ */
+export const admissionFormSchema = z.object({
+  sessionId: z.string().min(1, 'Choose the session being applied for'),
+  classId: z.string().min(1, 'Choose the class being applied for'),
+  applicant: applicantSchema,
+  contacts: z.array(applicationContactSchema).max(4, 'Four contacts is the most an application can carry'),
+});
 
 export type AdmissionFormValues = z.infer<typeof admissionFormSchema>;
 
@@ -133,3 +133,15 @@ export const conversionSchema = z.object({
 });
 
 export type ConversionValues = z.infer<typeof conversionSchema>;
+
+/**
+ * Attaching an existing guardian record to an application before enrollment
+ * — mirrors `guardianLinkSchema` in the students feature.
+ */
+export const admissionGuardianLinkSchema = z.object({
+  guardianId: z.string().min(1, 'Select a guardian'),
+  relationship: z.enum(['FATHER', 'MOTHER', 'GUARDIAN', 'SPONSOR', 'OTHER']),
+  isPrimaryContact: z.boolean().default(false),
+});
+
+export type AdmissionGuardianLinkValues = z.infer<typeof admissionGuardianLinkSchema>;

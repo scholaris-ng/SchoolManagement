@@ -28,10 +28,13 @@ import {
   AdmissionApplication,
   type ApplicationContact,
   type ApplicationStatus,
+  type ContactRelationship,
 } from '../entities/admissionApplication.entity';
 import { AdmissionStageEvent } from '../entities/admissionStageEvent.entity';
+import { AdmissionApplicationGuardian } from '../entities/admissionApplicationGuardian.entity';
 import type {
   AdmissionApplicationDTO,
+  AdmissionApplicationGuardianLinkDTO,
   PublicApplicationReceiptDTO,
   PublicOfferDTO,
 } from '../dto/admissions.dto';
@@ -41,6 +44,7 @@ import type {
   ConvertAdmissionInput,
   CreateAdmissionInput,
   FetchAdmissionsQuery,
+  LinkApplicationGuardianInput,
   PublicApplicationInput,
   RespondToOfferInput,
   ScheduleInterviewInput,
@@ -737,6 +741,94 @@ export class AdmissionsService {
     return dto;
   }
 
+  /* -- Guardians linked before enrollment ------------------------------------ */
+
+  /**
+   * Attaches an existing `Guardian` record to an application — a family the
+   * office already knows, such as a sibling already on roll. Unlike
+   * `contacts`, this points at a real row rather than typed-in text, but it
+   * still grants nothing by itself: no portal access, no billing, no
+   * directory listing. Those still wait for `convert`, the same as they do
+   * for a plain contact.
+   */
+  async linkGuardian(
+    context: RequestContext,
+    id: string,
+    input: LinkApplicationGuardianInput,
+  ): Promise<AdmissionApplicationGuardianLinkDTO> {
+    const application = await this.applications.findByIdScoped(context.schoolId, id);
+    if (!application) throw AppError.notFound('Application');
+
+    if (application.convertedStudentId) {
+      throw AppError.conflict(
+        'This applicant has already been enrolled, so the application can no longer be changed.',
+      );
+    }
+
+    const guardian = await AppDataSource.getRepository(Guardian).findOne({
+      where: { id: input.guardianId, schoolId: context.schoolId },
+    });
+    if (!guardian) throw AppError.notFound('Guardian');
+
+    const existing = await this.applications.findGuardianLinkByPair(
+      context.schoolId,
+      id,
+      input.guardianId,
+    );
+    if (existing) {
+      throw AppError.conflict('That guardian is already linked to this application.');
+    }
+
+    const link = await this.applications.createGuardianLink({
+      schoolId: context.schoolId,
+      applicationId: id,
+      guardianId: input.guardianId,
+      relationship: input.relationship,
+      isPrimaryContact: input.isPrimaryContact,
+    });
+
+    if (input.isPrimaryContact) {
+      await this.applications.clearOtherPrimaryGuardianLinks(context.schoolId, id, link.id);
+    }
+
+    await this.audit.record(context, {
+      action: 'admission.guardian_linked',
+      entityType: 'AdmissionApplication',
+      entityId: id,
+      entityLabel: application.applicationNo,
+      after: { guardianId: guardian.id, relationship: input.relationship },
+    });
+
+    const dtos = await this.applications.linkedGuardianDTOsFor(context.schoolId, id);
+    const dto = dtos.find((row) => row.id === link.id);
+    if (!dto) throw AppError.internal();
+    return dto;
+  }
+
+  async unlinkGuardian(context: RequestContext, id: string, linkId: string): Promise<void> {
+    const application = await this.applications.findByIdScoped(context.schoolId, id);
+    if (!application) throw AppError.notFound('Application');
+
+    if (application.convertedStudentId) {
+      throw AppError.conflict(
+        'This applicant has already been enrolled, so the application can no longer be changed.',
+      );
+    }
+
+    const link = await this.applications.findGuardianLink(context.schoolId, linkId);
+    if (!link || link.applicationId !== id) throw AppError.notFound('Guardian link');
+
+    await this.applications.deleteGuardianLink(context.schoolId, linkId);
+
+    await this.audit.record(context, {
+      action: 'admission.guardian_unlinked',
+      entityType: 'AdmissionApplication',
+      entityId: id,
+      entityLabel: application.applicationNo,
+      before: { guardianId: link.guardianId },
+    });
+  }
+
   /* -- Becoming a pupil ------------------------------------------------------ */
 
   /**
@@ -769,6 +861,20 @@ export class AdmissionsService {
     }
     if (application.convertedStudentId) {
       throw AppError.conflict('This applicant has already been enrolled.');
+    }
+
+    const linkedGuardians = await this.applications.linksForApplication(
+      context.schoolId,
+      application.id,
+    );
+    // Contacts are optional up front so an application can be opened before a
+    // family is fully known, but a school with nobody to call about a child
+    // about to be enrolled is a safeguarding gap, not a tidy record — so it is
+    // caught here, at the point that gap would otherwise become permanent.
+    if (application.contacts.length === 0 && linkedGuardians.length === 0) {
+      throw AppError.conflict(
+        'Add a parent, guardian or next of kin to this application before enrolling the applicant.',
+      );
     }
 
     const schoolClass = await AppDataSource.getRepository(SchoolClass).findOne({
@@ -837,6 +943,7 @@ export class AdmissionsService {
         context.schoolId,
         pupil.id,
         application.contacts,
+        linkedGuardians,
       );
 
       await manager.update(
@@ -1102,25 +1209,78 @@ export class AdmissionsService {
   }
 
   /**
-   * Contacts → guardians, once and only once, inside the conversion.
+   * Contacts and linked guardians → real `StudentGuardian` rows, once and
+   * only once, inside the conversion.
    *
-   * Returns the guardians this enrolment should invite to the portal —
-   * every contact who does not already have access, whether their `Guardian`
-   * row is brand new here or an existing one matched by email. A parent
-   * already using the portal for another child is left alone rather than
-   * re-invited. The invitation itself still goes out through `invite()`
-   * once this transaction has committed: it only grants access and sends the
-   * code that proves the address belongs to them, it never hands out a
-   * password, so an account existing early does not mean anyone can read a
-   * child's file before the parent completes that step.
+   * A linked guardian is already a known `Guardian` row, so it is joined to
+   * the new student directly. A plain contact is unverified text, so it is
+   * matched to an existing `Guardian` by email or, failing that, created —
+   * the same as before this method also had linked guardians to consider.
+   * Either way, a person named on both (a linked guardian who also happens
+   * to appear in `contacts` under the same email) is only ever joined once.
+   *
+   * Returns the guardians this enrolment should invite to the portal — every
+   * one of them who does not already have access. A parent already using the
+   * portal for another child is left alone rather than re-invited. The
+   * invitation itself still goes out through `invite()` once this
+   * transaction has committed: it only grants access and sends the code that
+   * proves the address belongs to them, it never hands out a password, so an
+   * account existing early does not mean anyone can read a child's file
+   * before the parent completes that step.
    */
   private async promoteContacts(
     manager: EntityManager,
     schoolId: string,
     studentId: string,
     contacts: ApplicationContact[],
+    linkedGuardians: AdmissionApplicationGuardian[],
   ): Promise<string[]> {
     const guardianIdsToInvite: string[] = [];
+    const joinedGuardianIds = new Set<string>();
+    // Linked guardians and contacts are each normalised to at most one
+    // primary within their own set, but not against each other — so the
+    // first primary seen across both wins, exactly the same rule
+    // `normaliseContacts` already applies within contacts alone.
+    let primaryClaimed = false;
+
+    const join = async (
+      guardian: Guardian,
+      params: { relationship: ContactRelationship; isPrimaryContact: boolean },
+    ) => {
+      if (joinedGuardianIds.has(guardian.id)) return;
+      joinedGuardianIds.add(guardian.id);
+
+      const isPrimaryContact = params.isPrimaryContact && !primaryClaimed;
+      if (isPrimaryContact) primaryClaimed = true;
+      params = { ...params, isPrimaryContact };
+
+      if (!guardian.hasPortalAccess) guardianIdsToInvite.push(guardian.id);
+
+      await manager.save(
+        manager.create(StudentGuardian, {
+          schoolId,
+          studentId,
+          guardianId: guardian.id,
+          relationship: params.relationship,
+          isPrimaryContact: params.isPrimaryContact,
+          isEmergencyContact: params.isPrimaryContact,
+          isFinanciallyResponsible: params.isPrimaryContact,
+          // Who may collect a child is a safeguarding decision the school
+          // makes, not one a form fills in. A parent gets it because the
+          // school already treats a parent that way; anyone else waits for
+          // somebody in the office to say so.
+          canPickUp: params.relationship === 'FATHER' || params.relationship === 'MOTHER',
+        }),
+      );
+    };
+
+    for (const link of linkedGuardians) {
+      const guardian = await manager.findOne(Guardian, {
+        where: { id: link.guardianId, schoolId },
+      });
+      if (!guardian) continue; // Scoped when linked; nothing left to join if it has since gone.
+      await join(guardian, { relationship: link.relationship, isPrimaryContact: link.isPrimaryContact });
+    }
 
     for (const contact of contacts) {
       const existing = await manager.findOne(Guardian, {
@@ -1147,24 +1307,10 @@ export class AdmissionsService {
           }),
         ));
 
-      if (!guardian.hasPortalAccess) guardianIdsToInvite.push(guardian.id);
-
-      await manager.save(
-        manager.create(StudentGuardian, {
-          schoolId,
-          studentId,
-          guardianId: guardian.id,
-          relationship: contact.relationship,
-          isPrimaryContact: contact.isPrimaryContact,
-          isEmergencyContact: contact.isPrimaryContact,
-          isFinanciallyResponsible: contact.isPrimaryContact,
-          // Who may collect a child is a safeguarding decision the school
-          // makes, not one a form fills in. A parent gets it because the
-          // school already treats a parent that way; anyone else waits for
-          // somebody in the office to say so.
-          canPickUp: contact.relationship === 'FATHER' || contact.relationship === 'MOTHER',
-        }),
-      );
+      await join(guardian, {
+        relationship: contact.relationship,
+        isPrimaryContact: contact.isPrimaryContact,
+      });
     }
 
     return guardianIdsToInvite;

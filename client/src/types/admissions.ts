@@ -85,6 +85,25 @@ export interface AdmissionStageEvent {
   note?: string | null;
 }
 
+/**
+ * An existing guardian record attached to the application before enrollment
+ * — a family the office already knows, such as a sibling already on roll.
+ * Distinct from `ApplicationContact`: this points at a real record, but
+ * attaching one still grants nothing by itself until the applicant is
+ * enrolled — no portal access, no billing, no directory listing.
+ */
+export interface AdmissionApplicationGuardianLink {
+  id: string;
+  applicationId: string;
+  guardianId: string;
+  guardianName: string;
+  guardianPhone: string;
+  guardianEmail: string;
+  guardianHasPortalAccess: boolean;
+  relationship: 'FATHER' | 'MOTHER' | 'GUARDIAN' | 'SPONSOR' | 'OTHER';
+  isPrimaryContact: boolean;
+}
+
 export interface AdmissionApplication {
   id: string;
   schoolId: string;
@@ -99,6 +118,7 @@ export interface AdmissionApplication {
   source: ApplicationSource;
   applicant: AdmissionApplicant;
   contacts: ApplicationContact[];
+  linkedGuardians: AdmissionApplicationGuardianLink[];
   documents: AdmissionDocument[];
   status: ApplicationStatus;
   screeningScore?: number | null;

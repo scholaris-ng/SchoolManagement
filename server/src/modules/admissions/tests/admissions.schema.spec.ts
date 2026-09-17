@@ -41,10 +41,20 @@ describe('createAdmissionSchema', () => {
     expect(createAdmissionSchema.safeParse(wrap(valid)).success).toBe(true);
   });
 
-  it('refuses an application with nobody to contact', () => {
-    // A child on the roll with no adult attached leaves the school with nobody
-    // to ring, which is a safeguarding gap rather than an untidy record.
-    expect(createAdmissionSchema.safeParse(wrap({ ...valid, contacts: [] })).success).toBe(false);
+  it('accepts an application taken at the office with nobody to contact yet', () => {
+    // The office may open an application before a family is fully known, and
+    // add a contact or link an existing guardian record afterwards from the
+    // application's own page. `AdmissionsService.convert` is what actually
+    // refuses to enrol an applicant with nobody on record, rather than the
+    // schema refusing to create the application in the first place.
+    expect(createAdmissionSchema.safeParse(wrap({ ...valid, contacts: [] })).success).toBe(true);
+  });
+
+  it('refuses more than four contacts', () => {
+    const tooMany = Array.from({ length: 5 }, () => contact);
+    expect(createAdmissionSchema.safeParse(wrap({ ...valid, contacts: tooMany })).success).toBe(
+      false,
+    );
   });
 
   it('refuses a date of birth in the future', () => {

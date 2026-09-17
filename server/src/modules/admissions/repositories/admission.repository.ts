@@ -1,10 +1,24 @@
-import type { EntityManager } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AdmissionApplication } from '../entities/admissionApplication.entity';
 import type { ApplicationStatus } from '../entities/admissionApplication.entity';
-import type { AdmissionApplicationDTO, AdmissionStageEventDTO } from '../dto/admissions.dto';
+import { AdmissionApplicationGuardian } from '../entities/admissionApplicationGuardian.entity';
+import type {
+  AdmissionApplicationDTO,
+  AdmissionApplicationGuardianLinkDTO,
+  AdmissionStageEventDTO,
+} from '../dto/admissions.dto';
+
+/** Both sides of the join, so the detail screen reads it in one shape. */
+const GUARDIAN_LINK_PROJECTION = `
+  ag.id, ag.application_id AS "applicationId", ag.guardian_id AS "guardianId",
+  concat_ws(' ', NULLIF(g.title, ''), g.first_name, g.last_name) AS "guardianName",
+  g.phone AS "guardianPhone", g.email AS "guardianEmail",
+  g.has_portal_access AS "guardianHasPortalAccess",
+  ag.relationship, ag.is_primary_contact AS "isPrimaryContact"
+`;
 
 /**
  * Every column the client's `AdmissionApplication` needs, assembled in SQL.
@@ -152,7 +166,7 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
     );
 
     const rows: AdmissionApplicationDTO[] = await this.repo.query(
-      `SELECT ${PROJECTION}, '[]'::json AS timeline
+      `SELECT ${PROJECTION}, '[]'::json AS timeline, '[]'::json AS "linkedGuardians"
        ${JOINS}
        WHERE ${whereSql}
        ORDER BY ${SORTABLE[orderBy]} ${direction} NULLS LAST, a.id ASC
@@ -170,7 +184,7 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
    */
   async findOneDTO(schoolId: string, id: string): Promise<AdmissionApplicationDTO | null> {
     const rows: AdmissionApplicationDTO[] = await this.repo.query(
-      `SELECT ${PROJECTION}, '[]'::json AS timeline
+      `SELECT ${PROJECTION}, '[]'::json AS timeline, '[]'::json AS "linkedGuardians"
        ${JOINS}
        WHERE a.school_id = $1 AND a.id = $2 AND a.deleted_at IS NULL`,
       [schoolId, id],
@@ -179,6 +193,7 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
     if (!application) return null;
 
     application.timeline = await this.timelineFor(schoolId, id);
+    application.linkedGuardians = await this.linkedGuardianDTOsFor(schoolId, id);
     return application;
   }
 
@@ -201,6 +216,77 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
        ORDER BY e.occurred_at ASC, e.created_at ASC`,
       [schoolId, applicationId],
     );
+  }
+
+  // ─── Guardians linked before enrollment ────────────────────────────────────
+
+  async linkedGuardianDTOsFor(
+    schoolId: string,
+    applicationId: string,
+  ): Promise<AdmissionApplicationGuardianLinkDTO[]> {
+    return this.repo.query(
+      `SELECT ${GUARDIAN_LINK_PROJECTION}
+       FROM admission_application_guardians ag
+       JOIN guardians g ON g.id = ag.guardian_id AND g.deleted_at IS NULL
+       WHERE ag.school_id = $1 AND ag.application_id = $2
+       ORDER BY ag.is_primary_contact DESC, g.last_name ASC`,
+      [schoolId, applicationId],
+    );
+  }
+
+  /** Plain entities, for the conversion transaction — no display formatting needed there. */
+  async linksForApplication(
+    schoolId: string,
+    applicationId: string,
+    manager?: EntityManager,
+  ): Promise<AdmissionApplicationGuardian[]> {
+    return (manager ?? this.repo.manager)
+      .getRepository(AdmissionApplicationGuardian)
+      .find({ where: { schoolId, applicationId } });
+  }
+
+  async findGuardianLink(schoolId: string, id: string): Promise<AdmissionApplicationGuardian | null> {
+    return this.repo.manager
+      .getRepository(AdmissionApplicationGuardian)
+      .findOne({ where: { schoolId, id } });
+  }
+
+  async findGuardianLinkByPair(
+    schoolId: string,
+    applicationId: string,
+    guardianId: string,
+  ): Promise<AdmissionApplicationGuardian | null> {
+    return this.repo.manager
+      .getRepository(AdmissionApplicationGuardian)
+      .findOne({ where: { schoolId, applicationId, guardianId } });
+  }
+
+  async createGuardianLink(
+    data: DeepPartial<AdmissionApplicationGuardian>,
+  ): Promise<AdmissionApplicationGuardian> {
+    const repo = this.repo.manager.getRepository(AdmissionApplicationGuardian);
+    return repo.save(repo.create(data));
+  }
+
+  /** "Who do we call first" has exactly one answer, so a new primary demotes the old one. */
+  async clearOtherPrimaryGuardianLinks(
+    schoolId: string,
+    applicationId: string,
+    keepId: string,
+  ): Promise<void> {
+    await this.repo.query(
+      `UPDATE admission_application_guardians
+          SET is_primary_contact = FALSE, updated_at = now()
+        WHERE school_id = $1 AND application_id = $2 AND id <> $3 AND is_primary_contact`,
+      [schoolId, applicationId, keepId],
+    );
+  }
+
+  async deleteGuardianLink(schoolId: string, id: string): Promise<boolean> {
+    const result = await this.repo.manager
+      .getRepository(AdmissionApplicationGuardian)
+      .delete({ schoolId, id });
+    return (result.affected ?? 0) > 0;
   }
 
   /**

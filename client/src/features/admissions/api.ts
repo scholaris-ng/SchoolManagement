@@ -5,9 +5,14 @@ import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import type { AdmissionFormValues, ConversionValues } from './schema';
 import { AdmissionEndpoints } from './admissions.endpoints';
-import type { TransitionInput, ConversionResult, ScheduleInterviewInput } from './admissions.endpoints';
+import type {
+  TransitionInput,
+  ConversionResult,
+  LinkApplicationGuardianInput,
+  ScheduleInterviewInput,
+} from './admissions.endpoints';
 
-export type { TransitionInput, ConversionResult, ScheduleInterviewInput };
+export type { TransitionInput, ConversionResult, ScheduleInterviewInput, LinkApplicationGuardianInput };
 
 export function useAdmissions(query: ListQuery) {
   const schoolId = useSchoolId();
@@ -77,6 +82,33 @@ export function useScheduleInterview(id: string) {
     onSuccess: (application) => {
       queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
       toast.success('Interview details saved');
+    },
+  });
+}
+
+/** Attaches an existing guardian record to the application, before enrollment. */
+export function useLinkApplicationGuardian(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: LinkApplicationGuardianInput) => AdmissionEndpoints.linkGuardian(id, values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.detail(schoolId, id) });
+      toast.success('Guardian linked to application');
+    },
+  });
+}
+
+export function useUnlinkApplicationGuardian(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (linkId: string) => AdmissionEndpoints.unlinkGuardian(id, linkId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.detail(schoolId, id) });
+      toast.success('Guardian unlinked');
     },
   });
 }

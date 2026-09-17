@@ -48,6 +48,7 @@ import { StudentEnrollment } from '../../modules/students/entities/studentEnroll
 import { StudentDocument } from '../../modules/students/entities/studentDocument.entity';
 import { AdmissionApplication } from '../../modules/admissions/entities/admissionApplication.entity';
 import { AdmissionStageEvent } from '../../modules/admissions/entities/admissionStageEvent.entity';
+import { AdmissionApplicationGuardian } from '../../modules/admissions/entities/admissionApplicationGuardian.entity';
 import { Guardian } from '../../modules/guardians/entities/guardian.entity';
 import { StudentGuardian } from '../../modules/guardians/entities/studentGuardian.entity';
 import { TeachingAssignment } from '../../modules/staff/entities/teachingAssignment.entity';
@@ -127,6 +128,7 @@ export const entities = [
   StudentGuardian,
   AdmissionApplication,
   AdmissionStageEvent,
+  AdmissionApplicationGuardian,
   FeeItem,
   PaymentDestination,
   Discount,
