@@ -109,6 +109,13 @@ export class FeeStructuresService {
    * "Add all standard fees" on a hand-raised invoice, resolved from whatever
    * structure is written for this pupil's class this term rather than the
    * whole school's fee-item list — see `ResolveFeeStructureResultDTO`.
+   *
+   * Returns every line on the structure, mandatory and optional alike: a
+   * bursar raising one bill by hand is looking at this specific pupil and can
+   * remove a line that does not apply (a day pupil's boarding charge, say)
+   * same as any other line they added by mistake. `isOptional` is passed
+   * through only as a display label for the fee-item dropdown elsewhere on
+   * the page.
    */
   async resolveForStudent(
     context: RequestContext,

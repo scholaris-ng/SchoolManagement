@@ -138,8 +138,8 @@ export function InvoiceEditPage() {
     );
 
   // Reads the actual fee structure written for the student's class this
-  // term, rather than every mandatory item the school has ever defined.
-  const addMandatoryItems = async () => {
+  // term, rather than every fee item the school has ever defined.
+  const addStandardItems = async () => {
     if (!invoice.data) return;
 
     const result = await resolveFeeStructure.mutateAsync({
@@ -160,7 +160,11 @@ export function InvoiceEditPage() {
     // particular structure actually bills to everyone.
     setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
 
-    const mandatoryIds = result.lines.filter((line) => !line.isOptional).map((line) => line.feeItemId);
+    // Every line on the structure, mandatory and optional alike — "Add all
+    // standard fees" means all of them. `isOptional` is only a display label
+    // for the dropdown above; filtering on it here was the bug, since it
+    // silently dropped optional charges the button is supposed to add.
+    const standardIds = result.lines.map((line) => line.feeItemId);
 
     // Adds whatever is missing rather than replacing the list outright — an
     // optional item already on this invoice (from the original bulk run, or
@@ -169,7 +173,7 @@ export function InvoiceEditPage() {
     let added = 0;
     setLines((current) => {
       const existingIds = new Set(current.map((line) => line.feeItemId));
-      const missing = mandatoryIds
+      const missing = standardIds
         .filter((feeItemId) => !existingIds.has(feeItemId))
         .map((feeItemId) => {
           const item = items.find((entry) => entry.id === feeItemId);
@@ -322,7 +326,7 @@ export function InvoiceEditPage() {
                   data-cy="finance-invoice-edit-add-all-standard-fees"
                   variant="outline"
                   size="sm"
-                  onClick={() => void addMandatoryItems()}
+                  onClick={() => void addStandardItems()}
                   loading={resolveFeeStructure.isPending}
                 >
                   Add all standard fees

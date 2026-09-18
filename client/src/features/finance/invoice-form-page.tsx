@@ -117,10 +117,10 @@ export function InvoiceFormPage() {
   };
 
   // Reads the actual fee structure written for the student's class this
-  // term, rather than every mandatory item the school has ever defined — a
-  // school with separate Primary and Secondary charges should not see both
-  // added to a Primary pupil's bill.
-  const addMandatoryItems = async () => {
+  // term, rather than every fee item the school has ever defined — a school
+  // with separate Primary and Secondary charges should not see both added
+  // to a Primary pupil's bill.
+  const addStandardItems = async () => {
     if (!student) {
       toast.error('Choose the student first');
       return;
@@ -148,7 +148,13 @@ export function InvoiceFormPage() {
     // particular structure actually bills to everyone.
     setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
 
-    const mandatoryIds = result.lines.filter((line) => !line.isOptional).map((line) => line.feeItemId);
+    // Every line on the structure, mandatory and optional alike — "Add all
+    // standard fees" means all of them. `isOptional` is only a display label
+    // for the dropdown above; filtering on it here was the bug, since it
+    // silently dropped optional charges (transport, boarding) the button is
+    // supposed to add. A line that does not apply to this pupil is the
+    // bursar's to remove, same as any other line added by mistake.
+    const standardIds = result.lines.map((line) => line.feeItemId);
 
     // Adds whatever is missing rather than replacing the list outright — a
     // line already on the invoice (an optional item the bursar added by
@@ -157,7 +163,7 @@ export function InvoiceFormPage() {
     let added = 0;
     setLines((current) => {
       const existingIds = new Set(current.map((line) => line.feeItemId));
-      const missing = mandatoryIds
+      const missing = standardIds
         .filter((feeItemId) => !existingIds.has(feeItemId))
         .map((feeItemId) => ({
           feeItemId,
@@ -344,7 +350,7 @@ export function InvoiceFormPage() {
                 data-cy="finance-invoice-form-add-all-standard-fees"
                 variant="outline"
                 size="sm"
-                onClick={() => void addMandatoryItems()}
+                onClick={() => void addStandardItems()}
                 loading={resolveFeeStructure.isPending}
               >
                 Add all standard fees
