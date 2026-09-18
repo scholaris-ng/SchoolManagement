@@ -188,6 +188,13 @@ export class LedgerRepository {
    * The payment's own id is included explicitly alongside the timestamp
    * comparison: two credits recorded in the same second would otherwise make
    * the receipt's own payment a coin toss to include.
+   *
+   * An invoice counts as billed if it was issued by then *or* if a payment
+   * counted below is allocated to it. A payment dated before the invoice it
+   * settles (a desk entry backdated to when the money actually arrived) would
+   * otherwise be subtracted from a bill this query never added, printing a
+   * negative "balance after" for a family that owes nothing — or, for a
+   * part-payment, understating what is still owed.
    */
   async balanceAsOf(
     schoolId: string,
@@ -201,7 +208,17 @@ export class LedgerRepository {
            SELECT SUM(i.subtotal) AS billed, SUM(i.discount_total) AS discount
              FROM invoices i
             WHERE i.school_id = $1 AND i.student_id = $2 AND ${REAL_INVOICE}
-              AND i.issue_date <= $3::date
+              AND (
+                i.issue_date <= $3::date
+                OR EXISTS (
+                  SELECT 1
+                    FROM payment_allocations pa
+                    JOIN payments pay2 ON pay2.id = pa.payment_id
+                   WHERE pa.invoice_id = i.id
+                     AND pay2.status = 'SUCCESSFUL'
+                     AND (pay2.paid_at <= $3::timestamptz OR pay2.id = $4::uuid)
+                )
+              )
          ) b
          CROSS JOIN (
            SELECT SUM(pay.amount) AS paid

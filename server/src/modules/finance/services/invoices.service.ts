@@ -193,6 +193,11 @@ export class InvoicesService {
       throw AppError.validation('Add an email address for this guardian first.');
     }
 
+    // Two different addresses on purpose: the school's own record routes the
+    // send (see `SendArgs.schoolEmail`), while the contact address it may have
+    // published on its website is what a parent is told to write to.
+    const school = await this.schools.findById(context.schoolId);
+
     await sendInvoiceEmail({
       to: guardian.email,
       firstName: guardian.firstName,
@@ -200,7 +205,7 @@ export class InvoicesService {
       schoolLogoUrl: invoice.schoolLogoUrl,
       schoolAddress: invoice.schoolAddress,
       schoolPhone: invoice.schoolPhone,
-      schoolEmail: invoice.schoolEmail,
+      schoolEmail: school?.email,
       studentName: invoice.studentName,
       admissionNo: invoice.admissionNo,
       className: invoice.className,

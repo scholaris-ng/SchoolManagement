@@ -10,6 +10,7 @@ import { sendReceiptEmail } from '../../../shared/utils/mailer';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
+import { WebsiteService } from '../../school/services/website.service';
 import { StudentRepository } from '../../students/repositories/student.repository';
 import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { GuardianRepository } from '../../guardians/repositories/guardian.repository';
@@ -67,6 +68,7 @@ export class PaymentsService {
     private readonly ledger = LedgerRepository.Instance,
     private readonly students = StudentRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
+    private readonly websites = WebsiteService.Instance,
     private readonly guardians = GuardianRepository.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly raven = RavenClient.Instance,
@@ -110,16 +112,23 @@ export class PaymentsService {
       throw AppError.validation('Add an email address for this guardian first.');
     }
 
-    const school = await this.schools.findById(context.schoolId);
+    const [school, website] = await Promise.all([
+      this.schools.findById(context.schoolId),
+      this.websites.getForSchool(context.schoolId),
+    ]);
     if (!school) throw AppError.internal();
 
+    // The same contact details `InvoicesService.fetchInvoice` gives an
+    // invoice — the school's published website contact where it has one, its
+    // own record otherwise — so a family reads one address on both. The
+    // school's own email still routes the send (see `SendArgs.schoolEmail`).
     await sendReceiptEmail({
       to: guardian.email,
       firstName: guardian.firstName,
       schoolName: receipt.schoolName,
       schoolLogoUrl: receipt.schoolLogoUrl,
-      schoolAddress: receipt.schoolAddress,
-      schoolPhone: school.phone,
+      schoolAddress: website.address || receipt.schoolAddress,
+      schoolPhone: website.contactPhone || school.phone,
       schoolEmail: school.email,
       studentName: receipt.studentName,
       admissionNo: receipt.admissionNo,
@@ -134,8 +143,16 @@ export class PaymentsService {
       allocations: receipt.allocations,
       balanceAfter: receipt.balanceAfter,
       verificationCode: receipt.verificationCode,
-      contactEmail: school.email,
+      contactEmail: website.contactEmail || school.email,
       includeCharges: input.includeCharges,
+    });
+
+    await this.audit.record(context, {
+      action: 'receipt.emailed',
+      entityType: 'Payment',
+      entityId: receipt.paymentId,
+      entityLabel: `${receipt.receiptNo} · ${receipt.studentName}`,
+      after: { guardianId: input.guardianId, email: guardian.email },
     });
 
     return { sent: true, email: guardian.email };
