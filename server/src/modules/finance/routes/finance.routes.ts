@@ -42,6 +42,7 @@ import {
   receiptParamSchema,
   reconcilePaymentSchema,
   recordPaymentSchema,
+  sendReceiptEmailSchema,
   studentIdParamSchema,
 } from '../validators/payments.schema';
 import {
@@ -368,6 +369,13 @@ router.get(
   authorise('finance.read', 'payment.manage'),
   validate(receiptParamSchema),
   PaymentsController.receipt,
+);
+
+router.post(
+  '/receipts/:paymentId/email',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(sendReceiptEmailSchema),
+  PaymentsController.sendReceiptEmail,
 );
 
 router.get(

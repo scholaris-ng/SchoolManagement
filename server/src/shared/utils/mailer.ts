@@ -1316,3 +1316,235 @@ export async function sendInvoiceEmail(params: {
     ].join('\n'),
   });
 }
+
+async function buildReceiptPdfAttachment(params: {
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  receiptNo: string;
+  paymentId: string;
+  amount: number;
+  amountInWords: string;
+  method: string;
+  paidAt: string;
+  receivedByName: string;
+  allocations: Array<{
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+  }>;
+  balanceAfter: number;
+  verificationCode: string;
+  includeCharges: boolean;
+}): Promise<Buffer> {
+  return new Promise<Buffer>(async (resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50, layout: 'portrait' });
+    const chunks: Buffer[] = [];
+    const amount = formatNaira(params.amount);
+    const logoImage = await resolveInvoiceLogoAsset(params.schoolLogoUrl);
+    const bg = '#0f172a';
+    const primary = '#1d4ed8';
+    const muted = '#64748b';
+    const border = '#d1d5db';
+    const width = 595.28;
+    const left = 50;
+
+    doc.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+    doc.fillColor(primary).rect(0, 0, width, 78).fill();
+    if (logoImage) {
+      try {
+        doc.image(logoImage, 18, 17, { fit: [42, 42] });
+      } catch {
+        // ignore invalid payloads
+      }
+    }
+    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text(params.schoolName, 72, 16, { width: 300 });
+    if (params.schoolAddress) {
+      doc.fillColor('#dbeafe').fontSize(9).font('Helvetica').text(params.schoolAddress, 72, 44, { width: 300 });
+    }
+    const contactLine = [params.schoolPhone, params.schoolEmail].filter(Boolean).join(' · ');
+    if (contactLine) {
+      doc.fillColor('#dbeafe').fontSize(8).font('Helvetica').text(contactLine, 72, 58, { width: 340 });
+    }
+    doc.fillColor('#e0f2fe').fontSize(12).font('Helvetica-Bold').text('RECEIPT', 430, 16, { align: 'right', width: 110 });
+    doc.fillColor('#f8fafc').fontSize(9).font('Helvetica').text(params.receiptNo, 420, 32, { align: 'right', width: 120 });
+
+    const contentY = 110;
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('RECEIVED FROM', left, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(params.studentName, left, contentY + 18, { width: 220 });
+    doc.fillColor(muted).fontSize(10).font('Helvetica').text(`${params.admissionNo} · ${params.className ?? '—'}`, left, contentY + 36, { width: 220 });
+
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('DATE', left + 250, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(new Date(params.paidAt).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' }), left + 250, contentY + 18, { width: 170 });
+
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('METHOD', left + 410, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(params.method, left + 410, contentY + 18, { width: 110 });
+
+    doc.fillColor(primary).rect(left, 165, 495, 28).fill();
+    doc.fillColor('#ffffff').fontSize(12).font('Helvetica-Bold').text('AMOUNT RECEIVED', left + 12, 172);
+    doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold').text(amount, left + 360, 170, { width: 120, align: 'right' });
+
+    doc.fillColor(bg).fontSize(10).font('Helvetica').text(`In words: ${params.amountInWords}`, left, 205, { width: 480 });
+
+    let y = 240;
+    if (params.allocations.length > 0) {
+      doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text('APPLIED TO', left, y);
+      y += 20;
+      for (const allocation of params.allocations) {
+        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(allocation.invoiceNo, left, y);
+        doc.fillColor(bg).fontSize(9).font('Helvetica').text(allocation.description, left + 120, y, { width: 230 });
+        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(formatNaira(allocation.amount), left + 380, y, { width: 90, align: 'right' });
+        y += 18;
+        if (params.includeCharges && allocation.lines.length > 0) {
+          for (const line of allocation.lines) {
+            doc.fillColor(muted).fontSize(8).font('Helvetica').text(`${line.description}${line.isOptional ? ' (optional)' : ''}`, left + 18, y, { width: 260 });
+            doc.fillColor(muted).fontSize(8).font('Helvetica').text(formatNaira(line.amount), left + 380, y, { width: 90, align: 'right' });
+            y += 14;
+          }
+        }
+        y += 8;
+        doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
+        y += 10;
+      }
+    }
+
+    doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text('BALANCE AFTER THIS PAYMENT', left, y + 10);
+    doc.fillColor(params.balanceAfter > 0 ? '#dc2626' : '#16a34a').fontSize(12).font('Helvetica-Bold').text(formatNaira(params.balanceAfter), left + 330, y + 8, { width: 150, align: 'right' });
+
+    doc.fillColor(muted).fontSize(9).font('Helvetica').text(`Verification code: ${params.verificationCode}`, left, y + 38, { width: 250 });
+    doc.fillColor(muted).fontSize(9).font('Helvetica').text(`Received by: ${params.receivedByName}`, left + 250, y + 38, { width: 220 });
+
+    if (params.includeCharges && params.allocations.some((allocation) => allocation.lines.length > 0)) {
+      doc.fillColor(primary).rect(left, 675, 495, 20).fill();
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold').text('INVOICE CHARGES INCLUDED', left + 12, 680);
+    }
+
+    doc.end();
+  });
+}
+
+export async function sendReceiptEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail?: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  receiptNo: string;
+  paymentId: string;
+  amount: number;
+  amountInWords: string;
+  method: string;
+  paidAt: string;
+  receivedByName: string;
+  allocations: Array<{
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+  }>;
+  balanceAfter: number;
+  verificationCode: string;
+  contactEmail: string;
+  includeCharges: boolean;
+}): Promise<void> {
+  const { to, firstName, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, studentName, admissionNo, className, receiptNo, paymentId, amount, amountInWords, method, paidAt, receivedByName, allocations, balanceAfter, verificationCode, contactEmail, includeCharges } = params;
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+  const student = escapeHtml(studentName);
+  const receiptPdf = await buildReceiptPdfAttachment({
+    schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
+    schoolEmail: schoolEmail ?? contactEmail,
+    studentName,
+    admissionNo,
+    className,
+    receiptNo,
+    paymentId,
+    amount,
+    amountInWords,
+    method,
+    paidAt,
+    receivedByName,
+    allocations,
+    balanceAfter,
+    verificationCode,
+    includeCharges,
+  });
+
+  const rows: [string, string][] = [
+    ['Student', student],
+    ['Receipt', escapeHtml(receiptNo)],
+    ['Amount', escapeHtml(formatNaira(amount))],
+    ['Paid', escapeHtml(new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' }).format(new Date(paidAt)))],
+    ['Balance after', escapeHtml(formatNaira(balanceAfter))],
+    ['Verification code', escapeHtml(verificationCode)],
+  ];
+
+  const body = [
+    heading(`Receipt ${escapeHtml(receiptNo)}`),
+    paragraph(`Hello ${name}, thank you for paying ${student}'s school fee. <strong>${school}</strong> has attached the receipt below.`),
+    infoBox(rows),
+    includeCharges && allocations.some((allocation) => allocation.lines.length > 0)
+      ? paragraph('Invoice charges included in this receipt:')
+      : '',
+    includeCharges && allocations.some((allocation) => allocation.lines.length > 0)
+      ? infoBox(
+          allocations.flatMap((allocation): [string, string][] =>
+            allocation.lines.map(
+              (line): [string, string] => [
+                escapeHtml(allocation.invoiceNo),
+                escapeHtml(`${line.description}${line.isOptional ? ' (optional)' : ''} — ${formatNaira(line.amount)}`),
+              ],
+            ),
+          ),
+        )
+      : '',
+    footnote(`Questions about this payment? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    schoolEmail,
+    subject: `Receipt ${receiptNo} — ${schoolName} — Scholaris`,
+    html: emailLayout(body, `${studentName}'s payment receipt is attached.`),
+    attachments: [
+      {
+        filename: `receipt-${receiptNo}.pdf`,
+        content: receiptPdf,
+        contentType: 'application/pdf',
+      },
+    ],
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `This is the receipt for ${studentName}'s payment to ${schoolName}.`,
+      '',
+      `Receipt: ${receiptNo}`,
+      `Amount: ${formatNaira(amount)}`,
+      `Paid: ${new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' }).format(new Date(paidAt))}`,
+      `Balance after: ${formatNaira(balanceAfter)}`,
+      `Verification code: ${verificationCode}`,
+      ...(includeCharges && allocations.some((allocation) => allocation.lines.length > 0)
+        ? ['', 'Invoice charges included:', ...allocations.flatMap((allocation) => allocation.lines.map((line) => `${allocation.invoiceNo}: ${line.description}${line.isOptional ? ' (optional)' : ''} — ${formatNaira(line.amount)}`))]
+        : []),
+      '',
+      `Questions? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}

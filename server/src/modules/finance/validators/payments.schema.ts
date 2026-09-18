@@ -82,6 +82,16 @@ export const receiptParamSchema = z.object({
   params: z.object({ paymentId: z.string().uuid() }),
 });
 
+export const sendReceiptEmailSchema = z.object({
+  params: z.object({ paymentId: z.string().uuid() }),
+  body: z
+    .object({
+      guardianId: z.string().uuid('Choose the guardian this receipt is for'),
+      includeCharges: z.boolean().default(false),
+    })
+    .strict(),
+});
+
 /**
  * Asking Raven for an account number a family can pay a specific bill into.
  * The amount is the whole of what is being asked for: Raven ties the account
@@ -140,5 +150,6 @@ export const ravenWebhookSchema = z.object({
 export type FetchPaymentsQuery = z.infer<typeof fetchPaymentsSchema>['query'];
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>['body'];
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>['body'];
+export type SendReceiptEmailInput = z.infer<typeof sendReceiptEmailSchema>['body'];
 export type CreatePaymentAccountInput = z.infer<typeof createPaymentAccountSchema>['body'];
 export type RavenWebhookBody = z.infer<typeof ravenWebhookSchema>['body'];

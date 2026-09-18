@@ -6,6 +6,7 @@ import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { amountInWords } from '../../../shared/utils/numberToWords';
+import { sendReceiptEmail } from '../../../shared/utils/mailer';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
@@ -89,6 +90,57 @@ export class PaymentsService {
     return this.payments.fetchAccountsForStudent(context.schoolId, studentId);
   }
 
+  async emailReceipt(
+    context: RequestContext,
+    paymentId: string,
+    input: { guardianId: string; includeCharges: boolean },
+  ): Promise<{ sent: boolean; email: string }> {
+    const receipt = await this.fetchReceipt(context, paymentId);
+    if (!receipt.studentId) {
+      throw AppError.validation('This payment is not linked to a student record.');
+    }
+
+    const link = await this.guardians.findLinkByPair(context.schoolId, receipt.studentId, input.guardianId);
+    if (!link) {
+      throw AppError.validation('That guardian is not linked to this student.');
+    }
+
+    const guardian = await this.guardians.findByIdScoped(context.schoolId, input.guardianId);
+    if (!guardian || !guardian.email) {
+      throw AppError.validation('Add an email address for this guardian first.');
+    }
+
+    const school = await this.schools.findById(context.schoolId);
+    if (!school) throw AppError.internal();
+
+    await sendReceiptEmail({
+      to: guardian.email,
+      firstName: guardian.firstName,
+      schoolName: receipt.schoolName,
+      schoolLogoUrl: receipt.schoolLogoUrl,
+      schoolAddress: receipt.schoolAddress,
+      schoolPhone: school.phone,
+      schoolEmail: school.email,
+      studentName: receipt.studentName,
+      admissionNo: receipt.admissionNo,
+      className: receipt.className,
+      receiptNo: receipt.receiptNo,
+      paymentId: receipt.paymentId,
+      amount: receipt.amount,
+      amountInWords: receipt.amountInWords,
+      method: receipt.method,
+      paidAt: receipt.paidAt,
+      receivedByName: receipt.receivedByName,
+      allocations: receipt.allocations,
+      balanceAfter: receipt.balanceAfter,
+      verificationCode: receipt.verificationCode,
+      contactEmail: school.email,
+      includeCharges: input.includeCharges,
+    });
+
+    return { sent: true, email: guardian.email };
+  }
+
   /**
    * The printable receipt.
    *
@@ -141,6 +193,7 @@ export class PaymentsService {
       id: entity.id,
       receiptNo: payment.reference,
       paymentId: entity.id,
+      studentId: payment.studentId ?? student?.id ?? '',
       schoolName: school.name,
       schoolLogoUrl: school.branding?.logoUrl ?? null,
       schoolAddress: [school.addressLine1, school.addressLine2, school.city, school.state]

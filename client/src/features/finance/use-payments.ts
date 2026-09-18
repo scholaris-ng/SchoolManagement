@@ -101,6 +101,16 @@ export function useReceipt(paymentId: string | undefined) {
   });
 }
 
+export function useSendReceiptEmail(paymentId: string) {
+  return useMutation({
+    mutationFn: ({ guardianId, includeCharges }: { guardianId: string; includeCharges: boolean }) =>
+      FinanceEndpoints.sendReceiptEmail(paymentId, guardianId, includeCharges),
+    onSuccess: (result) => {
+      toast.success('Receipt emailed', { description: result.email });
+    },
+  });
+}
+
 export function useDebtors(query: ListQuery) {
   const schoolId = useSchoolId();
   return useQuery({
