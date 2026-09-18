@@ -37,6 +37,16 @@ export interface WebhookOutcome {
 }
 
 /**
+ * A receipt is a proof of payment, not the raw ledger. A genuine overpayment can
+ * leave the school with a negative student balance in the ledger, but customers
+ * should not be told the receipt itself leaves them in the red.
+ */
+export function clampReceiptBalance(balance: number): number {
+  if (!Number.isFinite(balance)) return 0;
+  return Math.max(0, balance);
+}
+
+/**
  * Money arriving through Raven (spec section 27).
  *
  * Two halves. The office asks for a collection account — a bank account number
@@ -159,7 +169,7 @@ export class PaymentsService {
           })),
         };
       }),
-      balanceAfter,
+      balanceAfter: clampReceiptBalance(balanceAfter),
       verificationCode: entity.verificationCode,
     };
   }
