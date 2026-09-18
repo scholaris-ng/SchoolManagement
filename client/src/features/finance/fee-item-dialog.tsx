@@ -51,7 +51,7 @@ export function FeeItemDialog({
     (state.item?.accounts ?? []).map((account) => account.id),
   );
 
-  const valid = name.trim() && code.trim() && Number(amount) > 0;
+  const valid = name.trim() && Number(amount) > 0;
 
   const toggleDestination = (id: string) =>
     setPaymentDestinationIds((current) =>
@@ -83,10 +83,14 @@ export function FeeItemDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="fee-code" required>
-              Code
-            </Label>
-            <Input data-cy="fee-code" id="fee-code" value={code} onChange={(event) => setCode(event.target.value)} />
+            <Label htmlFor="fee-code">Code</Label>
+            <Input
+              data-cy="fee-code"
+              id="fee-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="Optional"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fee-amount" required>
@@ -198,7 +202,7 @@ export function FeeItemDialog({
             onClick={() =>
               void onSave({
                 name: name.trim(),
-                code: code.trim().toUpperCase(),
+                code: code.trim() ? code.trim().toUpperCase() : null,
                 amount: Number(amount),
                 category: category as FeeItem['category'],
                 description: description.trim() || null,

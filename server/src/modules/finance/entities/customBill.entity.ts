@@ -4,7 +4,9 @@ import { School } from '../../school/entities/school.entity';
 
 export interface CustomBillLine {
   description: string;
+  /** Per-unit price — the line totals `amount * quantity`. */
   amount: number;
+  quantity: number;
 }
 
 /**

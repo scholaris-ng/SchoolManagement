@@ -20,9 +20,10 @@ import {
 interface LineDraft {
   description: string;
   amount: string;
+  quantity: string;
 }
 
-const BLANK_LINE: LineDraft = { description: '', amount: '' };
+const BLANK_LINE: LineDraft = { description: '', amount: '', quantity: '1' };
 
 /**
  * A bill for whoever or whatever falls outside the real invoicing system —
@@ -53,7 +54,11 @@ export function CustomBillDialog({
   const [note, setNote] = useState(existing?.note ?? '');
   const [lines, setLines] = useState<LineDraft[]>(
     existing && existing.lines.length > 0
-      ? existing.lines.map((line) => ({ description: line.description, amount: String(line.amount) }))
+      ? existing.lines.map((line) => ({
+          description: line.description,
+          amount: String(line.amount),
+          quantity: String(line.quantity ?? 1),
+        }))
       : [{ ...BLANK_LINE }],
   );
 
@@ -74,8 +79,13 @@ export function CustomBillDialog({
     );
 
   const currency = 'NGN';
-  const total = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
-  const validLines = lines.filter((line) => line.description.trim() && Number(line.amount) > 0);
+  const total = lines.reduce(
+    (sum, line) => sum + (Number(line.amount) || 0) * (Number(line.quantity) || 1),
+    0,
+  );
+  const validLines = lines.filter(
+    (line) => line.description.trim() && Number(line.amount) > 0 && Number(line.quantity) >= 1,
+  );
   const valid = Boolean(payerName.trim() && validLines.length > 0);
 
   return (
@@ -109,41 +119,75 @@ export function CustomBillDialog({
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Charges</legend>
             <ul className="space-y-2">
-              {lines.map((line, index) => (
-                <li key={index} className="flex items-end gap-2">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    {index === 0 && <Label htmlFor={`bill-line-description-${index}`}>Description</Label>}
-                    <Input
-                      data-cy="custom-bill-line-description"
-                      id={`bill-line-description-${index}`}
-                      value={line.description}
-                      onChange={(event) => patchLine(index, { description: event.target.value })}
-                      placeholder="e.g. Plumbing repairs"
-                    />
-                  </div>
-                  <div className="w-36 space-y-1.5">
-                    {index === 0 && <Label htmlFor={`bill-line-amount-${index}`}>Amount</Label>}
-                    <Input
-                      data-cy="custom-bill-line-amount"
-                      id={`bill-line-amount-${index}`}
-                      type="number"
-                      min={0}
-                      value={line.amount}
-                      onChange={(event) => patchLine(index, { amount: event.target.value })}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeLine(index)}
-                    disabled={lines.length === 1}
-                    aria-label={`Remove ${line.description || `charge ${index + 1}`}`}
-                  >
-                    <Trash2 />
-                  </Button>
-                </li>
-              ))}
+              {lines.map((line, index) => {
+                const quantity = Number(line.quantity) || 1;
+                const lineTotal = (Number(line.amount) || 0) * quantity;
+                return (
+                  <li key={index} className="space-y-1">
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        {index === 0 && (
+                          <Label htmlFor={`bill-line-description-${index}`}>Description</Label>
+                        )}
+                        <Input
+                          data-cy="custom-bill-line-description"
+                          id={`bill-line-description-${index}`}
+                          value={line.description}
+                          onChange={(event) => patchLine(index, { description: event.target.value })}
+                          placeholder="e.g. Plumbing repairs"
+                        />
+                      </div>
+                      <div className="w-20 space-y-1.5">
+                        {index === 0 && <Label htmlFor={`bill-line-quantity-${index}`}>Qty</Label>}
+                        <Input
+                          data-cy="custom-bill-line-quantity"
+                          id={`bill-line-quantity-${index}`}
+                          type="number"
+                          min={1}
+                          max={9999}
+                          value={line.quantity}
+                          onChange={(event) => {
+                            const value = Math.max(
+                              1,
+                              Math.min(9999, Math.round(Number(event.target.value)) || 1),
+                            );
+                            patchLine(index, { quantity: String(value) });
+                          }}
+                        />
+                      </div>
+                      <div className="w-32 space-y-1.5">
+                        {index === 0 && (
+                          <Label htmlFor={`bill-line-amount-${index}`}>Unit amount</Label>
+                        )}
+                        <Input
+                          data-cy="custom-bill-line-amount"
+                          id={`bill-line-amount-${index}`}
+                          type="number"
+                          min={0}
+                          value={line.amount}
+                          onChange={(event) => patchLine(index, { amount: event.target.value })}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeLine(index)}
+                        disabled={lines.length === 1}
+                        aria-label={`Remove ${line.description || `charge ${index + 1}`}`}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                    {quantity > 1 && (
+                      <p className="text-right text-xs text-muted-foreground">
+                        {quantity} × {formatCurrency(Number(line.amount) || 0, currency, { showDecimals: false })} ={' '}
+                        {formatCurrency(lineTotal, currency, { showDecimals: false })}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <Button type="button" variant="outline" size="sm" onClick={addLine}>
               <Plus />
@@ -221,6 +265,7 @@ export function CustomBillDialog({
                 lines: validLines.map((line) => ({
                   description: line.description.trim(),
                   amount: Number(line.amount),
+                  quantity: Math.max(1, Math.round(Number(line.quantity)) || 1),
                 })),
                 // Sent even when empty — `undefined` here would drop the key
                 // from the request body entirely, and the server reads an

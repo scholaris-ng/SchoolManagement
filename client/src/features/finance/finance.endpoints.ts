@@ -44,7 +44,7 @@ export interface PaymentDestinationInput {
  */
 export interface FeeItemInput {
   name: string;
-  code: string;
+  code?: string | null;
   description?: string | null;
   amount: number;
   category: FeeItem['category'];
@@ -158,7 +158,7 @@ export interface GenerateInvoicesInput {
  */
 export interface CustomBillInput {
   payerName: string;
-  lines: { description: string; amount: number }[];
+  lines: { description: string; amount: number; quantity: number }[];
   note?: string;
   /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
   paymentDestinationIds?: string[];

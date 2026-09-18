@@ -32,7 +32,7 @@ export interface FeeItem {
   id: string;
   schoolId: string;
   name: string;
-  code: string;
+  code: string | null;
   description?: string | null;
   amount: number;
   category: 'TUITION' | 'TRANSPORT' | 'BOARDING' | 'UNIFORM' | 'EXAM' | 'DEVELOPMENT' | 'OTHER';
@@ -203,10 +203,11 @@ export interface Invoice {
   schoolEmail: string;
 }
 
-/** One charge on a custom bill. */
+/** One charge on a custom bill. `amount` is the per-unit price; the line totals `amount * quantity`. */
 export interface CustomBillLine {
   description: string;
   amount: number;
+  quantity: number;
 }
 
 /**

@@ -132,9 +132,16 @@ export function CustomBillPrintPage() {
               <tbody className="divide-y divide-border">
                 {record.lines.map((line, index) => (
                   <tr key={index}>
-                    <td className="px-3 py-2">{line.description}</td>
+                    <td className="px-3 py-2">
+                      {line.description}
+                      {line.quantity > 1 && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          × {line.quantity} ({formatCurrency(line.amount, currency, { showDecimals: false })} each)
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">
-                      {formatCurrency(line.amount, currency, { showDecimals: false })}
+                      {formatCurrency(line.amount * line.quantity, currency, { showDecimals: false })}
                     </td>
                   </tr>
                 ))}

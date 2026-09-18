@@ -4,6 +4,7 @@ import { Coins, Copy, Landmark, Percent, Plus, Printer, ReceiptText, Trash2 } fr
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
+import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
 import {
   useDeleteFeeItems,
@@ -29,6 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/primitives';
+import { Pagination } from '@/components/data/pagination';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState, LoadingState } from '@/components/ui/feedback';
@@ -57,7 +59,8 @@ export function FeesPage() {
   const { can } = useAuth();
   const [tab, setTab] = useState<Tab>('items');
 
-  const feeItems = useFeeItems();
+  const feeItemsList = useListQuery({ namespace: 'items', defaultPageSize: 20 });
+  const feeItems = useFeeItems(feeItemsList.query);
   const structures = useFeeStructures();
   const discounts = useDiscounts();
   const paymentDestinations = usePaymentDestinations();
@@ -258,7 +261,9 @@ export function FeesPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">
                           {item.name}
-                          <span className="font-normal text-muted-foreground"> · {item.code}</span>
+                          {item.code && (
+                            <span className="font-normal text-muted-foreground"> · {item.code}</span>
+                          )}
                         </p>
                         <p className="truncate text-xs text-muted-foreground">
                           {item.description ?? humanizeEnum(item.category)}
@@ -298,6 +303,14 @@ export function FeesPage() {
                     </li>
                   ))}
                 </ul>
+                {feeItems.data?.meta && (
+                  <Pagination
+                    meta={feeItems.data.meta}
+                    onPageChange={feeItemsList.setPage}
+                    onPageSizeChange={feeItemsList.setPageSize}
+                    isFetching={feeItems.isFetching}
+                  />
+                )}
               </>
             )}
           </CardContent>

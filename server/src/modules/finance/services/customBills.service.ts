@@ -154,7 +154,10 @@ export class CustomBillsService {
 }
 
 /** Summed in kobo, like every other money total in this module, then back to a fixed string. */
-function totalOf(lines: { amount: number }[]): string {
-  const kobo = lines.reduce((sum, line) => sum + Math.round(line.amount * MONEY_SCALE), 0);
+function totalOf(lines: { amount: number; quantity: number }[]): string {
+  const kobo = lines.reduce(
+    (sum, line) => sum + Math.round(line.amount * line.quantity * MONEY_SCALE),
+    0,
+  );
   return (kobo / MONEY_SCALE).toFixed(2);
 }

@@ -16,7 +16,10 @@ function toDTO(row: CustomBill, accounts: PaymentDestinationDTO[]): CustomBillDT
     id: row.id,
     schoolId: row.schoolId,
     payerName: row.payerName,
-    lines: row.lines,
+    // A bill saved before `quantity` existed has none in its stored JSON —
+    // default it to 1 here, the one place a row becomes a DTO, rather than
+    // in every screen that reads a line.
+    lines: row.lines.map((line) => ({ ...line, quantity: line.quantity ?? 1 })),
     total: Number(row.total),
     note: row.note,
     accounts,

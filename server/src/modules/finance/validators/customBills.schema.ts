@@ -6,7 +6,9 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../../config/constants';
 const customBillLine = z
   .object({
     description: z.string().trim().min(1, 'Give this charge a description').max(200),
+    /** Per-unit price — the line totals `amount * quantity`, computed server-side in `totalOf`. */
     amount: z.coerce.number().min(0, 'An amount cannot be negative'),
+    quantity: z.coerce.number().int().min(1, 'A quantity must be at least 1').max(9999).default(1),
   })
   .strict();
 

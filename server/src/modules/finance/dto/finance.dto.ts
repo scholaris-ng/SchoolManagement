@@ -40,7 +40,7 @@ export interface FeeItemDTO {
   id: string;
   schoolId: string;
   name: string;
-  code: string;
+  code: string | null;
   description: string | null;
   amount: number;
   category: FeeCategory;
@@ -375,7 +375,9 @@ export interface PaymentReceiptDTO {
 /** One charge on a custom bill. Mirrors `CustomBillLine` on the client. */
 export interface CustomBillLineDTO {
   description: string;
+  /** Per-unit price — the line totals `amount * quantity`. */
   amount: number;
+  quantity: number;
 }
 
 /**

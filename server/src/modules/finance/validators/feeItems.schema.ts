@@ -7,9 +7,10 @@ const feeItemBody = z.object({
   code: z
     .string()
     .trim()
-    .min(1, 'A fee code is required')
     .max(20)
-    .transform((value) => value.toUpperCase()),
+    .transform((value) => value.toUpperCase())
+    .nullable()
+    .optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   amount: z.coerce.number().min(0, 'An amount cannot be negative'),
   category: z.enum(FEE_CATEGORIES as unknown as [string, ...string[]]),

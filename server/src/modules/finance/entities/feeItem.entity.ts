@@ -42,8 +42,8 @@ export class FeeItem extends SoftDeletableEntity {
   @Column({ type: 'varchar', length: 120 })
   name: string;
 
-  @Column({ type: 'varchar', length: 20 })
-  code: string;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  code: string | null;
 
   @Column({ type: 'text', nullable: true })
   description: string | null;

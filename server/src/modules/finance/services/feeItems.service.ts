@@ -43,8 +43,10 @@ export class FeeItemsService {
   }
 
   async create(context: RequestContext, input: CreateFeeItemInput): Promise<FeeItemDTO> {
-    const clash = await this.feeItems.findByCode(context.schoolId, input.code);
-    if (clash) throw AppError.conflict('A fee item with that code already exists.');
+    if (input.code) {
+      const clash = await this.feeItems.findByCode(context.schoolId, input.code);
+      if (clash) throw AppError.conflict('A fee item with that code already exists.');
+    }
 
     const paymentDestinationIds = input.paymentDestinationIds ?? [];
     await this.assertDestinationsExist(context.schoolId, paymentDestinationIds);
@@ -52,7 +54,7 @@ export class FeeItemsService {
     const created = await this.feeItems.create({
       schoolId: context.schoolId,
       name: input.name,
-      code: input.code,
+      code: input.code ?? null,
       description: input.description ?? null,
       amount: input.amount.toFixed(2),
       category: input.category as FeeCategory,
@@ -67,7 +69,7 @@ export class FeeItemsService {
       action: 'feeItem.created',
       entityType: 'FeeItem',
       entityId: created.id,
-      entityLabel: `${created.name} (${created.code})`,
+      entityLabel: created.code ? `${created.name} (${created.code})` : created.name,
       after: {
         code: created.code,
         amount: created.amount,
@@ -110,7 +112,11 @@ export class FeeItemsService {
       action: 'feeItem.updated',
       entityType: 'FeeItem',
       entityId: id,
-      entityLabel: `${patch.name ?? existing.name} (${patch.code ?? existing.code})`,
+      entityLabel: (() => {
+        const label = patch.name ?? existing.name;
+        const code = patch.code !== undefined ? patch.code : existing.code;
+        return code ? `${label} (${code})` : label;
+      })(),
       after: { ...fields, accounts: paymentDestinationIds?.length },
     });
 
