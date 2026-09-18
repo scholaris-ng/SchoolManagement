@@ -224,9 +224,11 @@ export function InvoiceEditPage() {
   const amountLocked = record.amountPaid > 0;
   const valid = Boolean(dueDate && lines.length > 0);
 
+  // Same student-centric trail as the invoice detail page this is reached
+  // from — an invoice always belongs to exactly one student.
   const breadcrumbs = [
-    { label: 'Finance', to: '/finance' },
-    { label: 'Invoices', to: '/finance/invoices' },
+    { label: 'Students', to: '/students' },
+    { label: record.studentName, to: `/students/${record.studentId}?tab=finance` },
     { label: record.invoiceNo, to: `/finance/invoices/${record.id}` },
     { label: 'Edit' },
   ];

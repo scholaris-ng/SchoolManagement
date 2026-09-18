@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pencil, Receipt, Trash2, Wallet } from 'lucide-react';
+import { Eye, Pencil, Receipt, Trash2, Wallet } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
@@ -87,55 +87,67 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
           </span>
         ),
       },
-      // Only an invoice line in this statement is a document of its own that
-      // can be deleted — a payment or a discount is a consequence of one,
-      // not a separate thing to remove here.
-      ...(canManageInvoices
-        ? [
-            {
-              id: 'actions',
-              header: '',
-              align: 'right' as const,
-              cell: (entry: StudentLedgerEntry) => {
-                if (entry.type !== 'INVOICE') return null;
-                const deleteButton = (
+      // Every invoice line gets a way to open the full document; only a
+      // bursar with manage rights also gets to edit or delete it — a payment
+      // or a discount is a consequence of an invoice, not a separate thing
+      // to open or remove here.
+      {
+        id: 'actions',
+        header: '',
+        align: 'right' as const,
+        cell: (entry: StudentLedgerEntry) => {
+          if (entry.type !== 'INVOICE') return null;
+          const deleteButton = (
+            <Button
+              data-cy="tabs-finance-tab-delete-invoice"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete invoice ${entry.reference}`}
+              disabled={!entry.deletable}
+              onClick={() => setPendingDelete(entry)}
+            >
+              <Trash2 />
+            </Button>
+          );
+          return (
+            <span className="inline-flex items-center gap-1">
+              <Button
+                data-cy="tabs-finance-tab-view-invoice"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`View invoice ${entry.reference}`}
+                asChild
+              >
+                <Link to={`/finance/invoices/${entry.id}`}>
+                  <Eye />
+                </Link>
+              </Button>
+              {canManageInvoices && (
+                <>
                   <Button
-                    data-cy="tabs-finance-tab-delete-invoice"
+                    data-cy="tabs-finance-tab-edit-invoice"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Delete invoice ${entry.reference}`}
-                    disabled={!entry.deletable}
-                    onClick={() => setPendingDelete(entry)}
+                    aria-label={`Edit invoice ${entry.reference}`}
+                    asChild
                   >
-                    <Trash2 />
+                    <Link to={`/finance/invoices/${entry.id}/edit`}>
+                      <Pencil />
+                    </Link>
                   </Button>
-                );
-                return (
-                  <span className="inline-flex items-center gap-1">
-                    <Button
-                      data-cy="tabs-finance-tab-edit-invoice"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Edit invoice ${entry.reference}`}
-                      asChild
-                    >
-                      <Link to={`/finance/invoices/${entry.id}/edit`}>
-                        <Pencil />
-                      </Link>
-                    </Button>
-                    {entry.deletable ? (
-                      deleteButton
-                    ) : (
-                      <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
-                        <span className="inline-flex">{deleteButton}</span>
-                      </Tooltip>
-                    )}
-                  </span>
-                );
-              },
-            },
-          ]
-        : []),
+                  {entry.deletable ? (
+                    deleteButton
+                  ) : (
+                    <Tooltip content="Refused: this invoice has a payment recorded against it, or carries a balance to or from another invoice.">
+                      <span className="inline-flex">{deleteButton}</span>
+                    </Tooltip>
+                  )}
+                </>
+              )}
+            </span>
+          );
+        },
+      },
     ],
     [currency, canManageInvoices],
   );

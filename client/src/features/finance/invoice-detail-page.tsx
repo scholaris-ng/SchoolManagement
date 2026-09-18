@@ -31,10 +31,18 @@ export function InvoiceDetailPage() {
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const breadcrumbs = [
-    { label: 'Finance', to: '/finance' },
-    { label: 'Invoices', to: '/finance/invoices' },
-  ];
+  // An invoice always belongs to exactly one student, so the way back is to
+  // their record — specifically the Fees tab this was most likely opened
+  // from — not the general invoices list, same as `InvoiceFormPage`.
+  const breadcrumbs = invoice.data
+    ? [
+        { label: 'Students', to: '/students' },
+        {
+          label: invoice.data.studentName,
+          to: `/students/${invoice.data.studentId}?tab=finance`,
+        },
+      ]
+    : [{ label: 'Students', to: '/students' }];
 
   if (invoice.isPending) {
     return (
@@ -84,7 +92,7 @@ export function InvoiceDetailPage() {
           actions={
             <>
               <Button data-cy="finance-invoice-detail-student-record" variant="outline" asChild>
-                <Link to={`/students/${record.studentId}`}>
+                <Link to={`/students/${record.studentId}?tab=finance`}>
                   <User />
                   Student record
                 </Link>
