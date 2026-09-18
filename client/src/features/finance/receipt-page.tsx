@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Mail, MessageCircle, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -7,12 +7,61 @@ import { env } from '@/lib/env';
 import { toast } from '@/lib/toast-bus';
 import { useReceipt } from './api';
 import { EmailReceiptDialog } from './email-receipt-dialog';
+import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
+import { POS_RECEIPT_SELECTOR, POS_WIDTH_MM, PosReceipt } from './receipt-pos';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { QrCode } from '@/components/data/qr-code';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+
+const POS_PAGE_STYLE_ID = 'pos-page-style';
+
+/**
+ * Sends the receipt to the printer in one of two shapes: the ordinary page, or
+ * the narrow copy for a POS thermal roll.
+ *
+ * The mode is a `data-print-mode` attribute on the body — the print CSS in
+ * `index.css` reads it to decide what appears on paper — and it is cleared
+ * again once printing is over, so a later Ctrl+P is an ordinary print.
+ *
+ * A POS print also sets the paper size, to the roll's width and the height of
+ * the receipt itself: a fixed length would either cut a long receipt in two or
+ * feed a short one out with a blank tail. `@page` cannot be scoped by a
+ * selector, which is why it is injected for the print and removed after.
+ */
+function usePrintReceipt() {
+  useEffect(() => {
+    const reset = () => {
+      delete document.body.dataset.printMode;
+      document.getElementById(POS_PAGE_STYLE_ID)?.remove();
+    };
+    window.addEventListener('afterprint', reset);
+    return () => {
+      window.removeEventListener('afterprint', reset);
+      reset();
+    };
+  }, []);
+
+  return (mode: PrintMode) => {
+    document.body.dataset.printMode = mode;
+    document.getElementById(POS_PAGE_STYLE_ID)?.remove();
+
+    if (mode === 'pos') {
+      const copy = document.querySelector<HTMLElement>(POS_RECEIPT_SELECTOR);
+      // CSS pixels to millimetres, plus a little slack: a page a hair too short
+      // spills its last line onto a second, otherwise blank, page.
+      const heightMm = copy ? Math.ceil((copy.getBoundingClientRect().height * 25.4) / 96) + 4 : 200;
+      const style = document.createElement('style');
+      style.id = POS_PAGE_STYLE_ID;
+      style.textContent = `@page { size: ${POS_WIDTH_MM}mm ${heightMm}mm; margin: 0; }`;
+      document.head.appendChild(style);
+    }
+
+    window.print();
+  };
+}
 
 /**
  * A printable receipt.
@@ -26,6 +75,8 @@ export function ReceiptPage() {
   const receipt = useReceipt(paymentId);
   const [showItems, setShowItems] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const printReceipt = usePrintReceipt();
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -89,7 +140,7 @@ export function ReceiptPage() {
                     Email receipt
                   </Button>
                 </PermissionGate>
-                <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
+                <Button data-cy="finance-receipt-print" onClick={() => setPrintOpen(true)}>
                   <Printer />
                   Print
                 </Button>
@@ -201,6 +252,8 @@ export function ReceiptPage() {
           </CardContent>
         </Card>
     </PageContainer>
+      <PosReceipt record={record} verifyUrl={verifyUrl} showItems={showItems} />
+      <PrintReceiptDialog open={printOpen} onOpenChange={setPrintOpen} onPrint={printReceipt} />
       <EmailReceiptDialog
         open={emailOpen}
         onOpenChange={setEmailOpen}

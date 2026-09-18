@@ -275,6 +275,39 @@
   }
 }
 
+/*
+ * The POS (thermal paper) copy of a receipt. It is always laid out, so its
+ * height can be measured to size the paper to it, but held off-screen until a
+ * POS print is asked for — `body[data-print-mode='pos']`, set by the receipt
+ * page — when it becomes the only thing on the page. A plain Ctrl+P, with no
+ * mode set, never includes it.
+ */
+.pos-receipt-root {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  pointer-events: none;
+}
+@media print {
+  body:not([data-print-mode='pos']) > .pos-receipt-root {
+    display: none !important;
+  }
+  body[data-print-mode='pos'] > *:not(.pos-receipt-root) {
+    display: none !important;
+  }
+  body[data-print-mode='pos'] > .pos-receipt-root {
+    position: static;
+    left: auto;
+    pointer-events: auto;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 .print-only {
   display: none;
 }
