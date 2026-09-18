@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import PDFDocument from 'pdfkit';
 import { env } from '../../config/env';
 import { resolveProvider } from '../mail/router';
 
@@ -145,6 +148,11 @@ interface SendArgs {
   subject: string;
   html: string;
   text: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    contentType?: string;
+  }>;
   /**
    * The sending school's own `schools.email` — never the recipient — used
    * only to pick a provider in `resolveProvider()`. Every send below carries
@@ -161,7 +169,7 @@ interface SendArgs {
  * a school whose verification email bounced is still registered, and the right
  * response is a resend, not a rolled-back account.
  */
-async function send({ to, subject, html, text, schoolEmail }: SendArgs): Promise<void> {
+async function send({ to, subject, html, text, attachments, schoolEmail }: SendArgs): Promise<void> {
   const provider = resolveProvider(schoolEmail);
   if (!provider) {
     console.info(`[mail] No provider configured. Would send to ${to}: ${subject}`);
@@ -170,10 +178,289 @@ async function send({ to, subject, html, text, schoolEmail }: SendArgs): Promise
   }
 
   try {
-    await provider.send({ to, subject, html, text });
+    await provider.send({ to, subject, html, text, attachments });
   } catch (error) {
     console.error(`[mail] Failed to send "${subject}" to ${to}:`, error);
   }
+}
+
+function summariseAccountsByTotal(
+  lines: Array<{ isOptional: boolean; accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>; lineTotal: number }>,
+): Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }> {
+  const byKey = new Map<string, { label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }>();
+
+  for (const line of lines) {
+    for (const account of line.accounts) {
+      const key = `${account.bankName}::${account.accountNumber}`;
+      const row = byKey.get(key) ?? {
+        label: account.label,
+        bankName: account.bankName,
+        accountNumber: account.accountNumber,
+        accountName: account.accountName,
+        total: 0,
+      };
+      row.total += line.lineTotal;
+      byKey.set(key, row);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch {
+    return null;
+  }
+}
+
+async function readLocalImage(filePath: string): Promise<Buffer | null> {
+  try {
+    return fs.readFileSync(filePath);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveInvoiceLogoAsset(logoUrl?: string | null): Promise<Buffer | null> {
+  const defaultLogoPath = path.resolve(process.cwd(), '../client/public/site/logo.png');
+
+  if (!logoUrl) {
+    return readLocalImage(defaultLogoPath);
+  }
+
+  if (logoUrl.startsWith('@file:')) {
+    const rel = logoUrl.replace(/^@file:/, '').trim();
+    const localPath = rel.startsWith('/') ? rel : path.resolve(process.cwd(), '..', rel);
+    return readLocalImage(localPath) ?? readLocalImage(defaultLogoPath);
+  }
+
+  if (logoUrl.startsWith('/')) {
+    const publicPath = path.resolve(process.cwd(), '../client/public', logoUrl.replace(/^\/+/, ''));
+    const fromPublic = await readLocalImage(publicPath);
+    if (fromPublic) return fromPublic;
+  }
+
+  const remote = await fetchImageBuffer(logoUrl);
+  if (remote) return remote;
+
+  return readLocalImage(defaultLogoPath);
+}
+
+async function buildInvoicePdfAttachment(params: {
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  invoiceNo: string;
+  issueDate: string;
+  termName: string;
+  sessionName: string;
+  dueDate: string;
+  subtotal: number;
+  discountTotal: number;
+  broughtForward: number;
+  total: number;
+  amountPaid: number;
+  balance: number;
+  note: string | null;
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitAmount: number;
+    lineTotal: number;
+    isOptional: boolean;
+    accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+  }>;
+  accounts: Array<{ label: string; accountNumber: string; accountName: string }>;
+}): Promise<Buffer> {
+  return new Promise<Buffer>(async (resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50, layout: 'portrait' });
+    const chunks: Buffer[] = [];
+
+    doc.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+    const primary = '#1d4ed8';
+    const dark = '#0f172a';
+    const muted = '#64748b';
+    const border = '#d1d5db';
+    const panel = '#f8fafc';
+    const accent = '#f59e0b';
+    const danger = '#dc2626';
+    const width = 595.28;
+    const left = 50;
+    const logoImage = await resolveInvoiceLogoAsset(params.schoolLogoUrl);
+
+    doc.fillColor(primary).rect(0, 0, width, 78).fill();
+
+    if (logoImage) {
+      try {
+        doc.image(logoImage, 18, 17, { fit: [42, 42] });
+      } catch {
+        // ignore invalid logo payloads
+      }
+    }
+
+    const headerX = 72;
+    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text(params.schoolName, headerX, 16, {
+      width: 320,
+    });
+    if (params.schoolAddress) {
+      doc.fillColor('#dbeafe').fontSize(9).font('Helvetica').text(params.schoolAddress, headerX, 44, {
+        width: 320,
+      });
+    }
+    if (params.schoolPhone || params.schoolEmail) {
+      const contactLine = [params.schoolPhone, params.schoolEmail].filter(Boolean).join(' · ');
+      doc.fillColor('#dbeafe').fontSize(8).font('Helvetica').text(contactLine, headerX, 58, {
+        width: 340,
+      });
+    }
+
+    doc.fillColor('#e0f2fe').fontSize(12).font('Helvetica-Bold').text('INVOICE', 430, 16, {
+      align: 'right',
+      width: 110,
+    });
+    doc.fillColor('#f8fafc').fontSize(9).font('Helvetica').text(params.invoiceNo, 420, 32, {
+      align: 'right',
+      width: 120,
+    });
+
+    doc.moveTo(left, 80).lineTo(width - left, 80).strokeColor(border).lineWidth(1).stroke();
+
+    const contentStart = 98;
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('BILLED TO', left, contentStart);
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(params.studentName, left, contentStart + 20);
+    doc.fillColor(muted).fontSize(10).text(`${params.admissionNo} · ${params.className ?? '—'}`, left, contentStart + 36);
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('TERM', left + 210, contentStart, { width: 120 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(`${params.termName} · ${params.sessionName}`, left + 210, contentStart + 20, { width: 140 });
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('ISSUED', left + 350, contentStart, { width: 80 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(formatInvoiceDate(params.issueDate), left + 350, contentStart + 20, { width: 100 });
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('DUE', left + 440, contentStart, { width: 60 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(formatInvoiceDate(params.dueDate), left + 440, contentStart + 20, { width: 90 });
+
+    const tableY = 170;
+    doc.fillColor(primary).rect(left, tableY, 495, 22).fill();
+    doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('DESCRIPTION', left + 8, tableY + 7);
+    doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('AMOUNT', left + 390, tableY + 7, { align: 'right' });
+
+    let y = tableY + 22;
+    for (const line of params.lines) {
+      const amountText = formatNaira(line.lineTotal);
+      const descriptionText = line.description;
+      const rows = [
+        { text: descriptionText, color: dark },
+      ];
+
+      if (line.isOptional) {
+        rows.push({ text: '(optional)', color: muted });
+      }
+
+      if (line.accounts.length > 0) {
+        const accountText = `Pay into ${line.accounts
+          .map((account) => `${account.label || account.bankName} — ${account.accountNumber} · ${account.accountName}`)
+          .join(' | ')}`;
+        rows.push({ text: accountText, color: muted });
+      }
+
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(descriptionText, left + 8, y + 8, { width: 320 });
+      if (line.isOptional) {
+        doc.fillColor(muted).fontSize(8).font('Helvetica').text('(optional)', left + 8, y + 22, { width: 100 });
+      }
+      if (line.accounts.length > 0) {
+        doc.fillColor(muted).fontSize(8).font('Helvetica').text(
+          line.accounts
+            .map((account) => `${account.label || account.bankName} — ${account.accountNumber} · ${account.accountName}`)
+            .join(' | '),
+          left + 8,
+          y + (line.isOptional ? 34 : 22),
+          { width: 330 },
+        );
+      }
+
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(amountText, left + 390, y + 8, {
+        width: 90,
+        align: 'right',
+      });
+      y += line.isOptional || line.accounts.length > 0 ? 50 : 28;
+      doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
+      y += 10;
+    }
+
+    const totalsY = y + 8;
+    doc.fillColor(dark).fontSize(10).font('Helvetica').text('Subtotal', left + 300, totalsY, { width: 90, align: 'right' });
+    doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatNaira(params.subtotal), left + 390, totalsY, { width: 90, align: 'right' });
+
+    if (params.discountTotal > 0) {
+      doc.fillColor(dark).fontSize(10).font('Helvetica').text('Discount', left + 300, totalsY + 18, { width: 90, align: 'right' });
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(`- ${formatNaira(params.discountTotal)}`, left + 390, totalsY + 18, { width: 90, align: 'right' });
+    }
+
+    if (params.broughtForward > 0) {
+      doc.fillColor(dark).fontSize(10).font('Helvetica').text('Brought forward', left + 300, totalsY + 36, { width: 90, align: 'right' });
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatNaira(params.broughtForward), left + 390, totalsY + 36, { width: 90, align: 'right' });
+    }
+
+    doc.fillColor(dark).fontSize(10).font('Helvetica').text('Total', left + 300, totalsY + 58, { width: 90, align: 'right' });
+    doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatNaira(params.total), left + 390, totalsY + 58, { width: 90, align: 'right' });
+
+    doc.fillColor(dark).fontSize(10).font('Helvetica').text('Paid', left + 300, totalsY + 76, { width: 90, align: 'right' });
+    doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatNaira(params.amountPaid), left + 390, totalsY + 76, { width: 90, align: 'right' });
+
+    doc.fillColor(accent).rect(left + 300, totalsY + 95, 190, 26).fill();
+    doc.fillColor(dark).fontSize(10).font('Helvetica').text('Balance due', left + 310, totalsY + 103, { width: 90 });
+    doc.fillColor(danger).fontSize(12).font('Helvetica-Bold').text(formatNaira(params.balance), left + 390, totalsY + 100, { width: 90, align: 'right' });
+
+    const summaryY = totalsY + 150;
+    doc.fillColor(panel).rect(left, summaryY, 495, 90).fill();
+    doc.fillColor(primary).fontSize(10).font('Helvetica-Bold').text('PAYMENT SUMMARY', left + 10, summaryY + 12, { width: 160 });
+    doc.fillColor(muted).fontSize(8).font('Helvetica').text("Pay each account's own total below in a single transfer.", left + 10, summaryY + 28, { width: 320 });
+
+    let accountIndex = 0;
+    let accountX = left + 12;
+    let accountY = summaryY + 44;
+    for (const account of summariseAccountsByTotal(params.lines)) {
+      const boxWidth = 220;
+      doc.fillColor('#ffffff').rect(accountX, accountY, boxWidth, 26).strokeColor(border).stroke();
+      doc.fillColor(primary).fontSize(8).font('Helvetica-Bold').text(account.label || account.bankName, accountX + 8, accountY + 8, { width: 100 });
+      doc.fillColor(muted).fontSize(7).font('Helvetica').text(`${account.bankName} · ${account.accountNumber} · ${account.accountName}`, accountX + 8, accountY + 18, { width: 150 });
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatNaira(account.total), accountX + 150, accountY + 8, { width: 60, align: 'right' });
+      accountIndex += 1;
+      if (accountIndex % 2 === 0) {
+        accountX = left + 12;
+        accountY += 34;
+      } else {
+        accountX += 240;
+      }
+    }
+
+    doc.fillColor(muted).fontSize(8).font('Helvetica').text('Questions about this bill?', left + 10, summaryY + 100, { width: 150 });
+    if (params.schoolPhone) {
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(String(params.schoolPhone), left + 180, summaryY + 100, { width: 120 });
+    }
+    if (params.schoolEmail) {
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(String(params.schoolEmail), left + 310, summaryY + 100, { width: 150 });
+    }
+
+    if (params.note) {
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(params.note, left, 770, { width: 500 });
+    }
+
+    doc.end();
+  });
 }
 
 // ─── Registration ─────────────────────────────────────────────────────────────
@@ -880,15 +1167,34 @@ export async function sendInvoiceEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
   /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
   schoolEmail?: string;
   studentName: string;
+  admissionNo: string;
+  className: string | null;
   invoiceNo: string;
+  issueDate: string;
   termName: string;
   sessionName: string;
   dueDate: string;
+  subtotal: number;
+  discountTotal: number;
+  broughtForward: number;
   total: number;
+  amountPaid: number;
   balance: number;
+  note: string | null;
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitAmount: number;
+    lineTotal: number;
+    isOptional: boolean;
+    accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+  }>;
   accounts: { label: string; accountNumber: string; accountName: string }[];
   contactEmail: string;
 }): Promise<void> {
@@ -896,14 +1202,26 @@ export async function sendInvoiceEmail(params: {
     to,
     firstName,
     schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
     schoolEmail,
     studentName,
+    admissionNo,
+    className,
     invoiceNo,
+    issueDate,
     termName,
     sessionName,
     dueDate,
+    subtotal,
+    discountTotal,
+    broughtForward,
     total,
+    amountPaid,
     balance,
+    note,
+    lines,
     accounts,
     contactEmail,
   } = params;
@@ -921,6 +1239,31 @@ export async function sendInvoiceEmail(params: {
     ['Total', escapeHtml(formatNaira(total))],
     ['Balance due', escapeHtml(formatNaira(balance))],
   ];
+
+  const invoicePdf = await buildInvoicePdfAttachment({
+    schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
+    schoolEmail: schoolEmail ?? contactEmail,
+    studentName,
+    admissionNo,
+    className,
+    invoiceNo,
+    issueDate,
+    termName,
+    sessionName,
+    dueDate,
+    subtotal,
+    discountTotal,
+    broughtForward,
+    total,
+    amountPaid,
+    balance,
+    note,
+    lines,
+    accounts,
+  });
 
   const body = [
     heading(`Invoice ${escapeHtml(invoiceNo)}`),
@@ -945,6 +1288,13 @@ export async function sendInvoiceEmail(params: {
     schoolEmail,
     subject: `Invoice ${invoiceNo} — ${schoolName} — Scholaris`,
     html: emailLayout(body, `${studentName}'s invoice for ${termName} is inside.`),
+    attachments: [
+      {
+        filename: `invoice-${invoiceNo}.pdf`,
+        content: invoicePdf,
+        contentType: 'application/pdf',
+      },
+    ],
     text: [
       `Hello ${firstName},`,
       '',
