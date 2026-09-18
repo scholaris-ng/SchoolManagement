@@ -1,5 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import PDFDocument from 'pdfkit';
 import { env } from '../../config/env';
 import { resolveProvider } from '../mail/router';
+import { AppError } from '../errors/AppError';
 
 /**
  * Outbound mail (`server_arch.md` section 22).
@@ -145,6 +149,11 @@ interface SendArgs {
   subject: string;
   html: string;
   text: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    contentType?: string;
+  }>;
   /**
    * The sending school's own `schools.email` — never the recipient — used
    * only to pick a provider in `resolveProvider()`. Every send below carries
@@ -152,28 +161,411 @@ interface SendArgs {
    * found, no school yet) always falls through to nodemailer.
    */
   schoolEmail?: string;
+  /**
+   * Set by a send that *is* the point of the request — a bursar pressing
+   * "Email invoice" — rather than a side effect of one. Delivery failure, or
+   * no provider being configured at all, then throws instead of being
+   * swallowed, so the screen can say the email did not go out instead of
+   * reporting a send that never happened.
+   */
+  strict?: boolean;
 }
 
 /**
  * Sends, or logs when no provider is configured for this send.
  *
- * Never throws. A failed send must not fail the operation that triggered it —
- * a school whose verification email bounced is still registered, and the right
- * response is a resend, not a rolled-back account.
+ * Does not throw by default. A failed send must not fail the operation that
+ * triggered it — a school whose verification email bounced is still
+ * registered, and the right response is a resend, not a rolled-back account.
+ * `strict` is the exception, for a send the user asked for by name.
  */
-async function send({ to, subject, html, text, schoolEmail }: SendArgs): Promise<void> {
+async function send({ to, subject, html, text, attachments, schoolEmail, strict }: SendArgs): Promise<void> {
   const provider = resolveProvider(schoolEmail);
   if (!provider) {
     console.info(`[mail] No provider configured. Would send to ${to}: ${subject}`);
     console.info(`[mail] ${text}`);
+    if (strict) {
+      throw new AppError(
+        'Email is not set up on this server, so nothing was sent. Ask whoever runs the system to configure it.',
+        503,
+        'EMAIL_NOT_CONFIGURED',
+      );
+    }
     return;
   }
 
   try {
-    await provider.send({ to, subject, html, text });
+    await provider.send({ to, subject, html, text, attachments });
   } catch (error) {
     console.error(`[mail] Failed to send "${subject}" to ${to}:`, error);
+    if (strict) {
+      throw new AppError(
+        'The email could not be delivered. Check the email settings and try again.',
+        502,
+        'EMAIL_DELIVERY_FAILED',
+      );
+    }
   }
+}
+
+function summariseAccountsByTotal(
+  lines: Array<{ isOptional: boolean; accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>; lineTotal: number }>,
+): Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }> {
+  const byKey = new Map<string, { label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }>();
+
+  for (const line of lines) {
+    for (const account of line.accounts) {
+      const key = `${account.bankName}::${account.accountNumber}`;
+      const row = byKey.get(key) ?? {
+        label: account.label,
+        bankName: account.bankName,
+        accountNumber: account.accountNumber,
+        accountName: account.accountName,
+        total: 0,
+      };
+      row.total += line.lineTotal;
+      byKey.set(key, row);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+/** The client's static assets — the only place a relative logo path may point. */
+const PUBLIC_DIR = path.resolve(process.cwd(), '../client/public');
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const LOGO_FETCH_TIMEOUT_MS = 5_000;
+
+/** PDFKit draws PNG and JPEG only; anything else would throw when drawn. */
+function isPdfKitImage(bytes: Buffer): boolean {
+  const png = bytes.length > 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const jpeg = bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  return png || jpeg;
+}
+
+/**
+ * Loopback, private and link-local hosts written out literally. A school
+ * supplies its logo URL and this server fetches it, so without this a school
+ * could point the fetch at the server's own network. It does not stop a public
+ * name that *resolves* to a private address — that needs a resolver-level
+ * guard — but it closes the direct routes.
+ */
+function isInternalHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) return true;
+  if (host.includes(':')) {
+    return host === '::1' || host === '::' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd');
+  }
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!v4) return false;
+  const a = Number(v4[1]);
+  const b = Number(v4[2]);
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const parsed = new URL(url);
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || isInternalHost(parsed.hostname)) {
+      return null;
+    }
+    // No redirects: one could bounce a permitted host to an internal one.
+    const response = await fetch(parsed, { signal: AbortSignal.timeout(LOGO_FETCH_TIMEOUT_MS), redirect: 'error' });
+    if (!response.ok || !response.body) return null;
+    if (!(response.headers.get('content-type') ?? '').startsWith('image/')) return null;
+
+    // Read at most the cap, rather than buffering whatever the host sends.
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_LOGO_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}
+
+async function readPublicImage(relativePath: string): Promise<Buffer | null> {
+  try {
+    const target = path.resolve(PUBLIC_DIR, relativePath.replace(/^\/+/, ''));
+    // A path with `..` in it must not climb out of the public folder.
+    if (target !== PUBLIC_DIR && !target.startsWith(PUBLIC_DIR + path.sep)) return null;
+    return await fs.promises.readFile(target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The school's crest for a PDF, falling back to the app's own logo for
+ * anything missing, unreachable, oversized or not a PNG/JPEG — an unusable
+ * logo should cost the PDF its crest, never the whole email.
+ */
+async function resolveInvoiceLogoAsset(logoUrl?: string | null): Promise<Buffer | null> {
+  const usable = (bytes: Buffer | null) => (bytes && isPdfKitImage(bytes) ? bytes : null);
+  const fallback = () => readPublicImage('site/logo.png').then(usable);
+
+  if (!logoUrl) return fallback();
+
+  const found = logoUrl.startsWith('/')
+    ? usable(await readPublicImage(logoUrl))
+    : usable(await fetchImageBuffer(logoUrl));
+  return found ?? fallback();
+}
+
+/**
+ * Runs one PDF drawing function to completion and hands back the bytes.
+ *
+ * A throw inside `draw` rejects the returned promise. The builders used to
+ * hand `new Promise` an `async` executor instead, where a throw after the
+ * first `await` was swallowed as an unhandled rejection and the promise never
+ * settled — an emailed invoice would then hang the request rather than fail.
+ */
+async function renderPdf(
+  draw: (doc: InstanceType<typeof PDFDocument>) => Promise<void> | void,
+): Promise<Buffer> {
+  const doc = new PDFDocument({ size: 'A4', margin: 50, layout: 'portrait' });
+  const chunks: Buffer[] = [];
+  const finished = new Promise<Buffer>((resolve, reject) => {
+    doc.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+
+  try {
+    await draw(doc);
+    doc.end();
+  } catch (error) {
+    doc.end();
+    await finished.catch(() => undefined);
+    throw error;
+  }
+  return finished;
+}
+
+async function buildInvoicePdfAttachment(params: {
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  invoiceNo: string;
+  issueDate: string;
+  termName: string;
+  sessionName: string;
+  dueDate: string;
+  subtotal: number;
+  discountTotal: number;
+  broughtForward: number;
+  total: number;
+  amountPaid: number;
+  balance: number;
+  note: string | null;
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitAmount: number;
+    lineTotal: number;
+    isOptional: boolean;
+    accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+  }>;
+  accounts: Array<{ label: string; accountNumber: string; accountName: string }>;
+}): Promise<Buffer> {
+  return renderPdf(async (doc) => {
+    const primary = '#1d4ed8';
+    const dark = '#0f172a';
+    const muted = '#64748b';
+    const border = '#d1d5db';
+    const panel = '#f8fafc';
+    const accent = '#f59e0b';
+    const danger = '#dc2626';
+    const width = 595.28;
+    const left = 50;
+    const logoImage = await resolveInvoiceLogoAsset(params.schoolLogoUrl);
+
+    doc.fillColor(primary).rect(0, 0, width, 78).fill();
+
+    if (logoImage) {
+      try {
+        doc.image(logoImage, 18, 17, { fit: [42, 42] });
+      } catch {
+        // ignore invalid logo payloads
+      }
+    }
+
+    const headerX = 72;
+    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text(params.schoolName, headerX, 16, {
+      width: 320,
+    });
+    if (params.schoolAddress) {
+      doc.fillColor('#dbeafe').fontSize(9).font('Helvetica').text(params.schoolAddress, headerX, 44, {
+        width: 320,
+      });
+    }
+    if (params.schoolPhone || params.schoolEmail) {
+      const contactLine = [params.schoolPhone, params.schoolEmail].filter(Boolean).join(' · ');
+      doc.fillColor('#dbeafe').fontSize(8).font('Helvetica').text(contactLine, headerX, 58, {
+        width: 340,
+      });
+    }
+
+    doc.fillColor('#e0f2fe').fontSize(12).font('Helvetica-Bold').text('INVOICE', 430, 16, {
+      align: 'right',
+      width: 110,
+    });
+    doc.fillColor('#f8fafc').fontSize(9).font('Helvetica').text(params.invoiceNo, 420, 32, {
+      align: 'right',
+      width: 120,
+    });
+
+    doc.moveTo(left, 80).lineTo(width - left, 80).strokeColor(border).lineWidth(1).stroke();
+
+    const contentStart = 98;
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('BILLED TO', left, contentStart);
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(params.studentName, left, contentStart + 20);
+    doc.fillColor(muted).fontSize(10).text(`${params.admissionNo} · ${params.className ?? '—'}`, left, contentStart + 36);
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('TERM', left + 190, contentStart, { width: 130 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(`${params.termName} · ${params.sessionName}`, left + 190, contentStart + 20, { width: 130 });
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('ISSUED', left + 330, contentStart, { width: 85 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(formatShortDate(params.issueDate), left + 330, contentStart + 20, { width: 85 });
+
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text('DUE', left + 420, contentStart, { width: 75 });
+    doc.fillColor(dark).fontSize(12).font('Helvetica').text(formatShortDate(params.dueDate), left + 420, contentStart + 20, { width: 75 });
+
+    const tableY = 170;
+    doc.fillColor(primary).rect(left, tableY, 495, 22).fill();
+    doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('DESCRIPTION', left + 8, tableY + 7);
+    doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('AMOUNT', left + 390, tableY + 7, { width: 90, align: 'right' });
+
+    // Nothing below is allowed to start past here: text drawn beyond the
+    // bottom margin makes PDFKit open a page of its own mid-layout, and a
+    // rectangle drawn there is simply lost. Anything that will not fit moves
+    // to a fresh page instead.
+    const pageBottom = 780;
+
+    let y = tableY + 22;
+    for (const line of params.lines) {
+      const accountText =
+        line.accounts.length > 0
+          ? line.accounts
+              .map((account) => `${account.label || account.bankName} — ${account.accountNumber} · ${account.accountName}`)
+              .join(' | ')
+          : '';
+      // A long description or a charge with several accounts wraps, so the
+      // row is measured rather than assumed to be one fixed height.
+      const descriptionHeight = doc.fontSize(10).font('Helvetica-Bold').heightOfString(line.description, { width: 320 });
+      const accountHeight = accountText
+        ? doc.fontSize(8).font('Helvetica').heightOfString(accountText, { width: 330 })
+        : 0;
+      const rowHeight = 8 + descriptionHeight + (line.isOptional ? 12 : 0) + (accountText ? accountHeight + 2 : 0) + 8;
+
+      if (y + rowHeight > pageBottom) {
+        doc.addPage();
+        y = 50;
+      }
+
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(line.description, left + 8, y + 8, { width: 320 });
+      let detailY = y + 8 + descriptionHeight + 2;
+      if (line.isOptional) {
+        doc.fillColor(muted).fontSize(8).font('Helvetica').text('(optional)', left + 8, detailY, { width: 100 });
+        detailY += 12;
+      }
+      if (accountText) {
+        doc.fillColor(muted).fontSize(8).font('Helvetica').text(accountText, left + 8, detailY, { width: 330 });
+      }
+
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatPdfCurrency(line.lineTotal), left + 390, y + 8, {
+        width: 90,
+        align: 'right',
+      });
+      y += rowHeight;
+      doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
+      y += 4;
+    }
+
+    const accountTotals = summariseAccountsByTotal(params.lines);
+    // The payment summary grows with the number of accounts (two per row).
+    const summaryHeight = 44 + Math.max(1, Math.ceil(accountTotals.length / 2)) * 34 + 22;
+    // Totals and the summary read as one block; keep it together on one page.
+    if (y + 8 + 150 + summaryHeight > pageBottom) {
+      doc.addPage();
+      y = 50;
+    }
+
+    // Each row stacks under the last, so an invoice with no discount or
+    // carried-forward balance does not leave a gap where they would be.
+    let totalsY = y + 8;
+    const totalsRow = (label: string, value: string) => {
+      doc.fillColor(dark).fontSize(10).font('Helvetica').text(label, left + 300, totalsY, { width: 90, align: 'right' });
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(value, left + 390, totalsY, { width: 90, align: 'right' });
+      totalsY += 18;
+    };
+    totalsRow('Subtotal', formatPdfCurrency(params.subtotal));
+    if (params.discountTotal > 0) totalsRow('Discount', `- ${formatPdfCurrency(params.discountTotal)}`);
+    if (params.broughtForward > 0) totalsRow('Brought forward', formatPdfCurrency(params.broughtForward));
+    totalsRow('Total', formatPdfCurrency(params.total));
+    totalsRow('Paid', formatPdfCurrency(params.amountPaid));
+
+    totalsY += 4;
+    doc.fillColor(accent).rect(left + 300, totalsY, 190, 26).fill();
+    doc.fillColor(dark).fontSize(10).font('Helvetica').text('Balance due', left + 310, totalsY + 8, { width: 90 });
+    doc.fillColor(params.balance > 0 ? danger : '#166534').fontSize(12).font('Helvetica-Bold').text(formatPdfCurrency(params.balance), left + 390, totalsY + 5, { width: 90, align: 'right' });
+
+    const summaryY = totalsY + 26 + 24;
+    doc.fillColor(panel).rect(left, summaryY, 495, summaryHeight).fill();
+    doc.fillColor(primary).fontSize(10).font('Helvetica-Bold').text('PAYMENT SUMMARY', left + 10, summaryY + 12, { width: 160 });
+    doc.fillColor(muted).fontSize(8).font('Helvetica').text("Pay each account's own total below in a single transfer.", left + 10, summaryY + 28, { width: 320 });
+
+    let accountIndex = 0;
+    let accountX = left + 12;
+    let accountY = summaryY + 44;
+    for (const account of accountTotals) {
+      const boxWidth = 220;
+      doc.fillColor('#ffffff').rect(accountX, accountY, boxWidth, 26).strokeColor(border).stroke();
+      doc.fillColor(primary).fontSize(8).font('Helvetica-Bold').text(account.label || account.bankName, accountX + 8, accountY + 8, { width: 100 });
+      doc.fillColor(muted).fontSize(7).font('Helvetica').text(`${account.bankName} · ${account.accountNumber} · ${account.accountName}`, accountX + 8, accountY + 18, { width: 150 });
+      doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(formatPdfCurrency(account.total), accountX + 130, accountY + 8, { width: 80, align: 'right' });
+      accountIndex += 1;
+      if (accountIndex % 2 === 0) {
+        accountX = left + 12;
+        accountY += 34;
+      } else {
+        accountX += 240;
+      }
+    }
+
+    const questionsY = summaryY + summaryHeight - 16;
+    doc.fillColor(muted).fontSize(8).font('Helvetica').text('Questions about this bill?', left + 10, questionsY, { width: 150 });
+    if (params.schoolPhone) {
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(String(params.schoolPhone), left + 180, questionsY, { width: 120 });
+    }
+    if (params.schoolEmail) {
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(String(params.schoolEmail), left + 310, questionsY, { width: 180 });
+    }
+
+    // Below the summary rather than pinned to a fixed spot near the page
+    // foot, where a longer invoice would draw straight over it.
+    if (params.note) {
+      const noteY = summaryY + summaryHeight + 14;
+      const noteHeight = doc.fontSize(8).font('Helvetica').heightOfString(params.note, { width: 495 });
+      if (noteY + noteHeight > pageBottom) doc.addPage();
+      doc.fillColor(muted).fontSize(8).font('Helvetica').text(params.note, left, noteY + noteHeight > pageBottom ? 50 : noteY, { width: 495 });
+    }
+  });
 }
 
 // ─── Registration ─────────────────────────────────────────────────────────────
@@ -854,6 +1246,17 @@ export async function sendStaffAccountEmail(params: {
 }
 
 const formatNaira = (value: number) => `₦${value.toLocaleString('en-NG')}`;
+const formatPdfCurrency = (value: number) => `NGN ${value.toLocaleString('en-NG')}`;
+
+/** The same day, abbreviated — for the narrow date columns in the PDF header. */
+function formatShortDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Africa/Lagos',
+  }).format(new Date(iso));
+}
 
 /** Date-only, so an invoice's due date reads as a day, never a moment. */
 function formatInvoiceDate(iso: string): string {
@@ -880,15 +1283,34 @@ export async function sendInvoiceEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
   /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
   schoolEmail?: string;
   studentName: string;
+  admissionNo: string;
+  className: string | null;
   invoiceNo: string;
+  issueDate: string;
   termName: string;
   sessionName: string;
   dueDate: string;
+  subtotal: number;
+  discountTotal: number;
+  broughtForward: number;
   total: number;
+  amountPaid: number;
   balance: number;
+  note: string | null;
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitAmount: number;
+    lineTotal: number;
+    isOptional: boolean;
+    accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+  }>;
   accounts: { label: string; accountNumber: string; accountName: string }[];
   contactEmail: string;
 }): Promise<void> {
@@ -896,14 +1318,26 @@ export async function sendInvoiceEmail(params: {
     to,
     firstName,
     schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
     schoolEmail,
     studentName,
+    admissionNo,
+    className,
     invoiceNo,
+    issueDate,
     termName,
     sessionName,
     dueDate,
+    subtotal,
+    discountTotal,
+    broughtForward,
     total,
+    amountPaid,
     balance,
+    note,
+    lines,
     accounts,
     contactEmail,
   } = params;
@@ -922,9 +1356,34 @@ export async function sendInvoiceEmail(params: {
     ['Balance due', escapeHtml(formatNaira(balance))],
   ];
 
+  const invoicePdf = await buildInvoicePdfAttachment({
+    schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
+    schoolEmail: contactEmail || schoolEmail || '',
+    studentName,
+    admissionNo,
+    className,
+    invoiceNo,
+    issueDate,
+    termName,
+    sessionName,
+    dueDate,
+    subtotal,
+    discountTotal,
+    broughtForward,
+    total,
+    amountPaid,
+    balance,
+    note,
+    lines,
+    accounts,
+  });
+
   const body = [
     heading(`Invoice ${escapeHtml(invoiceNo)}`),
-    paragraph(`Hello ${name}, here is ${student}'s invoice for ${term} from <strong>${school}</strong>.`),
+    paragraph(`Hello ${name}, here is ${student}'s invoice for ${term} from <strong>${school}</strong>. It is also attached as a PDF.`),
     infoBox(rows),
     balance > 0 && accounts.length > 0
       ? paragraph('Pay the balance into any one of these accounts:')
@@ -943,12 +1402,20 @@ export async function sendInvoiceEmail(params: {
   await send({
     to,
     schoolEmail,
+    strict: true,
     subject: `Invoice ${invoiceNo} — ${schoolName} — Scholaris`,
     html: emailLayout(body, `${studentName}'s invoice for ${termName} is inside.`),
+    attachments: [
+      {
+        filename: `invoice-${invoiceNo}.pdf`,
+        content: invoicePdf,
+        contentType: 'application/pdf',
+      },
+    ],
     text: [
       `Hello ${firstName},`,
       '',
-      `Here is ${studentName}'s invoice for ${termName} · ${sessionName} from ${schoolName}.`,
+      `Here is ${studentName}'s invoice for ${termName} · ${sessionName} from ${schoolName}. It is also attached as a PDF.`,
       '',
       `Invoice: ${invoiceNo}`,
       `Due date: ${due}`,
@@ -963,6 +1430,233 @@ export async function sendInvoiceEmail(params: {
         : []),
       '',
       `Questions? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}
+
+async function buildReceiptPdfAttachment(params: {
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  receiptNo: string;
+  paymentId: string;
+  amount: number;
+  amountInWords: string;
+  method: string;
+  paidAt: string;
+  receivedByName: string;
+  allocations: Array<{
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+  }>;
+  balanceAfter: number;
+  verificationCode: string;
+  includeCharges: boolean;
+}): Promise<Buffer> {
+  return renderPdf(async (doc) => {
+    const amount = formatPdfCurrency(params.amount);
+    const logoImage = await resolveInvoiceLogoAsset(params.schoolLogoUrl);
+    const bg = '#0f172a';
+    const primary = '#1d4ed8';
+    const muted = '#64748b';
+    const border = '#d1d5db';
+    const width = 595.28;
+    const left = 50;
+    const pageBottom = 780;
+
+    doc.fillColor(primary).rect(0, 0, width, 78).fill();
+    if (logoImage) {
+      try {
+        doc.image(logoImage, 18, 17, { fit: [42, 42] });
+      } catch {
+        // ignore invalid payloads
+      }
+    }
+    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text(params.schoolName, 72, 16, { width: 300 });
+    if (params.schoolAddress) {
+      doc.fillColor('#dbeafe').fontSize(9).font('Helvetica').text(params.schoolAddress, 72, 44, { width: 300 });
+    }
+    const contactLine = [params.schoolPhone, params.schoolEmail].filter(Boolean).join(' · ');
+    if (contactLine) {
+      doc.fillColor('#dbeafe').fontSize(8).font('Helvetica').text(contactLine, 72, 58, { width: 340 });
+    }
+    doc.fillColor('#e0f2fe').fontSize(12).font('Helvetica-Bold').text('RECEIPT', 430, 16, { align: 'right', width: 110 });
+    doc.fillColor('#f8fafc').fontSize(9).font('Helvetica').text(params.receiptNo, 420, 32, { align: 'right', width: 120 });
+
+    const contentY = 110;
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('RECEIVED FROM', left, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(params.studentName, left, contentY + 18, { width: 220 });
+    doc.fillColor(muted).fontSize(10).font('Helvetica').text(`${params.admissionNo} · ${params.className ?? '—'}`, left, contentY + 36, { width: 220 });
+
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('DATE', left + 250, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(new Date(params.paidAt).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' }), left + 250, contentY + 18, { width: 170 });
+
+    doc.fillColor(bg).fontSize(12).font('Helvetica-Bold').text('METHOD', left + 410, contentY);
+    doc.fillColor(bg).fontSize(12).font('Helvetica').text(params.method, left + 410, contentY + 18, { width: 110 });
+
+    doc.fillColor(primary).rect(left, 165, 495, 28).fill();
+    doc.fillColor('#ffffff').fontSize(12).font('Helvetica-Bold').text('AMOUNT RECEIVED', left + 12, 172);
+    doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold').text(amount, left + 360, 170, { width: 120, align: 'right' });
+
+    doc.fillColor(bg).fontSize(10).font('Helvetica').text(`In words: ${params.amountInWords}`, left, 205, { width: 480 });
+
+    let y = 240;
+    if (params.allocations.length > 0) {
+      doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text('APPLIED TO', left, y);
+      y += 20;
+      for (const allocation of params.allocations) {
+        if (y + 40 > pageBottom) {
+          doc.addPage();
+          y = 50;
+        }
+        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(allocation.invoiceNo, left, y);
+        doc.fillColor(bg).fontSize(9).font('Helvetica').text(allocation.description, left + 120, y, { width: 230 });
+        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(formatPdfCurrency(allocation.amount), left + 360, y, { width: 110, align: 'right' });
+        y += 18;
+        if (params.includeCharges && allocation.lines.length > 0) {
+          for (const line of allocation.lines) {
+            if (y + 14 > pageBottom) {
+              doc.addPage();
+              y = 50;
+            }
+            doc.fillColor(muted).fontSize(8).font('Helvetica').text(`${line.description}${line.isOptional ? ' (optional)' : ''}`, left + 18, y, { width: 260 });
+            doc.fillColor(muted).fontSize(8).font('Helvetica').text(formatPdfCurrency(line.amount), left + 360, y, { width: 110, align: 'right' });
+            y += 14;
+          }
+        }
+        y += 8;
+        doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
+        y += 10;
+      }
+    }
+
+    // The closing block (balance, verification code, who received it) stays
+    // together rather than splitting across a page break.
+    if (y + 70 > pageBottom) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text('BALANCE AFTER THIS PAYMENT', left, y + 10);
+    doc.fillColor(params.balanceAfter > 0 ? '#dc2626' : '#16a34a').fontSize(12).font('Helvetica-Bold').text(formatPdfCurrency(params.balanceAfter), left + 310, y + 8, { width: 170, align: 'right' });
+
+    doc.fillColor(muted).fontSize(9).font('Helvetica').text(`Verification code: ${params.verificationCode}`, left, y + 38, { width: 250 });
+    doc.fillColor(muted).fontSize(9).font('Helvetica').text(`Received by: ${params.receivedByName}`, left + 250, y + 38, { width: 220 });
+  });
+}
+
+export async function sendReceiptEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  schoolLogoUrl?: string | null;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail?: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  receiptNo: string;
+  paymentId: string;
+  amount: number;
+  amountInWords: string;
+  method: string;
+  paidAt: string;
+  receivedByName: string;
+  allocations: Array<{
+    invoiceNo: string;
+    description: string;
+    amount: number;
+    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+  }>;
+  balanceAfter: number;
+  verificationCode: string;
+  contactEmail: string;
+  includeCharges: boolean;
+}): Promise<void> {
+  const { to, firstName, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, studentName, admissionNo, className, receiptNo, paymentId, amount, amountInWords, method, paidAt, receivedByName, allocations, balanceAfter, verificationCode, contactEmail, includeCharges } = params;
+  const receiptPdf = await buildReceiptPdfAttachment({
+    schoolName,
+    schoolLogoUrl,
+    schoolAddress,
+    schoolPhone,
+    schoolEmail: contactEmail || schoolEmail || '',
+    studentName,
+    admissionNo,
+    className,
+    receiptNo,
+    paymentId,
+    amount,
+    amountInWords,
+    method,
+    paidAt,
+    receivedByName,
+    allocations,
+    balanceAfter,
+    verificationCode,
+    includeCharges,
+  });
+
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+  const student = escapeHtml(studentName);
+  const paid = new Intl.DateTimeFormat('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Africa/Lagos',
+  }).format(new Date(paidAt));
+  // Not just a courtesy line: the PDF is the record, but a message that says
+  // nothing else reads like spam, and the figures below let a parent check the
+  // payment without opening the attachment.
+  const rows: [string, string][] = [
+    ['Student', student],
+    ['Receipt', escapeHtml(receiptNo)],
+    ['Amount received', escapeHtml(formatNaira(amount))],
+    ['Paid', escapeHtml(paid)],
+    ['Balance after this payment', escapeHtml(formatNaira(balanceAfter))],
+    ['Verification code', escapeHtml(verificationCode)],
+  ];
+
+  const body = [
+    heading(`Receipt ${escapeHtml(receiptNo)}`),
+    paragraph(
+      `Hello ${name}, thank you. <strong>${school}</strong> has received this payment for ${student}. The receipt is attached to this email as a PDF.`,
+    ),
+    infoBox(rows),
+    footnote(`Questions about this payment? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    schoolEmail,
+    strict: true,
+    subject: `Receipt ${receiptNo} — ${schoolName} — Scholaris`,
+    html: emailLayout(body, `${studentName}'s payment receipt is attached.`),
+    attachments: [
+      {
+        filename: `receipt-${receiptNo}.pdf`,
+        content: receiptPdf,
+        contentType: 'application/pdf',
+      },
+    ],
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `Thank you. ${schoolName} has received this payment for ${studentName}. The receipt is attached to this email as a PDF.`,
+      '',
+      `Receipt: ${receiptNo}`,
+      `Amount received: ${formatNaira(amount)}`,
+      `Paid: ${paid}`,
+      `Balance after this payment: ${formatNaira(balanceAfter)}`,
+      `Verification code: ${verificationCode}`,
+      '',
+      `Questions about this payment? Write to ${schoolName} at ${contactEmail}.`,
     ].join('\n'),
   });
 }

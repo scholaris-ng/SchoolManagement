@@ -1,16 +1,18 @@
 import { Fragment, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { MessageCircle, Printer } from 'lucide-react';
+import { Mail, MessageCircle, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
 import { toast } from '@/lib/toast-bus';
 import { useReceipt } from './api';
+import { EmailReceiptDialog } from './email-receipt-dialog';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { QrCode } from '@/components/data/qr-code';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
+import { PermissionGate } from '@/components/guards/permission-gate';
 
 /**
  * A printable receipt.
@@ -23,6 +25,7 @@ export function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
   const receipt = useReceipt(paymentId);
   const [showItems, setShowItems] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -55,138 +58,156 @@ export function ReceiptPage() {
   const verifyUrl = `${env.appUrl}/verify/${record.verificationCode}`;
 
   return (
-    <PageContainer width="narrow">
-      <div className="no-print">
-        <PageHeader
-          title={`Receipt ${record.receiptNo}`}
-          description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
-          breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
-          actions={
-            <>
-              <Button
-                data-cy="finance-receipt-whatsapp"
-                variant="outline"
-                onClick={() =>
-                  toast.info('Coming soon', {
-                    description: "Sending receipts straight to a guardian's WhatsApp is on the way.",
-                  })
-                }
-              >
-                <MessageCircle />
-                Send to WhatsApp
-              </Button>
-              <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
-                <Printer />
-                Print
-              </Button>
-            </>
-          }
-        />
-      </div>
-
-      {record.allocations.some((allocation) => allocation.lines.length > 0) && (
-        <label className="no-print flex items-center gap-2 text-sm text-muted-foreground">
-          <input
-            data-cy="finance-receipt-show-items"
-            type="checkbox"
-            checked={showItems}
-            onChange={(event) => setShowItems(event.target.checked)}
-            className="size-4 rounded border-input"
-          />
-          Show each invoice's charges on the receipt
-        </label>
-      )}
-
-      <Card className="print-page">
-        <CardContent className="space-y-5 pt-6">
-          <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
-            {record.schoolLogoUrl ? (
-              <img src={record.schoolLogoUrl} alt="" className="size-14 object-contain" />
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold">{record.schoolName}</h2>
-              <p className="text-sm text-muted-foreground">{record.schoolAddress}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Receipt</p>
-              <p className="font-mono font-semibold">{record.receiptNo}</p>
-            </div>
-          </header>
-
-          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <Field label="Received from" value={record.studentName} />
-            <Field label="Admission number" value={record.admissionNo} />
-            <Field label="Class" value={record.className ?? '—'} />
-            <Field label="Date" value={formatDateTime(record.paidAt)} />
-            <Field label="Method" value={humanizeEnum(record.method)} />
-            <Field label="Received by" value={record.receivedByName} />
-          </dl>
-
-          <div className="rounded-md bg-muted/50 p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Amount received</p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(record.amount, 'NGN')}</p>
-            <p className="mt-0.5 text-sm capitalize text-muted-foreground">
-              {record.amountInWords}
-            </p>
-          </div>
-
-          {record.allocations.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-                Applied to
-              </p>
-              <table className="w-full text-sm">
-                <caption className="sr-only">Invoices this payment was applied to</caption>
-                <tbody className="divide-y divide-border">
-                  {record.allocations.map((allocation, index) => (
-                    <Fragment key={index}>
-                      <tr>
-                        <td className="py-1.5 font-mono text-xs">{allocation.invoiceNo}</td>
-                        <td className="py-1.5">{allocation.description}</td>
-                        <td className="py-1.5 text-right tabular-nums">
-                          {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
-                        </td>
-                      </tr>
-                      {showItems &&
-                        allocation.lines.map((line, lineIndex) => (
-                          <tr key={lineIndex} className="text-xs text-muted-foreground">
-                            <td className="py-1"></td>
-                            <td className="py-1 pl-4">
-                              {line.description}
-                              {line.isOptional ? ' (optional)' : ''}
-                            </td>
-                            <td className="py-1 text-right tabular-nums">
-                              {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
-                            </td>
-                          </tr>
-                        ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border pt-4">
-            <div className="space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Balance after this payment: </span>
-                <span
-                  className={`font-semibold tabular-nums ${record.balanceAfter > 0 ? 'text-danger' : 'text-success'}`}
+    <>
+      <PageContainer width="narrow">
+        <div className="no-print">
+          <PageHeader
+            title={`Receipt ${record.receiptNo}`}
+            description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
+            breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
+            actions={
+              <>
+                <Button
+                  data-cy="finance-receipt-whatsapp"
+                  variant="outline"
+                  onClick={() =>
+                    toast.info('Coming soon', {
+                      description: "Sending receipts straight to a guardian's WhatsApp is on the way.",
+                    })
+                  }
                 >
-                  {formatCurrency(record.balanceAfter, 'NGN')}
-                </span>
+                  <MessageCircle />
+                  Send to WhatsApp
+                </Button>
+                <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
+                  <Button
+                    data-cy="finance-receipt-email"
+                    variant="outline"
+                    onClick={() => setEmailOpen(true)}
+                  >
+                    <Mail />
+                    Email receipt
+                  </Button>
+                </PermissionGate>
+                <Button data-cy="finance-receipt-print" onClick={() => window.print()}>
+                  <Printer />
+                  Print
+                </Button>
+              </>
+            }
+          />
+        </div>
+
+        {record.allocations.some((allocation) => allocation.lines.length > 0) && (
+          <label className="no-print flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              data-cy="finance-receipt-show-items"
+              type="checkbox"
+              checked={showItems}
+              onChange={(event) => setShowItems(event.target.checked)}
+              className="size-4 rounded border-input"
+            />
+            Show each invoice's charges on the receipt
+          </label>
+        )}
+
+        <Card className="print-page">
+          <CardContent className="space-y-5 pt-6">
+            <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
+              {record.schoolLogoUrl ? (
+                <img src={record.schoolLogoUrl} alt="" className="size-14 object-contain" />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold">{record.schoolName}</h2>
+                <p className="text-sm text-muted-foreground">{record.schoolAddress}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Receipt</p>
+                <p className="font-mono font-semibold">{record.receiptNo}</p>
+              </div>
+            </header>
+
+            <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <Field label="Received from" value={record.studentName} />
+              <Field label="Admission number" value={record.admissionNo} />
+              <Field label="Class" value={record.className ?? '—'} />
+              <Field label="Date" value={formatDateTime(record.paidAt)} />
+              <Field label="Method" value={humanizeEnum(record.method)} />
+              <Field label="Received by" value={record.receivedByName} />
+            </dl>
+
+            <div className="rounded-md bg-muted/50 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Amount received</p>
+              <p className="text-2xl font-bold tabular-nums">{formatCurrency(record.amount, 'NGN')}</p>
+              <p className="mt-0.5 text-sm capitalize text-muted-foreground">
+                {record.amountInWords}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Verification code <span className="font-mono">{record.verificationCode}</span>
-              </p>
-              <p className="break-all text-xs text-muted-foreground">{verifyUrl}</p>
             </div>
-            <QrCode value={verifyUrl} size={84} label="Scan to verify this receipt" />
-          </div>
-        </CardContent>
-      </Card>
+
+            {record.allocations.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+                  Applied to
+                </p>
+                <table className="w-full text-sm">
+                  <caption className="sr-only">Invoices this payment was applied to</caption>
+                  <tbody className="divide-y divide-border">
+                    {record.allocations.map((allocation, index) => (
+                      <Fragment key={index}>
+                        <tr>
+                          <td className="py-1.5 font-mono text-xs">{allocation.invoiceNo}</td>
+                          <td className="py-1.5">{allocation.description}</td>
+                          <td className="py-1.5 text-right tabular-nums">
+                            {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                          </td>
+                        </tr>
+                        {showItems &&
+                          allocation.lines.map((line, lineIndex) => (
+                            <tr key={lineIndex} className="text-xs text-muted-foreground">
+                              <td className="py-1"></td>
+                              <td className="py-1 pl-4">
+                                {line.description}
+                                {line.isOptional ? ' (optional)' : ''}
+                              </td>
+                              <td className="py-1 text-right tabular-nums">
+                                {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                              </td>
+                            </tr>
+                          ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border pt-4">
+              <div className="space-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Balance after this payment: </span>
+                  <span
+                    className={`font-semibold tabular-nums ${record.balanceAfter > 0 ? 'text-danger' : 'text-success'}`}
+                  >
+                    {formatCurrency(record.balanceAfter, 'NGN')}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Verification code <span className="font-mono">{record.verificationCode}</span>
+                </p>
+                <p className="break-all text-xs text-muted-foreground">{verifyUrl}</p>
+              </div>
+              <QrCode value={verifyUrl} size={84} label="Scan to verify this receipt" />
+            </div>
+          </CardContent>
+        </Card>
     </PageContainer>
+      <EmailReceiptDialog
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
+        paymentId={record.paymentId}
+        studentId={record.studentId}
+      />
+    </>
   );
 }
 

@@ -280,6 +280,7 @@ export interface ReceiptDTO {
   id: string;
   receiptNo: string;
   paymentId: string;
+  studentId: string;
   schoolName: string;
   schoolLogoUrl: string | null;
   schoolAddress: string;

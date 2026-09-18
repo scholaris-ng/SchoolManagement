@@ -1,9 +1,16 @@
 /** A rendered message, ready for any provider to deliver. */
+export interface MailAttachment {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+}
+
 export interface MailMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
+  attachments?: MailAttachment[];
 }
 
 /**

@@ -18,11 +18,21 @@ import type { MailMessage, MailProvider } from '../types';
 export class AppsScriptProvider implements MailProvider {
   constructor(private readonly webAppUrl: string) {}
 
-  async send({ to, subject, html, text }: MailMessage): Promise<void> {
+  async send({ to, subject, html, text, attachments }: MailMessage): Promise<void> {
     const response = await fetch(this.webAppUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject, htmlBody: html, body: text }),
+      body: JSON.stringify({
+        to,
+        subject,
+        htmlBody: html,
+        body: text,
+        attachments: attachments?.map((file) => ({
+          filename: file.filename,
+          content: Buffer.isBuffer(file.content) ? file.content.toString('base64') : file.content,
+          contentType: file.contentType ?? 'application/octet-stream',
+        })),
+      }),
     });
 
     if (!response.ok) {

@@ -19,13 +19,14 @@ export class NodemailerProvider implements MailProvider {
     return this.transporter;
   }
 
-  async send({ to, subject, html, text }: MailMessage): Promise<void> {
+  async send({ to, subject, html, text, attachments }: MailMessage): Promise<void> {
     await this.getTransporter().sendMail({
       from: `"${env.email.fromName}" <${env.email.user}>`,
       to,
       subject,
       html,
       text,
+      attachments,
     });
   }
 }

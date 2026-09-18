@@ -297,6 +297,12 @@ export const FinanceEndpoints = {
 
   fetchReceipt: (paymentId: string) => http.get<Receipt>(`/receipts/${paymentId}`),
 
+  sendReceiptEmail: (paymentId: string, guardianId: string, includeCharges: boolean) =>
+    http.post<{ sent: boolean; email: string }>(`/receipts/${paymentId}/email`, {
+      guardianId,
+      includeCharges,
+    }),
+
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),
 
