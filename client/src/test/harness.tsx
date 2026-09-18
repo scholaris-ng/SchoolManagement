@@ -35,6 +35,15 @@ export function buildMembership(over: Partial<SchoolMembership> = {}): SchoolMem
     customRoleNames: [],
     permissions: [],
     branding: { primaryColor: '#4f46e5', accentColor: '#0ea5e9' },
+    // Open and well clear of its end, so a page under test is never locked or
+    // warned about unless the test asks for it.
+    access: {
+      plan: 'ACTIVE',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      expired: false,
+      daysLeft: 30,
+      contactEmail: 'admin@scholaris.test',
+    },
     status: 'ACTIVE',
     ...over,
   };
@@ -134,6 +143,7 @@ export function authStub(permissions: Permission[], over: Record<string, unknown
       phone: null,
       photoUrl: null,
       isPlatformAdmin: false,
+      canManageSubscriptions: false,
       memberships: [membership],
       createdAt: new Date().toISOString(),
     } satisfies AuthenticatedUser as AuthenticatedUser,

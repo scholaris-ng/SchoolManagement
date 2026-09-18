@@ -54,6 +54,25 @@ export interface SchoolBranch {
 }
 
 /**
+ * Where a school stands on its subscription. Mirrors `SchoolAccessDTO` on the
+ * server.
+ *
+ * `plan` is a free trial or an activation; whether the school may be *used* is
+ * `expired` alone, decided by the server's clock, so a trial and a paid month
+ * lock in the same way.
+ */
+export interface SchoolAccess {
+  plan: 'TRIAL' | 'ACTIVE' | 'SUSPENDED';
+  /** ISO timestamp of the moment access ends. */
+  endsAt: string;
+  expired: boolean;
+  /** Whole days left, rounded up; zero once expired. */
+  daysLeft: number;
+  /** Who a locked school is told to write to, or `null` when none is configured. */
+  contactEmail: string | null;
+}
+
+/**
  * What the authenticated user is allowed to do *within one school*. A user may
  * hold several memberships; the active one drives navigation and every query.
  */
@@ -69,6 +88,8 @@ export interface SchoolMembership {
   customRoleNames: string[];
   permissions: Permission[];
   branding: SchoolBranding;
+  /** The school's trial or activation — whether it may be used right now. */
+  access: SchoolAccess;
   status: 'ACTIVE' | 'INVITED' | 'SUSPENDED';
   /** Present when the membership is a parent/guardian record. */
   guardianId?: string | null;
@@ -92,6 +113,8 @@ export interface AuthenticatedUser {
   phone?: string | null;
   photoUrl?: string | null;
   isPlatformAdmin: boolean;
+  /** May activate schools after their trial — shows the Schools screen. Set by the server from its configured list. */
+  canManageSubscriptions: boolean;
   memberships: SchoolMembership[];
   createdAt: string;
 }

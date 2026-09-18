@@ -68,9 +68,29 @@ export class School extends SoftDeletableEntity {
   @Column({ type: 'jsonb' })
   settings: SchoolSettings;
 
+  /** `TRIAL` until someone activates the school, `ACTIVE` after. Whether it can be *used* is `accessEndsAt`. */
   @Column({ type: 'varchar', length: 20, default: 'TRIAL' })
   @Index()
   status: 'ACTIVE' | 'SUSPENDED' | 'TRIAL';
+
+  /**
+   * The moment the software stops working for this school: 14 days after it was
+   * created, and pushed back a month at a time by an activation. The default
+   * starts every school's trial however it was created — see the migration.
+   */
+  @Column({
+    type: 'timestamptz',
+    name: 'access_ends_at',
+    default: () => "now() + interval '14 days'",
+  })
+  accessEndsAt: Date;
+
+  @Column({ type: 'timestamptz', name: 'last_activated_at', nullable: true })
+  lastActivatedAt: Date | null;
+
+  /** The administrator's email address, as it was when they activated. */
+  @Column({ type: 'varchar', name: 'last_activated_by', length: 160, nullable: true })
+  lastActivatedBy: string | null;
 
   /**
    * Optimistic lock (spec section 34). Two administrators editing branding at

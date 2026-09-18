@@ -25,6 +25,8 @@ import { SyncIndicator } from './sync-indicator';
 import { ImportIndicator } from './import-indicator';
 import { NotificationBell } from '@/features/notifications/notification-bell';
 import { CommandPalette } from './command-palette';
+import { SchoolPlanBadge } from '@/features/subscription/school-plan-badge';
+import { PLAN_LABEL } from '@/features/subscription/school-access';
 
 export interface TopbarProps {
   onOpenMobileNav: () => void;
@@ -128,6 +130,16 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                       {membership.schoolName}
                     </p>
                   )}
+                  {/* The header badge needs a wide screen; this is where a
+                      narrower one finds the same answer. */}
+                  {membership?.access && (
+                    <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">
+                      {PLAN_LABEL[membership.access.plan]} ·{' '}
+                      {membership.access.expired
+                        ? 'ended'
+                        : `${membership.access.daysLeft} day${membership.access.daysLeft === 1 ? '' : 's'} left`}
+                    </p>
+                  )}
                   {/* The top-bar badge is hidden on a phone; this is where a
                       mobile user finds the same answer. */}
                   {currentTerm && (
@@ -215,6 +227,8 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+
+          <SchoolPlanBadge />
         </div>
       </header>
 

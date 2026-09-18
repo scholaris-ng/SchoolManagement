@@ -5,6 +5,7 @@ import {
   BarChart3,
   BookMarked,
   BookOpen,
+  Building2,
   Bus,
   CalendarDays,
   ClipboardCheck,
@@ -48,8 +49,21 @@ export interface NavItem {
   require?: PermissionRequirement;
   /** Restrict the entry to particular personas even when permitted. */
   personas?: PersonaKey[];
+  /**
+   * Only for the people who may activate schools (`user.canManageSubscriptions`).
+   * Not a permission: those are granted per school, and this is not that.
+   */
+  subscriptionAdminOnly?: boolean;
   end?: boolean;
   badgeKey?: 'messages' | 'notifications' | 'outbox';
+}
+
+/** Whether this entry is one the person may be shown, given what they hold. */
+export function isNavItemVisible(
+  item: Pick<NavItem, 'subscriptionAdminOnly'>,
+  user: { canManageSubscriptions: boolean } | null,
+): boolean {
+  return !item.subscriptionAdminOnly || Boolean(user?.canManageSubscriptions);
 }
 
 export interface NavSection {
@@ -195,6 +209,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Roles & access', to: '/settings/roles', icon: Shield, require: 'role.manage' },
       { label: 'Website', to: '/settings/website', icon: Newspaper, require: 'website.manage' },
       { label: 'Audit trail', to: '/audit', icon: ScrollText, require: 'audit.read' },
+    ],
+  },
+  {
+    id: 'platform',
+    label: 'Platform',
+    items: [
+      { label: 'Schools', to: '/platform/schools', icon: Building2, subscriptionAdminOnly: true },
     ],
   },
 ];

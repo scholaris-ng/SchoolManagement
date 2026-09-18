@@ -63,6 +63,8 @@ export const ApiErrorCode = {
   Conflict: 'CONFLICT',
   VersionConflict: 'VERSION_CONFLICT',
   RateLimited: 'RATE_LIMITED',
+  /** The school's trial or subscription has ended — see `SchoolAccess`. */
+  SubscriptionExpired: 'SUBSCRIPTION_EXPIRED',
   Network: 'NETWORK_ERROR',
   Offline: 'OFFLINE',
   Internal: 'INTERNAL_ERROR',

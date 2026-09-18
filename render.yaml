@@ -65,6 +65,12 @@ services:
       - key: RAVEN_WEBHOOK_SECRET
         sync: false
 
+      # --- Subscriptions ----------------------------------------------------
+      # Comma-separated emails of the people who may activate a school after its
+      # 14-day trial. Left empty, nobody can and schools stay locked.
+      - key: SUBSCRIPTION_ADMIN_EMAILS
+        sync: false
+
       # --- Sharing finance PDFs on WhatsApp (optional) -----------------------
       # Without all three, "Send to WhatsApp" refuses with a clear message.
       - key: CLOUDINARY_CLOUD_NAME

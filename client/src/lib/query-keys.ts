@@ -16,6 +16,14 @@ export const queryKeys = {
   session: () => ['session'] as const,
 
   /**
+   * Platform administration acts on every school at once, so — like the session —
+   * these keys cannot be filed under any one of them.
+   */
+  platform: {
+    schools: () => ['platform', 'schools'] as const,
+  },
+
+  /**
    * Every cached query for one school — the prefix `scoped()` builds every
    * other key from. React Query matches a query key by prefix, so
    * invalidating this evicts everything below it in one call. Use it for a

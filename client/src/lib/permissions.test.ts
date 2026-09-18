@@ -27,6 +27,7 @@ const membership = (over: Partial<SchoolMembership> = {}): SchoolMembership => (
   customRoleNames: [],
   permissions: [],
   branding: { primaryColor: '#4f46e5', accentColor: '#0ea5e9' },
+  access: { plan: 'ACTIVE', endsAt: '2099-01-01T00:00:00.000Z', expired: false, daysLeft: 30, contactEmail: null },
   status: 'ACTIVE',
   ...over,
 });

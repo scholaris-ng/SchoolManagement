@@ -33,6 +33,9 @@ export function createQueryClient(): QueryClient {
         // Background refetch failures stay quiet; only surface the first load.
         if (query.state.data !== undefined) return;
         if (isApiError(error) && (error.isUnauthenticated || error.isOffline)) return;
+        // Every request on the page fails at once when a school's trial ends;
+        // the app locks itself, and a toast apiece would bury that.
+        if (isApiError(error) && error.isSubscriptionExpired) return;
         // Opt-out for screens that render their own in-page error state instead
         // of a toast — the public school site, whose visitors are not signed
         // in and would otherwise see a raw "School was not found" banner
@@ -43,7 +46,7 @@ export function createQueryClient(): QueryClient {
     }),
     mutationCache: new MutationCache({
       onError: (error, _variables, _context, mutation) => {
-        if (isApiError(error) && error.isUnauthenticated) return;
+        if (isApiError(error) && (error.isUnauthenticated || error.isSubscriptionExpired)) return;
         // Version conflicts are handled by the calling feature with a dialog.
         if (isApiError(error) && error.isVersionConflict) return;
         // Same opt-out the queries have, for the same reason: a family whose

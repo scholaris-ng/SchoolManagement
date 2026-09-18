@@ -42,6 +42,13 @@ export function membershipFor(role: TestRole): SchoolMembership {
       faviconUrl: null,
       motto: 'Knowledge and character',
     },
+    access: {
+      plan: 'ACTIVE',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      expired: false,
+      daysLeft: 30,
+      contactEmail: null,
+    },
     status: 'ACTIVE',
     guardianId: role === 'parent' ? 'e2e-guardian-1' : null,
     studentId: role === 'student' ? 'e2e-student-1' : null,
@@ -60,6 +67,7 @@ export function userFor(role: TestRole): AuthenticatedUser {
     phone: null,
     photoUrl: null,
     isPlatformAdmin: false,
+    canManageSubscriptions: false,
     memberships: [membershipFor(role)],
     createdAt: '2026-01-01T00:00:00.000Z',
   };

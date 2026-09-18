@@ -10,6 +10,7 @@ import { configureHttp, http } from '@/lib/http';
 import { queryKeys } from '@/lib/query-keys';
 import { localStore, storageKeys } from '@/lib/storage';
 import { resolvePersona, satisfies, type PermissionRequirement } from '@/lib/permissions';
+import { isLocked } from '@/features/subscription/school-access';
 import type { PersonaKey, Permission } from '@/types/rbac';
 import type { AuthenticatedUser, SchoolMembership, SessionPayload } from '@/types/tenant';
 
@@ -84,6 +85,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         queryClient.clear();
         void identity.signOut();
       },
+      // A school can run out of trial while someone has it open. The session says
+      // so, and reading it again is what turns the page into the locked one.
+      onSubscriptionExpired: () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+      },
     });
   }, [queryClient]);
 
@@ -106,6 +112,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryFn: sessionQueryFn,
     enabled: identityReady && Boolean(identityUser),
     staleTime: 5 * 60_000,
+    // While a school is locked, look again every half minute: when an
+    // administrator activates it, the people waiting on the locked page are let
+    // back in without having to know to reload.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const active =
+        data?.user.memberships.find((entry) => entry.schoolId === activeSchoolId) ??
+        data?.user.memberships[0] ??
+        null;
+      return data && isLocked(data.user, active) ? 30_000 : false;
+    },
     retry: (failureCount, error) => {
       const status = (error as { status?: number }).status;
       // A 401/403 means this identity has no session — retrying will not help.

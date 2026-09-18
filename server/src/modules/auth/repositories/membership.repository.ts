@@ -15,6 +15,8 @@ export interface MembershipRow {
   schoolShortName: string;
   schoolSlug: string;
   schoolBranding: Record<string, unknown>;
+  schoolStatus: 'ACTIVE' | 'SUSPENDED' | 'TRIAL';
+  schoolAccessEndsAt: Date;
   branchId: string | null;
   branchName: string | null;
   status: 'ACTIVE' | 'INVITED' | 'SUSPENDED';
@@ -48,6 +50,8 @@ export class MembershipRepository {
         s.short_name                           AS "schoolShortName",
         s.slug                                 AS "schoolSlug",
         s.branding                             AS "schoolBranding",
+        s.status                               AS "schoolStatus",
+        s.access_ends_at                       AS "schoolAccessEndsAt",
         m.branch_id                            AS "branchId",
         b.name                                 AS "branchName",
         m.status                               AS "status",

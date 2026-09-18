@@ -80,6 +80,11 @@ const schema = z.object({
   EMAIL_APPS_SCRIPT_URL: z.string().url().optional(),
   EMAIL_APPS_SCRIPT_SCHOOL_EMAIL: csv,
 
+  // Who may activate a school's subscription: a comma-separated list of email
+  // addresses. Empty means nobody can, which is the safe failure — schools then
+  // stay on their trial and lock when it ends. See `subscriptionAdmin.ts`.
+  SUBSCRIPTION_ADMIN_EMAILS: csv,
+
   /** How long an email verification code stays valid. */
   VERIFICATION_CODE_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
 
@@ -181,6 +186,13 @@ export const env = {
       schoolEmails: new Set(raw.EMAIL_APPS_SCRIPT_SCHOOL_EMAIL.map((email) => email.toLowerCase())),
       configured: Boolean(raw.EMAIL_APPS_SCRIPT_URL && raw.EMAIL_APPS_SCRIPT_SCHOOL_EMAIL.length > 0),
     },
+  },
+
+  subscription: {
+    /** Lower-cased, so a match never depends on how an address was capitalised. */
+    adminEmails: new Set(raw.SUBSCRIPTION_ADMIN_EMAILS.map((email) => email.toLowerCase())),
+    /** Who a locked-out school is told to write to: the first administrator listed. */
+    contactEmail: raw.SUBSCRIPTION_ADMIN_EMAILS[0]?.toLowerCase() ?? null,
   },
 
   verificationCodeTtlMinutes: raw.VERIFICATION_CODE_TTL_MINUTES,

@@ -92,7 +92,7 @@ export function SchoolSwitcher({ compact }: { compact?: boolean }) {
   );
 }
 
-function SchoolMark({
+export function SchoolMark({
   name,
   logoUrl,
   color,

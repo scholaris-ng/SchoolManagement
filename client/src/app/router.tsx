@@ -11,6 +11,7 @@ import { financeRoutes } from './routes/finance.routes';
 import { behaviourRoutes } from './routes/behaviour.routes';
 import { communicationRoutes } from './routes/communication.routes';
 import { administrationRoutes } from './routes/administration.routes';
+import { platformRoutes } from './routes/platform.routes';
 import { portalRoutes } from './routes/portal.routes';
 import { siteHostRoute, sitePathRoute } from '@/features/site/site.routes';
 import { siteSlugFromHost } from '@/features/site/site-host';
@@ -109,6 +110,7 @@ export const router = createBrowserRouter(
             ...behaviourRoutes,
             ...communicationRoutes,
             ...administrationRoutes,
+            ...platformRoutes,
             ...portalRoutes,
 
             { path: 'dashboard', element: <Navigate to="/" replace /> },
