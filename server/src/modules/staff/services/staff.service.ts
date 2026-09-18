@@ -18,6 +18,7 @@ import { SubjectRepository } from '../../academics/repositories/subject.reposito
 import { TeachingAssignment } from '../entities/teachingAssignment.entity';
 import { StaffClassAssignment } from '../entities/staffClassAssignment.entity';
 import { ClassFormTeacher } from '../../academics/entities/classFormTeacher.entity';
+import { SchoolRepository } from '../../school/repositories/school.repository';
 import { StaffRepository } from '../repositories/staff.repository';
 import { Staff } from '../entities/staff.entity';
 import type { StaffMemberDTO } from '../dto/staff.dto';
@@ -55,6 +56,7 @@ export class StaffService {
     private readonly classes = ClassRepository.Instance,
     private readonly subjects = SubjectRepository.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly schools = SchoolRepository.Instance,
   ) {}
 
   async fetchAll(
@@ -226,10 +228,12 @@ export class StaffService {
     // Fire-and-forget, like every other transactional email here: a bounced
     // address must not undo a successful hire. The admin's copy in the create
     // dialog is the fallback if this never arrives.
+    const school = await this.schools.findById(context.schoolId);
     void sendStaffAccountEmail({
       to: input.email,
       firstName: input.firstName,
       schoolName: context.membership.schoolName,
+      schoolEmail: school?.email ?? '',
       designation: input.designation,
       temporaryPassword,
     }).catch(console.error);

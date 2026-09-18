@@ -6,6 +6,7 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { sendNotificationEmail } from '../../../shared/utils/mailer';
 import { MembershipRepository } from '../../auth/repositories/membership.repository';
 import { UserRepository } from '../../auth/repositories/user.repository';
+import { SchoolRepository } from '../../school/repositories/school.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
 import { NotificationPreferenceRepository } from '../repositories/notificationPreference.repository';
 import { PushTokenRepository } from '../repositories/pushToken.repository';
@@ -72,6 +73,7 @@ export class NotificationsService {
     private readonly pushTokens = PushTokenRepository.Instance,
     private readonly memberships = MembershipRepository.Instance,
     private readonly users = UserRepository.Instance,
+    private readonly schools = SchoolRepository.Instance,
   ) {}
 
   // ─── The inbox ──────────────────────────────────────────────────────────────
@@ -236,7 +238,7 @@ export class NotificationsService {
       // Not awaited: an SMTP round trip per recipient must never make the
       // business operation that triggered this wait on the inbox delivery,
       // same as every other mail send in this codebase (`mailer.ts`).
-      void this.emailTo(wantsEmail, payload);
+      void this.emailTo(schoolId, wantsEmail, payload);
     } catch (error) {
       console.error(`[notifications] Failed to notify for ${payload.category}:`, error);
     }
@@ -280,16 +282,20 @@ export class NotificationsService {
    * `sendNotificationEmail`. Never throws: a bounced or slow inbox must not
    * turn the in-app notification this rides alongside into a failure too.
    */
-  private async emailTo(userIds: string[], payload: NotifyPayload): Promise<void> {
+  private async emailTo(schoolId: string, userIds: string[], payload: NotifyPayload): Promise<void> {
     if (userIds.length === 0) return;
 
     try {
-      const recipients = await this.users.findContactInfoForIds(userIds);
+      const [recipients, school] = await Promise.all([
+        this.users.findContactInfoForIds(userIds),
+        this.schools.findById(schoolId),
+      ]);
       await Promise.all(
         recipients.map((recipient) =>
           sendNotificationEmail({
             to: recipient.email,
             firstName: recipient.firstName,
+            schoolEmail: school?.email ?? '',
             title: payload.title,
             body: payload.body,
             actionUrl: payload.actionUrl,

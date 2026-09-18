@@ -20,6 +20,9 @@ jest.mock('../../auth/repositories/membership.repository', () => ({
 jest.mock('../../auth/repositories/user.repository', () => ({
   UserRepository: { Instance: { findContactInfoForIds: jest.fn() } },
 }));
+jest.mock('../../school/repositories/school.repository', () => ({
+  SchoolRepository: { Instance: { findById: jest.fn().mockResolvedValue({ email: 'admin@brightfield.test' }) } },
+}));
 jest.mock('../../../shared/utils/mailer', () => ({
   sendNotificationEmail: jest.fn().mockResolvedValue(undefined),
 }));
@@ -58,6 +61,7 @@ describe('NotificationsService.notifyUsers — email fan-out', () => {
     expect(email).toHaveBeenCalledWith({
       to: 'teacher@brightfield.edu.ng',
       firstName: 'Ada',
+      schoolEmail: 'admin@brightfield.test',
       title: 'Scheme of work approved',
       body: 'Your scheme was approved.',
       actionUrl: '/schemes/1',

@@ -163,6 +163,7 @@ export class RegistrationService {
       to: user.email,
       firstName: user.firstName,
       schoolName: school.name,
+      schoolEmail: school.email,
       code,
       expiresInMinutes: env.verificationCodeTtlMinutes,
     }).catch(console.error);
@@ -220,6 +221,7 @@ export class RegistrationService {
       firstName: user.firstName,
       schoolName: membership.schoolName,
       schoolCode: membership.schoolCode,
+      schoolEmail: membership.schoolEmail,
     }).catch(console.error);
 
     return { email: user.email, emailVerified: true };
@@ -243,6 +245,7 @@ export class RegistrationService {
         to: user.email,
         firstName: user.firstName,
         schoolName: membership?.schoolName ?? 'your school',
+        schoolEmail: membership?.schoolEmail,
         code,
         expiresInMinutes: env.verificationCodeTtlMinutes,
       }).catch(console.error);
@@ -268,17 +271,21 @@ export class RegistrationService {
     const user = await this.users.findByEmail(input.email);
 
     if (user) {
-      const link = await getIdentityProvider()
-        .generatePasswordResetLink(user.email)
-        .catch((error) => {
-          console.error('[registration] Could not prepare a password reset:', error);
-          return null;
-        });
+      const [link, membership] = await Promise.all([
+        getIdentityProvider()
+          .generatePasswordResetLink(user.email)
+          .catch((error) => {
+            console.error('[registration] Could not prepare a password reset:', error);
+            return null;
+          }),
+        this.firstMembership(user.id).catch(() => null),
+      ]);
 
       if (link) {
         void sendPasswordResetEmail({
           to: user.email,
           firstName: user.firstName,
+          schoolEmail: membership?.schoolEmail,
           resetUrl: link,
           expiresInHours: PASSWORD_RESET_TTL_HOURS,
         }).catch(console.error);
@@ -379,9 +386,10 @@ export class RegistrationService {
     schoolId: string;
     schoolName: string;
     schoolCode: string;
+    schoolEmail: string;
   }> {
     const [row] = await AppDataSource.query(
-      `SELECT m.school_id AS "schoolId", s.name AS "schoolName", s.code AS "schoolCode"
+      `SELECT m.school_id AS "schoolId", s.name AS "schoolName", s.code AS "schoolCode", s.email AS "schoolEmail"
        FROM school_memberships m
        JOIN schools s ON s.id = m.school_id
        WHERE m.user_id = $1 AND m.deleted_at IS NULL

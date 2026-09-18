@@ -12,6 +12,7 @@ import { sendGuardianInviteEmail } from '../../../shared/utils/mailer';
 import { env } from '../../../config/env';
 import { StudentRepository } from '../../students/repositories/student.repository';
 import { StudentAccessService } from '../../students/services/studentAccess.service';
+import { SchoolRepository } from '../../school/repositories/school.repository';
 import { GuardianRepository } from '../repositories/guardian.repository';
 import type { GuardianDTO, StudentGuardianLinkDTO } from '../dto/guardians.dto';
 import type {
@@ -37,6 +38,7 @@ export class GuardiansService {
     private readonly audit = AuditService.Instance,
     private readonly verifications = EmailVerificationRepository.Instance,
     private readonly notifications = NotificationsService.Instance,
+    private readonly schools = SchoolRepository.Instance,
   ) {}
 
   async fetchGuardians(
@@ -400,10 +402,12 @@ export class GuardiansService {
         console.info(`[guardian-invite] Verification code for ${guardian.email}: ${code}`);
       }
 
+      const school = await this.schools.findById(context.schoolId);
       void sendGuardianInviteEmail({
         to: guardian.email,
         firstName: guardian.firstName,
         schoolName: context.membership.schoolName,
+        schoolEmail: school?.email ?? '',
         childNames: children.map((link) => link.studentName),
         code,
         expiresInMinutes: env.verificationCodeTtlMinutes,

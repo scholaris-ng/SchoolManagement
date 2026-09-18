@@ -32,6 +32,9 @@ jest.mock('../../academics/repositories/subject.repository', () => ({
 jest.mock('../../audit/services/audit.service', () => ({
   AuditService: { Instance: { record: jest.fn() } },
 }));
+jest.mock('../../school/repositories/school.repository', () => ({
+  SchoolRepository: { Instance: { findById: jest.fn() } },
+}));
 jest.mock('../../../infrastructure/database/dataSource', () => ({
   AppDataSource: { transaction: jest.fn(async (run: (m: unknown) => unknown) => run({})) },
 }));

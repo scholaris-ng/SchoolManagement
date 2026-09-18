@@ -69,6 +69,17 @@ const schema = z.object({
   EMAIL_PASSWORD: z.string().optional(),
   EMAIL_FROM_NAME: z.string().default('Scholaris'),
 
+  /**
+   * Per-school override: school notifications (never auth mail — see
+   * `mailer.ts`) for a school whose `schools.email` is listed in
+   * EMAIL_APPS_SCRIPT_SCHOOL_EMAIL (comma-separated) are sent through this
+   * Google Apps Script Web App instead of SMTP. Every other school keeps
+   * using SMTP. Absent either value, all mail stays on SMTP — see
+   * `shared/mail/router.ts`.
+   */
+  EMAIL_APPS_SCRIPT_URL: z.string().url().optional(),
+  EMAIL_APPS_SCRIPT_SCHOOL_EMAIL: csv,
+
   /** How long an email verification code stays valid. */
   VERIFICATION_CODE_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
 
@@ -158,6 +169,12 @@ export const env = {
     fromName: raw.EMAIL_FROM_NAME,
     /** Without both a user and a password there is nothing to authenticate with. */
     configured: Boolean(raw.EMAIL_USER && raw.EMAIL_PASSWORD),
+
+    appsScript: {
+      url: raw.EMAIL_APPS_SCRIPT_URL,
+      schoolEmails: new Set(raw.EMAIL_APPS_SCRIPT_SCHOOL_EMAIL.map((email) => email.toLowerCase())),
+      configured: Boolean(raw.EMAIL_APPS_SCRIPT_URL && raw.EMAIL_APPS_SCRIPT_SCHOOL_EMAIL.length > 0),
+    },
   },
 
   verificationCodeTtlMinutes: raw.VERIFICATION_CODE_TTL_MINUTES,

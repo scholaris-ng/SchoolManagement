@@ -50,6 +50,14 @@ services:
         sync: false
       - key: EMAIL_PASSWORD
         sync: false
+      # Per-school override: notifications (never auth mail) for a school
+      # whose `schools.email` is in this comma-separated list go through this
+      # Apps Script Web App instead of SMTP above. Leave both unset to keep
+      # every school on SMTP — see server/src/shared/mail/router.ts.
+      - key: EMAIL_APPS_SCRIPT_URL
+        sync: false
+      - key: EMAIL_APPS_SCRIPT_SCHOOL_EMAIL
+        sync: false
 
       # --- Payments (optional) ----------------------------------------------
       - key: RAVEN_SECRET_KEY

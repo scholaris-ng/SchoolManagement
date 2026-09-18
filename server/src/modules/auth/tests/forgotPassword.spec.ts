@@ -2,6 +2,7 @@ import { RegistrationService } from '../services/registration.service';
 import { UserRepository } from '../repositories/user.repository';
 import { getIdentityProvider } from '../../../shared/services/identity.service';
 import { sendPasswordResetEmail } from '../../../shared/utils/mailer';
+import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import type { User } from '../entities/user.entity';
 
 jest.mock('../repositories/user.repository', () => ({
@@ -20,10 +21,14 @@ jest.mock('../../../shared/utils/mailer', () => ({
   sendSchoolReadyEmail: jest.fn().mockResolvedValue(undefined),
   sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../../infrastructure/database/dataSource', () => ({
+  AppDataSource: { query: jest.fn() },
+}));
 
 const users = UserRepository.Instance as jest.Mocked<typeof UserRepository.Instance>;
 const identity = getIdentityProvider as jest.MockedFunction<typeof getIdentityProvider>;
 const sendReset = sendPasswordResetEmail as jest.MockedFunction<typeof sendPasswordResetEmail>;
+const query = AppDataSource.query as jest.Mock;
 
 const generatePasswordResetLink = jest.fn();
 
@@ -43,6 +48,9 @@ beforeEach(() => {
   identity.mockReturnValue({
     generatePasswordResetLink,
   } as unknown as ReturnType<typeof getIdentityProvider>);
+  // No membership row by default — `firstMembership` throws, `forgotPassword`
+  // swallows it, and the reset just carries no `schoolEmail`.
+  query.mockResolvedValue([]);
 });
 
 /**
@@ -83,6 +91,23 @@ describe('RegistrationService.forgotPassword', () => {
 
     expect(result).toEqual({ expiresInHours: 1 });
     expect(sendReset).not.toHaveBeenCalled();
+  });
+
+  it('carries the requester’s own school email through, so a school on the Apps Script list gets its resets from there too', async () => {
+    users.findByEmail.mockResolvedValue(user());
+    generatePasswordResetLink.mockResolvedValue('https://auth.test/reset?oobCode=abc');
+    query.mockResolvedValue([
+      { schoolId: 'sch_1', schoolName: 'Brightfield Academy', schoolCode: 'BFA', schoolEmail: 'admin@brightfield.test' },
+    ]);
+
+    await RegistrationService.Instance.forgotPassword({
+      email: 'chidinma.eze@brightfield.edu.ng',
+    });
+    await settle();
+
+    expect(sendReset).toHaveBeenCalledWith(
+      expect.objectContaining({ schoolEmail: 'admin@brightfield.test' }),
+    );
   });
 
   it('sends nothing when the provider has no credential for the address', async () => {

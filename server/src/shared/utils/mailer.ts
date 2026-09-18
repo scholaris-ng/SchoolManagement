@@ -1,5 +1,5 @@
-import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../../config/env';
+import { resolveProvider } from '../mail/router';
 
 /**
  * Outbound mail (`server_arch.md` section 22).
@@ -25,22 +25,6 @@ const BODY_TEXT = '#374151';
 const MUTED_TEXT = '#9ca3af';
 const CARD_BORDER = '#e2e8f0';
 const SURFACE = '#f8fafc';
-
-let transporter: Transporter | null = null;
-
-function getTransporter(): Transporter | null {
-  if (!env.email.configured) return null;
-  if (transporter) return transporter;
-
-  transporter = nodemailer.createTransport({
-    host: env.email.host,
-    port: env.email.port,
-    // 465 is implicit TLS; anything else negotiates with STARTTLS.
-    secure: env.email.port === 465,
-    auth: { user: env.email.user!, pass: env.email.password! },
-  });
-  return transporter;
-}
 
 /**
  * Makes a value safe to drop into the templates below.
@@ -161,31 +145,32 @@ interface SendArgs {
   subject: string;
   html: string;
   text: string;
+  /**
+   * The sending school's own `schools.email` — never the recipient — used
+   * only to pick a provider in `resolveProvider()`. Every send below carries
+   * this when the caller can resolve one; a send with none (no membership
+   * found, no school yet) always falls through to nodemailer.
+   */
+  schoolEmail?: string;
 }
 
 /**
- * Sends, or logs when no SMTP credentials are configured.
+ * Sends, or logs when no provider is configured for this send.
  *
  * Never throws. A failed send must not fail the operation that triggered it —
  * a school whose verification email bounced is still registered, and the right
  * response is a resend, not a rolled-back account.
  */
-async function send({ to, subject, html, text }: SendArgs): Promise<void> {
-  const mail = getTransporter();
-  if (!mail) {
-    console.info(`[mail] SMTP not configured. Would send to ${to}: ${subject}`);
+async function send({ to, subject, html, text, schoolEmail }: SendArgs): Promise<void> {
+  const provider = resolveProvider(schoolEmail);
+  if (!provider) {
+    console.info(`[mail] No provider configured. Would send to ${to}: ${subject}`);
     console.info(`[mail] ${text}`);
     return;
   }
 
   try {
-    await mail.sendMail({
-      from: `"${env.email.fromName}" <${env.email.user}>`,
-      to,
-      subject,
-      html,
-      text,
-    });
+    await provider.send({ to, subject, html, text });
   } catch (error) {
     console.error(`[mail] Failed to send "${subject}" to ${to}:`, error);
   }
@@ -201,10 +186,12 @@ export async function sendVerificationEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail?: string;
   code: string;
   expiresInMinutes: number;
 }): Promise<void> {
-  const { to, firstName, schoolName, code, expiresInMinutes } = params;
+  const { to, firstName, schoolName, schoolEmail, code, expiresInMinutes } = params;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
 
@@ -221,6 +208,7 @@ export async function sendVerificationEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: 'Verify your email — Scholaris',
     // The code itself stays out of the preview line: it is readable from a
     // locked phone by anyone holding it.
@@ -249,11 +237,13 @@ export async function sendGuardianInviteEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   childNames: string[];
   code: string;
   expiresInMinutes: number;
 }): Promise<void> {
-  const { to, firstName, schoolName, childNames, code, expiresInMinutes } = params;
+  const { to, firstName, schoolName, schoolEmail, childNames, code, expiresInMinutes } = params;
   const childList = childNames.length > 0 ? childNames.join(', ') : 'your child';
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
@@ -281,6 +271,7 @@ export async function sendGuardianInviteEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `Parent portal invitation — ${schoolName} — Scholaris`,
     html: emailLayout(body, `Follow attendance, results and fees for ${childList}.`),
     text: [
@@ -311,8 +302,10 @@ export async function sendSchoolReadyEmail(params: {
   firstName: string;
   schoolName: string;
   schoolCode: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail?: string;
 }): Promise<void> {
-  const { to, firstName, schoolName, schoolCode } = params;
+  const { to, firstName, schoolName, schoolCode, schoolEmail } = params;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
   const setupUrl = `${env.appUrl}/settings`;
@@ -338,6 +331,7 @@ export async function sendSchoolReadyEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `Your school is ready — ${schoolName} — Scholaris`,
     html: emailLayout(body, 'Define your levels, classes and subjects to finish setting up.'),
     text: [
@@ -366,10 +360,18 @@ export async function sendSchoolReadyEmail(params: {
 export async function sendPasswordResetEmail(params: {
   to: string;
   firstName: string;
+  /**
+   * The requester's own `schools.email`, when they belong to one — routes
+   * this send, see `SendArgs.schoolEmail`. Unlike the other auth-flow
+   * functions in this file, this one does route per-school: a school on the
+   * Apps Script list gets its whole outbound mail, resets included, from that
+   * one address.
+   */
+  schoolEmail?: string;
   resetUrl: string;
   expiresInHours: number;
 }): Promise<void> {
-  const { to, firstName, resetUrl, expiresInHours } = params;
+  const { to, firstName, schoolEmail, resetUrl, expiresInHours } = params;
   const name = escapeHtml(firstName);
   const hours = expiresInHours === 1 ? 'one hour' : `${expiresInHours} hours`;
 
@@ -387,6 +389,7 @@ export async function sendPasswordResetEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: 'Reset your password — Scholaris',
     // Never the link: a preheader renders on a locked phone, and this one is
     // enough on its own to take over the account.
@@ -421,10 +424,12 @@ export async function sendApplicationReceivedEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   applications: { applicationNo: string; applicantName: string; className: string }[];
   contactEmail: string;
 }): Promise<void> {
-  const { to, firstName, schoolName, applications, contactEmail } = params;
+  const { to, firstName, schoolName, schoolEmail, applications, contactEmail } = params;
   const many = applications.length > 1;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
@@ -448,6 +453,7 @@ export async function sendApplicationReceivedEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `${many ? 'Applications' : 'Application'} received — ${schoolName} — Scholaris`,
     html: emailLayout(body, `Your application reference${many ? 's are' : ' is'} inside.`),
     text: [
@@ -552,6 +558,8 @@ export async function sendApplicationStatusEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   applicantName: string;
   applicationNo: string;
   status: keyof typeof STATUS_COPY;
@@ -562,7 +570,8 @@ export async function sendApplicationStatusEmail(params: {
   note?: string | null;
   contactEmail: string;
 }): Promise<void> {
-  const { to, firstName, schoolName, applicantName, applicationNo, status, note, contactEmail } = params;
+  const { to, firstName, schoolName, schoolEmail, applicantName, applicationNo, status, note, contactEmail } =
+    params;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
   const applicant = escapeHtml(applicantName);
@@ -600,6 +609,7 @@ export async function sendApplicationStatusEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `${copy.subject} — ${schoolName} — Scholaris`,
     html: emailLayout(body, copy.heading),
     text: [
@@ -647,6 +657,8 @@ export async function sendInterviewScheduledEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   applicantName: string;
   applicationNo: string;
   interviewDate: string;
@@ -654,8 +666,17 @@ export async function sendInterviewScheduledEmail(params: {
   note?: string | null;
   contactEmail: string;
 }): Promise<void> {
-  const { to, firstName, schoolName, applicantName, applicationNo, interviewVenue, note, contactEmail } =
-    params;
+  const {
+    to,
+    firstName,
+    schoolName,
+    schoolEmail,
+    applicantName,
+    applicationNo,
+    interviewVenue,
+    note,
+    contactEmail,
+  } = params;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
   const applicant = escapeHtml(applicantName);
@@ -678,6 +699,7 @@ export async function sendInterviewScheduledEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `Interview scheduled — ${schoolName} — Scholaris`,
     html: emailLayout(body, `${applicantName}'s interview is scheduled for ${when}.`),
     text: [
@@ -723,11 +745,13 @@ function offerAction(offerExpiresOn: string | null | undefined, hasLink: boolean
 export async function sendNotificationEmail(params: {
   to: string;
   firstName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   title: string;
   body: string;
   actionUrl?: string | null;
 }): Promise<void> {
-  const { to, firstName, title, body: message, actionUrl } = params;
+  const { to, firstName, schoolEmail, title, body: message, actionUrl } = params;
   const name = escapeHtml(firstName);
   const url = actionUrl ? `${env.appUrl}${actionUrl}` : null;
 
@@ -744,6 +768,7 @@ export async function sendNotificationEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `${title} — Scholaris`,
     html: emailLayout(body, title),
     text: [
@@ -774,10 +799,12 @@ export async function sendStaffAccountEmail(params: {
   to: string;
   firstName: string;
   schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail: string;
   designation: string;
   temporaryPassword: string;
 }): Promise<void> {
-  const { to, firstName, schoolName, designation, temporaryPassword } = params;
+  const { to, firstName, schoolName, schoolEmail, designation, temporaryPassword } = params;
   const name = escapeHtml(firstName);
   const school = escapeHtml(schoolName);
   const role = escapeHtml(designation);
@@ -805,6 +832,7 @@ export async function sendStaffAccountEmail(params: {
 
   await send({
     to,
+    schoolEmail,
     subject: `Your account is ready — ${schoolName} — Scholaris`,
     // Never the password. A preheader shows on a lock screen, in front of
     // whoever is holding the phone.

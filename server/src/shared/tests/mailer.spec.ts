@@ -26,6 +26,9 @@ jest.mock('../../config/env', () => ({
       user: 'no-reply@scholaris.test',
       password: 'secret',
       fromName: 'Scholaris',
+      // Unconfigured, so every send in this file resolves to the nodemailer
+      // mock above regardless of the `schoolEmail` it carries.
+      appsScript: { configured: false, url: undefined, schoolEmails: new Set() },
     },
   },
 }));
@@ -100,6 +103,7 @@ describe('sendStaffAccountEmail', () => {
     to: 'chidinma.eze@brightfield.edu.ng',
     firstName: 'Chidinma',
     schoolName: 'Brightfield Academy',
+    schoolEmail: 'admin@brightfield.test',
     designation: 'Mathematics teacher',
     temporaryPassword: 'Kq7!vbnm2xZa',
   };
@@ -173,6 +177,7 @@ describe('sendApplicationReceivedEmail', () => {
       to: 'ngozi@example.test',
       firstName: 'Ngozi',
       schoolName: 'Brightfield Academy',
+      schoolEmail: 'admin@brightfield.test',
       applications: [
         { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', className: 'Primary 1' },
         { applicationNo: 'APP/2026-2027/0002', applicantName: 'Chidi Okafor', className: 'JSS 1' },
@@ -193,6 +198,7 @@ describe('sendApplicationReceivedEmail', () => {
       to: 'ngozi@example.test',
       firstName: 'Ngozi',
       schoolName: 'Brightfield Academy',
+      schoolEmail: 'admin@brightfield.test',
       applications: [
         { applicationNo: 'APP/2026-2027/0001', applicantName: 'Amara Okafor', className: 'Primary 1' },
       ],
@@ -210,6 +216,7 @@ describe('sendApplicationStatusEmail', () => {
     to: 'ngozi@example.test',
     firstName: 'Ngozi',
     schoolName: 'Brightfield Academy',
+    schoolEmail: 'admin@brightfield.test',
     applicantName: 'Amara Okafor',
     applicationNo: 'APP/2026-2027/0001',
     contactEmail: 'office@brightfield.test',
@@ -278,6 +285,7 @@ describe('sendNotificationEmail', () => {
     await sendNotificationEmail({
       to: 'teacher@brightfield.edu.ng',
       firstName: 'Ada',
+      schoolEmail: 'admin@brightfield.test',
       title: 'Scheme of work approved',
       body: 'Your Mathematics · JSS 1 scheme of work has been approved.',
       actionUrl: '/schemes/scheme-1',
@@ -293,6 +301,7 @@ describe('sendNotificationEmail', () => {
     await sendNotificationEmail({
       to: 'teacher@brightfield.edu.ng',
       firstName: 'Ada',
+      schoolEmail: 'admin@brightfield.test',
       title: 'Scheme of work approved',
       body: 'Approved.',
       actionUrl: '/schemes/scheme-1',
@@ -308,6 +317,7 @@ describe('sendNotificationEmail', () => {
     await sendNotificationEmail({
       to: 'teacher@brightfield.edu.ng',
       firstName: 'Ada',
+      schoolEmail: 'admin@brightfield.test',
       title: 'Scheme of work submitted for approval',
       body: 'A teacher submitted a scheme.',
     });
@@ -320,6 +330,7 @@ describe('sendNotificationEmail', () => {
     await sendNotificationEmail({
       to: 'teacher@brightfield.edu.ng',
       firstName: 'Ada',
+      schoolEmail: 'admin@brightfield.test',
       title: 'Kings & Queens update',
       body: '<b>bold</b> claim',
     });
@@ -336,6 +347,7 @@ describe('sendGuardianInviteEmail', () => {
       to: 'parent@example.test',
       firstName: 'Ngozi',
       schoolName: 'Brightfield Academy',
+      schoolEmail: 'admin@brightfield.test',
       childNames: ['Ada Eze'],
       code: '418923',
       expiresInMinutes: 15,
