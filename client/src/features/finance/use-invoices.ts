@@ -63,6 +63,16 @@ export function useUpdateInvoice() {
   });
 }
 
+/** Emails one invoice to a guardian already linked to its student. */
+export function useSendInvoiceEmail(invoiceId: string) {
+  return useMutation({
+    mutationFn: (guardianId: string) => FinanceEndpoints.sendInvoiceEmail(invoiceId, guardianId),
+    onSuccess: (result) => {
+      toast.success('Invoice emailed', { description: result.email });
+    },
+  });
+}
+
 /**
  * A batch is not all-or-nothing: whatever was safe to delete is gone, and
  * the toast names anything that was not, and why — see `DeleteInvoicesResult`.

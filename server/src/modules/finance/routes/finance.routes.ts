@@ -32,6 +32,7 @@ import {
   fetchDebtorsSchema,
   fetchInvoicesSchema,
   invoiceParamSchema,
+  sendInvoiceEmailSchema,
   studentLedgerParamSchema,
   updateInvoiceSchema,
 } from '../validators/invoices.schema';
@@ -309,6 +310,18 @@ router.post(
   authorise('invoice.manage'),
   validate(cancelInvoiceSchema),
   InvoicesController.cancel,
+);
+
+/**
+ * Emails one invoice to a guardian already linked to its student — see
+ * `InvoicesService.emailInvoice`. `invoice.manage`, same as raising the bill
+ * itself.
+ */
+router.post(
+  '/invoices/:id/email',
+  authorise('invoice.manage'),
+  validate(sendInvoiceEmailSchema),
+  InvoicesController.sendEmail,
 );
 
 router.get(

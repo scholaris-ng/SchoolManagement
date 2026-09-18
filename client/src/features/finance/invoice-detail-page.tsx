@@ -8,6 +8,7 @@ import { useAuth } from '@/app/providers/auth-provider';
 import { useDeleteInvoices, useInvoice } from './api';
 import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
+import { EmailInvoiceDialog } from './email-invoice-dialog';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ export function InvoiceDetailPage() {
   const { membership } = useAuth();
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // An invoice always belongs to exactly one student, so the way back is to
   // their record — specifically the Fees tab this was most likely opened
@@ -111,6 +113,16 @@ export function InvoiceDetailPage() {
                 <Printer />
                 Print
               </Button>
+              <PermissionGate require="invoice.manage">
+                <Button
+                  data-cy="finance-invoice-detail-email"
+                  variant="outline"
+                  onClick={() => setEmailOpen(true)}
+                >
+                  <Mail />
+                  Email invoice
+                </Button>
+              </PermissionGate>
               <Button
                 data-cy="finance-invoice-detail-whatsapp"
                 variant="outline"
@@ -360,6 +372,13 @@ export function InvoiceDetailPage() {
           setDeleteOpen(false);
           if (result.deletedIds.includes(record.id)) navigate('/finance/invoices');
         }}
+      />
+
+      <EmailInvoiceDialog
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
+        invoiceId={record.id}
+        studentId={record.studentId}
       />
     </PageContainer>
   );

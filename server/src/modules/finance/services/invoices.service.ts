@@ -9,6 +9,8 @@ import { StudentRepository } from '../../students/repositories/student.repositor
 import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
+import { GuardianRepository } from '../../guardians/repositories/guardian.repository';
+import { sendInvoiceEmail } from '../../../shared/utils/mailer';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
@@ -28,6 +30,7 @@ import type {
   CreateInvoiceInput,
   FetchDebtorsQuery,
   FetchInvoicesQuery,
+  SendInvoiceEmailInput,
   UpdateInvoiceInput,
 } from '../validators/invoices.schema';
 
@@ -98,6 +101,7 @@ export class InvoicesService {
     private readonly terms = TermRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
     private readonly websites = WebsiteService.Instance,
+    private readonly guardians = GuardianRepository.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
@@ -157,6 +161,63 @@ export class InvoicesService {
       schoolPhone: website.contactPhone || school.phone,
       schoolEmail: website.contactEmail || school.email,
     };
+  }
+
+  /**
+   * Emails one invoice to a guardian a bursar has picked by hand.
+   *
+   * Refuses a guardian who is not actually linked to this invoice's own
+   * student — the client only ever offers ones that are, but the check
+   * belongs here regardless, not to a screen someone could work around.
+   * Never touches `hasPortalAccess`, `userId` or anything else `invite()`
+   * owns: sending this email opens no account for anyone, on purpose.
+   */
+  async emailInvoice(
+    context: RequestContext,
+    id: string,
+    input: SendInvoiceEmailInput,
+  ): Promise<{ sent: boolean; email: string }> {
+    const invoice = await this.fetchInvoice(context, id);
+
+    const link = await this.guardians.findLinkByPair(
+      context.schoolId,
+      invoice.studentId,
+      input.guardianId,
+    );
+    if (!link) {
+      throw AppError.validation('That guardian is not linked to this student.');
+    }
+
+    const guardian = await this.guardians.findByIdScoped(context.schoolId, input.guardianId);
+    if (!guardian || !guardian.email) {
+      throw AppError.validation('Add an email address for this guardian first.');
+    }
+
+    await sendInvoiceEmail({
+      to: guardian.email,
+      firstName: guardian.firstName,
+      schoolName: invoice.schoolName ?? context.membership.schoolName,
+      schoolEmail: invoice.schoolEmail,
+      studentName: invoice.studentName,
+      invoiceNo: invoice.invoiceNo,
+      termName: invoice.termName,
+      sessionName: invoice.sessionName,
+      dueDate: invoice.dueDate,
+      total: invoice.total,
+      balance: invoice.balance,
+      accounts: uniqueAccounts(invoice.lines),
+      contactEmail: invoice.schoolEmail ?? '',
+    });
+
+    await this.audit.record(context, {
+      action: 'invoice.emailed',
+      entityType: 'Invoice',
+      entityId: invoice.id,
+      entityLabel: `${invoice.invoiceNo} · ${invoice.studentName}`,
+      after: { guardianId: input.guardianId, email: guardian.email },
+    });
+
+    return { sent: true, email: guardian.email };
   }
 
   async fetchLedger(context: RequestContext, studentId: string): Promise<StudentLedgerResultDTO> {
@@ -666,6 +727,31 @@ export function invoiceNumber(sessionName: string, sequence: number): string {
 /** Money is compared in kobo and written back as a fixed-point string. */
 function fromKobo(kobo: number): string {
   return (kobo / MONEY_SCALE).toFixed(2);
+}
+
+/**
+ * Every account across an invoice's lines, once each — for the emailed copy,
+ * the same dedup `account-summary.ts` does client-side for the printed one:
+ * a charge can name more than one account (`fee-structure-dialog.tsx`), and
+ * two lines sometimes name the same real account separately.
+ */
+function uniqueAccounts(
+  lines: InvoiceDTO['lines'],
+): { label: string; accountNumber: string; accountName: string }[] {
+  const byKey = new Map<string, { label: string; accountNumber: string; accountName: string }>();
+  for (const line of lines) {
+    for (const account of line.accounts) {
+      const key = `${account.bankName}::${account.accountNumber}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, {
+          label: account.label || account.bankName,
+          accountNumber: account.accountNumber,
+          accountName: account.accountName,
+        });
+      }
+    }
+  }
+  return Array.from(byKey.values());
 }
 
 function todayIso(): string {

@@ -8,6 +8,7 @@ import type {
   CreateInvoiceInput,
   FetchDebtorsQuery,
   FetchInvoicesQuery,
+  SendInvoiceEmailInput,
   UpdateInvoiceInput,
 } from '../validators/invoices.schema';
 
@@ -62,6 +63,16 @@ export class InvoicesController {
       const { id } = req.validated!.params as { id: string };
       const body = req.validated!.body as UpdateInvoiceInput;
       res.status(200).json(ApiResponse.ok(await service().updateInvoice(contextOf(req), id, body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async sendEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const body = req.validated!.body as SendInvoiceEmailInput;
+      res.status(200).json(ApiResponse.ok(await service().emailInvoice(contextOf(req), id, body)));
     } catch (error) {
       next(error);
     }

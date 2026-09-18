@@ -852,3 +852,117 @@ export async function sendStaffAccountEmail(params: {
     ].join('\n'),
   });
 }
+
+const formatNaira = (value: number) => `₦${value.toLocaleString('en-NG')}`;
+
+/** Date-only, so an invoice's due date reads as a day, never a moment. */
+function formatInvoiceDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-NG', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Africa/Lagos',
+  }).format(new Date(iso));
+}
+
+/**
+ * Recipient: a guardian a bursar has chosen, by hand, to email one invoice
+ * to. Trigger: `POST /invoices/:id/email`. Tone: transactional — no emoji.
+ *
+ * Carries no sign-in link and opens no account: the guardian receiving this
+ * may never have a parent-portal login, and sending an invoice must never be
+ * the thing that quietly creates one — `GuardiansService.invite` is the only
+ * path that ever does that, and this function is not it. What it carries
+ * instead is everything needed to act on the bill without signing in
+ * anywhere: the amount, the due date, and where to pay it.
+ */
+export async function sendInvoiceEmail(params: {
+  to: string;
+  firstName: string;
+  schoolName: string;
+  /** The school's own `schools.email` — routes this send, see `SendArgs.schoolEmail`. */
+  schoolEmail?: string;
+  studentName: string;
+  invoiceNo: string;
+  termName: string;
+  sessionName: string;
+  dueDate: string;
+  total: number;
+  balance: number;
+  accounts: { label: string; accountNumber: string; accountName: string }[];
+  contactEmail: string;
+}): Promise<void> {
+  const {
+    to,
+    firstName,
+    schoolName,
+    schoolEmail,
+    studentName,
+    invoiceNo,
+    termName,
+    sessionName,
+    dueDate,
+    total,
+    balance,
+    accounts,
+    contactEmail,
+  } = params;
+  const name = escapeHtml(firstName);
+  const school = escapeHtml(schoolName);
+  const student = escapeHtml(studentName);
+  const term = escapeHtml(`${termName} · ${sessionName}`);
+  const due = formatInvoiceDate(dueDate);
+
+  const rows: [string, string][] = [
+    ['Student', student],
+    ['Term', term],
+    ['Invoice', escapeHtml(invoiceNo)],
+    ['Due date', escapeHtml(due)],
+    ['Total', escapeHtml(formatNaira(total))],
+    ['Balance due', escapeHtml(formatNaira(balance))],
+  ];
+
+  const body = [
+    heading(`Invoice ${escapeHtml(invoiceNo)}`),
+    paragraph(`Hello ${name}, here is ${student}'s invoice for ${term} from <strong>${school}</strong>.`),
+    infoBox(rows),
+    balance > 0 && accounts.length > 0
+      ? paragraph('Pay the balance into any one of these accounts:')
+      : '',
+    balance > 0 && accounts.length > 0
+      ? infoBox(
+          accounts.map((account) => [
+            escapeHtml(account.label),
+            escapeHtml(`${account.accountNumber} · ${account.accountName}`),
+          ]),
+        )
+      : '',
+    footnote(`Questions about this bill? Write to ${school} at ${escapeHtml(contactEmail)}.`),
+  ].join('');
+
+  await send({
+    to,
+    schoolEmail,
+    subject: `Invoice ${invoiceNo} — ${schoolName} — Scholaris`,
+    html: emailLayout(body, `${studentName}'s invoice for ${termName} is inside.`),
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `Here is ${studentName}'s invoice for ${termName} · ${sessionName} from ${schoolName}.`,
+      '',
+      `Invoice: ${invoiceNo}`,
+      `Due date: ${due}`,
+      `Total: ${formatNaira(total)}`,
+      `Balance due: ${formatNaira(balance)}`,
+      ...(balance > 0 && accounts.length > 0
+        ? [
+            '',
+            'Pay the balance into any one of these accounts:',
+            ...accounts.map((account) => `${account.label}: ${account.accountNumber} · ${account.accountName}`),
+          ]
+        : []),
+      '',
+      `Questions? Write to ${schoolName} at ${contactEmail}.`,
+    ].join('\n'),
+  });
+}

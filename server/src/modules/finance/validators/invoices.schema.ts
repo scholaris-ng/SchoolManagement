@@ -139,6 +139,17 @@ export const studentLedgerParamSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
 });
 
+/**
+ * Emailing one invoice to a guardian a bursar has picked by hand. The
+ * guardian must already be linked to the invoice's own student — checked in
+ * the service, not here — so this can never be used to email a bill to
+ * someone with no relationship to the child it is for.
+ */
+export const sendInvoiceEmailSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ guardianId: z.string().uuid() }).strict(),
+});
+
 export const fetchDebtorsSchema = z.object({
   query: z
     .object({
@@ -160,3 +171,4 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>['body'];
 export type BulkDeleteInvoicesInput = z.infer<typeof bulkDeleteInvoicesSchema>['body'];
 export type CancelInvoiceInput = z.infer<typeof cancelInvoiceSchema>['body'];
 export type FetchDebtorsQuery = z.infer<typeof fetchDebtorsSchema>['query'];
+export type SendInvoiceEmailInput = z.infer<typeof sendInvoiceEmailSchema>['body'];

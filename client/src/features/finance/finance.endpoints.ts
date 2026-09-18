@@ -271,6 +271,10 @@ export const FinanceEndpoints = {
   deleteInvoices: (ids: string[]) =>
     http.post<DeleteInvoicesResult>('/invoices/bulk-delete', { ids }),
 
+  /** Emails one invoice to a guardian already linked to its student. */
+  sendInvoiceEmail: (id: string, guardianId: string) =>
+    http.post<{ sent: boolean; email: string }>(`/invoices/${id}/email`, { guardianId }),
+
   /* -- Payments ------------------------------------------------------------- */
 
   fetchPayments: (query: ListQuery) => http.get<Paginated<Payment>>('/payments', { query }),
