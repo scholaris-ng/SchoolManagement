@@ -14,10 +14,12 @@ const service = () => FeeItemsService.Instance;
 export class FeeItemsController {
   static async fetchAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { page, pageSize } = req.validated!.query as FetchFeeItemsQuery;
+      const { page, pageSize, search } = req.validated!.query as FetchFeeItemsQuery;
       res
         .status(200)
-        .json(ApiResponse.paginated(await service().fetchAll(contextOf(req), page, pageSize)));
+        .json(
+          ApiResponse.paginated(await service().fetchAll(contextOf(req), page, pageSize, search)),
+        );
     } catch (error) {
       next(error);
     }

@@ -31,6 +31,7 @@ import {
   CardTitle,
 } from '@/components/ui/primitives';
 import { Pagination } from '@/components/data/pagination';
+import { FilterBar } from '@/components/data/filter-bar';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState, LoadingState } from '@/components/ui/feedback';
@@ -220,6 +221,12 @@ export function FeesPage() {
                 </div>
               )}
             </div>
+            <FilterBar
+              search={feeItemsList.search}
+              onSearchChange={feeItemsList.setSearch}
+              searchPlaceholder="Search by name, code or description…"
+              isSearching={feeItemsList.isSearchPending || feeItems.isFetching}
+            />
           </CardHeader>
           <CardContent className="p-0">
             {feeItems.isPending ? (
@@ -228,8 +235,12 @@ export function FeesPage() {
               <EmptyState
                 compact
                 icon={<Coins />}
-                title="No fee items yet"
-                description="Start with tuition, then add transport, boarding and one-off charges."
+                title={feeItemsList.search ? 'No fee items match your search' : 'No fee items yet'}
+                description={
+                  feeItemsList.search
+                    ? 'Try a different name, code or description.'
+                    : 'Start with tuition, then add transport, boarding and one-off charges.'
+                }
               />
             ) : (
               <>

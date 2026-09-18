@@ -34,10 +34,13 @@ export class FeeItemsService {
     context: RequestContext,
     page: number,
     pageSize: number,
+    search?: string,
   ): Promise<Paginated<FeeItemDTO>> {
     // Small enough a list that a school reads it whole; paged to keep the
-    // client's contract rather than because the volume demands it.
-    const items = await this.feeItems.fetchForSchool(context.schoolId);
+    // client's contract rather than because the volume demands it. Search is
+    // filtered here in memory for the same reason, rather than pushed to SQL.
+    const all = await this.feeItems.fetchForSchool(context.schoolId);
+    const items = search ? filterByText(all, search) : all;
     const start = (page - 1) * pageSize;
     return paginatedResult(items.slice(start, start + pageSize), page, pageSize, items.length);
   }
@@ -160,4 +163,15 @@ export class FeeItemsService {
     if (!dto) throw AppError.notFound('Fee item');
     return dto;
   }
+}
+
+/** Matches on name, code or description — whichever a bursar is typing from memory. */
+function filterByText(items: FeeItemDTO[], search: string): FeeItemDTO[] {
+  const needle = search.toLowerCase();
+  return items.filter(
+    (item) =>
+      item.name.toLowerCase().includes(needle) ||
+      (item.code ?? '').toLowerCase().includes(needle) ||
+      (item.description ?? '').toLowerCase().includes(needle),
+  );
 }

@@ -35,6 +35,7 @@ export const fetchFeeItemsSchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+    search: z.string().trim().max(120).optional(),
   }),
 });
 
