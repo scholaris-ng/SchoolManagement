@@ -59,7 +59,7 @@ export function PageHeader({
   return (
     <header className={cn('space-y-3', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           {loading ? (
             <Skeleton className="h-7 w-56" />
