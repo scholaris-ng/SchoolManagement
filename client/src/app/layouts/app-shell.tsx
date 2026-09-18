@@ -11,13 +11,27 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { LoadingState } from '@/components/ui/feedback';
 import { OfflineBanner } from '@/components/layout/offline-banner';
+import { useAuth } from '@/app/providers/auth-provider';
+import { isLocked } from '@/features/subscription/school-access';
+import { SubscriptionLockedFrame } from '@/features/subscription/subscription-locked-frame';
 
 /**
- * The authenticated application frame: permanent sidebar on desktop, a slide-in
- * drawer on mobile, and a persistent top bar carrying search, sync state and
- * notifications.
+ * The authenticated application frame — or, for a school whose trial or
+ * subscription has ended, the locked page in its place.
+ *
+ * Decided here, above the frame rather than inside it, so a locked school never
+ * mounts the shell's data hooks: every one of them would be refused.
  */
 export function AppShell() {
+  const { user, membership } = useAuth();
+  return isLocked(user, membership) ? <SubscriptionLockedFrame /> : <UnlockedShell />;
+}
+
+/**
+ * The frame itself: permanent sidebar on desktop, a slide-in drawer on mobile,
+ * and a persistent top bar carrying search, sync state and notifications.
+ */
+function UnlockedShell() {
   const location = useLocation();
   const isDesktop = useIsDesktop();
   const [collapsed, setCollapsed] = useState(() =>

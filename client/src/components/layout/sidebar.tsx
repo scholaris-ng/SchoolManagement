@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NAV_SECTIONS, type NavItem } from '@/app/navigation';
+import { NAV_SECTIONS, isNavItemVisible, type NavItem } from '@/app/navigation';
 import { useAuth } from '@/app/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/feedback';
@@ -23,7 +23,7 @@ export function Sidebar({
   badges = {},
   className,
 }: SidebarProps) {
-  const { can, persona, membership } = useAuth();
+  const { can, persona, membership, user } = useAuth();
   const { pathname } = useLocation();
 
   // Sections are filtered once per permission change rather than per render of
@@ -35,13 +35,15 @@ export function Sidebar({
         ...section,
         items: section.items.filter(
           (item) =>
-            (!item.personas || item.personas.includes(persona)) && (!item.require || can(item.require)),
+            (!item.personas || item.personas.includes(persona)) &&
+            (!item.require || can(item.require)) &&
+            isNavItemVisible(item, user),
         ),
       })).filter(
         (section) =>
           section.items.length > 0 && (!section.personas || section.personas.includes(persona)),
       ),
-    [can, persona],
+    [can, persona, user],
   );
 
   /**

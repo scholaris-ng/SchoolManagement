@@ -208,7 +208,7 @@ async function send({ to, subject, html, text, attachments, schoolEmail, strict 
   }
 }
 
-function summariseAccountsByTotal(
+export function summariseAccountsByTotal(
   lines: Array<{ isOptional: boolean; accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>; lineTotal: number }>,
 ): Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }> {
   const byKey = new Map<string, { label: string | null; bankName: string; accountNumber: string; accountName: string; total: number }>();
@@ -310,7 +310,7 @@ async function readPublicImage(relativePath: string): Promise<Buffer | null> {
  * anything missing, unreachable, oversized or not a PNG/JPEG — an unusable
  * logo should cost the PDF its crest, never the whole email.
  */
-async function resolveInvoiceLogoAsset(logoUrl?: string | null): Promise<Buffer | null> {
+export async function resolveInvoiceLogoAsset(logoUrl?: string | null): Promise<Buffer | null> {
   const usable = (bytes: Buffer | null) => (bytes && isPdfKitImage(bytes) ? bytes : null);
   const fallback = () => readPublicImage('site/logo.png').then(usable);
 
@@ -330,7 +330,7 @@ async function resolveInvoiceLogoAsset(logoUrl?: string | null): Promise<Buffer 
  * first `await` was swallowed as an unhandled rejection and the promise never
  * settled — an emailed invoice would then hang the request rather than fail.
  */
-async function renderPdf(
+export async function renderPdf(
   draw: (doc: InstanceType<typeof PDFDocument>) => Promise<void> | void,
 ): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: 50, layout: 'portrait' });
@@ -352,7 +352,7 @@ async function renderPdf(
   return finished;
 }
 
-async function buildInvoicePdfAttachment(params: {
+export async function buildInvoicePdfAttachment(params: {
   schoolName: string;
   schoolLogoUrl?: string | null;
   schoolAddress: string;
@@ -1246,7 +1246,7 @@ export async function sendStaffAccountEmail(params: {
 }
 
 const formatNaira = (value: number) => `₦${value.toLocaleString('en-NG')}`;
-const formatPdfCurrency = (value: number) => `NGN ${value.toLocaleString('en-NG')}`;
+export const formatPdfCurrency = (value: number) => `NGN ${value.toLocaleString('en-NG')}`;
 
 /** The same day, abbreviated — for the narrow date columns in the PDF header. */
 function formatShortDate(iso: string): string {
@@ -1434,7 +1434,7 @@ export async function sendInvoiceEmail(params: {
   });
 }
 
-async function buildReceiptPdfAttachment(params: {
+export async function buildReceiptPdfAttachment(params: {
   schoolName: string;
   schoolLogoUrl?: string | null;
   schoolAddress: string;

@@ -1,4 +1,7 @@
 import { AppError } from '../../../shared/errors/AppError';
+import { env } from '../../../config/env';
+import { isSubscriptionAdmin } from '../../../shared/utils/subscriptionAdmin';
+import { describeAccess } from '../../school/services/schoolAccess';
 import { ROLES, type Permission, type RoleName } from '../../../config/constants';
 import type { AuthIdentity, MembershipContext, UserContext } from '../../../shared/types/context';
 import type { SchoolBranding } from '../../school/entities/school.entity';
@@ -100,6 +103,32 @@ export class SessionService {
       return 'This staff account has exited the school and can no longer sign in. Contact your school administrator.';
     }
     return null;
+  }
+
+  /**
+   * Refuses a school whose trial or activation has run out.
+   *
+   * Runs on every school-scoped request, so a school that expires mid-session
+   * stops working at once rather than at the next sign-in. Whoever operates the
+   * platform is never locked out by their own school's clock: an administrator
+   * who could be would have no way to activate anyone.
+   */
+  assertAccessOpen(row: MembershipRow, user: User): void {
+    if (user.isPlatformAdmin || isSubscriptionAdmin(user)) return;
+
+    const access = describeAccess(
+      { status: row.schoolStatus, accessEndsAt: row.schoolAccessEndsAt },
+      env.subscription.contactEmail,
+    );
+    if (!access.expired) return;
+
+    throw new AppError(
+      access.plan === 'TRIAL'
+        ? 'The free trial for this school has ended. Ask the administrator to activate it.'
+        : 'This school’s subscription has ended. Ask the administrator to renew it.',
+      402,
+      'SUBSCRIPTION_EXPIRED',
+    );
   }
 
   /**
@@ -224,6 +253,10 @@ export function toMembershipDTO(row: MembershipRow): SchoolMembershipDTO {
     customRoleNames: split.custom,
     permissions: [...new Set(row.permissions.filter(Boolean))] as Permission[],
     branding: row.schoolBranding as unknown as SchoolBranding,
+    access: describeAccess(
+      { status: row.schoolStatus, accessEndsAt: row.schoolAccessEndsAt },
+      env.subscription.contactEmail,
+    ),
     status: row.status,
     guardianId: row.guardianId,
     studentId: row.studentId,
@@ -243,6 +276,7 @@ export function toUserDTO(user: User, rows: MembershipRow[]): AuthenticatedUserD
     phone: user.phone,
     photoUrl: user.photoUrl,
     isPlatformAdmin: user.isPlatformAdmin,
+    canManageSubscriptions: isSubscriptionAdmin(user),
     memberships: rows.map(toMembershipDTO),
     createdAt: user.createdAt.toISOString(),
   };

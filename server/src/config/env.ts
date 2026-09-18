@@ -80,12 +80,23 @@ const schema = z.object({
   EMAIL_APPS_SCRIPT_URL: z.string().url().optional(),
   EMAIL_APPS_SCRIPT_SCHOOL_EMAIL: csv,
 
+  // Who may activate a school's subscription: a comma-separated list of email
+  // addresses. Empty means nobody can, which is the safe failure — schools then
+  // stay on their trial and lock when it ends. See `subscriptionAdmin.ts`.
+  SUBSCRIPTION_ADMIN_EMAILS: csv,
+
   /** How long an email verification code stays valid. */
   VERIFICATION_CODE_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().default(300),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(20),
+
+  // Cloudinary — where a finance PDF is put so a "Send to WhatsApp" message can
+  // carry a link to it. From the dashboard's Programmable Media → API Keys.
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
 
   PAYSTACK_SECRET_KEY: z.string().optional(),
 
@@ -177,12 +188,29 @@ export const env = {
     },
   },
 
+  subscription: {
+    /** Lower-cased, so a match never depends on how an address was capitalised. */
+    adminEmails: new Set(raw.SUBSCRIPTION_ADMIN_EMAILS.map((email) => email.toLowerCase())),
+    /** Who a locked-out school is told to write to: the first administrator listed. */
+    contactEmail: raw.SUBSCRIPTION_ADMIN_EMAILS[0]?.toLowerCase() ?? null,
+  },
+
   verificationCodeTtlMinutes: raw.VERIFICATION_CODE_TTL_MINUTES,
 
   rateLimit: {
     windowMs: raw.RATE_LIMIT_WINDOW_MS,
     max: raw.RATE_LIMIT_MAX,
     authMax: raw.AUTH_RATE_LIMIT_MAX,
+  },
+
+  cloudinary: {
+    cloudName: raw.CLOUDINARY_CLOUD_NAME,
+    apiKey: raw.CLOUDINARY_API_KEY,
+    apiSecret: raw.CLOUDINARY_API_SECRET,
+    /** All three are needed to sign an upload. */
+    configured: Boolean(
+      raw.CLOUDINARY_CLOUD_NAME && raw.CLOUDINARY_API_KEY && raw.CLOUDINARY_API_SECRET,
+    ),
   },
 
   paystack: { secretKey: raw.PAYSTACK_SECRET_KEY },

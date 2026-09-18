@@ -93,6 +93,16 @@ export const sendReceiptEmailSchema = z.object({
 });
 
 /**
+ * Sharing a receipt on WhatsApp. No guardian is named: the server addresses it
+ * to whoever pays the student's fees, and the sender can change the chat in
+ * WhatsApp itself.
+ */
+export const shareReceiptWhatsAppSchema = z.object({
+  params: z.object({ paymentId: z.string().uuid() }),
+  body: z.object({ includeCharges: z.boolean().default(false) }).strict(),
+});
+
+/**
  * Asking Raven for an account number a family can pay a specific bill into.
  * The amount is the whole of what is being asked for: Raven ties the account
  * to it, so the office decides the figure here, not the parent at the bank.
@@ -151,5 +161,6 @@ export type FetchPaymentsQuery = z.infer<typeof fetchPaymentsSchema>['query'];
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>['body'];
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>['body'];
 export type SendReceiptEmailInput = z.infer<typeof sendReceiptEmailSchema>['body'];
+export type ShareReceiptWhatsAppInput = z.infer<typeof shareReceiptWhatsAppSchema>['body'];
 export type CreatePaymentAccountInput = z.infer<typeof createPaymentAccountSchema>['body'];
 export type RavenWebhookBody = z.infer<typeof ravenWebhookSchema>['body'];

@@ -16,6 +16,12 @@ declare global {
       identity?: AuthIdentity;
       /** Set by `tenantMiddleware` once a membership has been resolved. */
       context?: RequestContext;
+      /**
+       * Set by `subscriptionAdminMiddleware` for the platform routes, which act
+       * on schools other than the caller's own and so have no membership to
+       * resolve a `context` from.
+       */
+      subscriptionAdmin?: { userId: string; email: string; displayName: string };
       validated?: {
         body: unknown;
         query: unknown;

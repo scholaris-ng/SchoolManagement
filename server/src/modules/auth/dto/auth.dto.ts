@@ -1,5 +1,6 @@
 import type { Permission, RoleName } from '../../../config/constants';
 import type { SchoolBranding } from '../../school/entities/school.entity';
+import type { SchoolAccessDTO } from '../../school/services/schoolAccess';
 
 /**
  * The session contract, matching `client/src/types/tenant.ts` field for field.
@@ -20,6 +21,8 @@ export interface SchoolMembershipDTO {
   customRoleNames: string[];
   permissions: Permission[];
   branding: SchoolBranding;
+  /** The school's trial or activation — whether this school may be used right now. */
+  access: SchoolAccessDTO;
   status: 'ACTIVE' | 'INVITED' | 'SUSPENDED';
   guardianId: string | null;
   studentId: string | null;
@@ -37,6 +40,8 @@ export interface AuthenticatedUserDTO {
   phone: string | null;
   photoUrl: string | null;
   isPlatformAdmin: boolean;
+  /** May activate schools — shows the Schools screen. Decided by `SUBSCRIPTION_ADMIN_EMAILS`. */
+  canManageSubscriptions: boolean;
   memberships: SchoolMembershipDTO[];
   createdAt: string;
 }

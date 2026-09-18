@@ -7,6 +7,7 @@ import type {
   FetchFeeStructuresQuery,
   GenerateInvoicesInput,
   ResolveFeeStructureQuery,
+  ShareFeeStructureWhatsAppInput,
   UpdateFeeStructureInput,
 } from '../validators/feeStructures.schema';
 
@@ -69,6 +70,16 @@ export class FeeStructuresController {
       const { id } = req.validated!.params as { id: string };
       await service().remove(contextOf(req), id);
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async shareWhatsApp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const body = req.validated!.body as ShareFeeStructureWhatsAppInput;
+      res.status(200).json(ApiResponse.ok(await service().shareOnWhatsApp(contextOf(req), id, body)));
     } catch (error) {
       next(error);
     }

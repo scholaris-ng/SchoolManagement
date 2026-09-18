@@ -16,6 +16,7 @@ import {
 import healthRoutes from './modules/health/routes/health.routes';
 import authRoutes from './modules/auth/routes/auth.routes';
 import schoolRoutes from './modules/school/routes/school.routes';
+import platformRoutes from './modules/platform/routes/platform.routes';
 import roleRoutes from './modules/rbac/routes/role.routes';
 import auditRoutes from './modules/audit/routes/audit.routes';
 import academicsRoutes from './modules/academics/routes/academics.routes';
@@ -82,6 +83,9 @@ export function createApp(): Express {
   // be registered last.
   app.use(env.apiPrefix, authRoutes);
   app.use(env.apiPrefix, schoolRoutes);
+  // Platform administration acts on other schools than the caller's own, so it
+  // carries its own guard in place of `tenantMiddleware` — see its router.
+  app.use(env.apiPrefix, platformRoutes);
   // The unauthenticated writes: the school website's application form, keyed
   // by the slug in its path; a family's own "respond to this offer" link,
   // keyed by nothing but its token; and Raven's webhook, keyed by a shared

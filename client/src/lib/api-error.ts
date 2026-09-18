@@ -42,6 +42,15 @@ export class ApiError extends Error {
     return this.status === 422 || this.code === ApiErrorCode.Validation;
   }
 
+  /**
+   * The school ran out of trial or subscription while this page was open.
+   * Answered by locking the app, not by a toast per failed request — see
+   * `SubscriptionLockedFrame`.
+   */
+  get isSubscriptionExpired(): boolean {
+    return this.code === ApiErrorCode.SubscriptionExpired;
+  }
+
   /** A concurrent edit clobbered ours — surfaced as a conflict dialog, not a toast. */
   get isVersionConflict(): boolean {
     return this.status === 409 && this.code === ApiErrorCode.VersionConflict;

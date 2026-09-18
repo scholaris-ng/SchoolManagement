@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CornerDownLeft, Loader2, Search, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
-import { NAV_SECTIONS, QUICK_ACTIONS } from '@/app/navigation';
+import { NAV_SECTIONS, QUICK_ACTIONS, isNavItemVisible } from '@/app/navigation';
 import { useStudentSearch } from '@/features/students/api';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Avatar } from '@/components/ui/primitives';
@@ -29,7 +29,7 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
-  const { can, persona } = useAuth();
+  const { can, persona, user } = useAuth();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -64,7 +64,8 @@ export function CommandPalette({
         .filter(
           (item) =>
             (!item.personas || item.personas.includes(persona)) &&
-            (!item.require || can(item.require)),
+            (!item.require || can(item.require)) &&
+            isNavItemVisible(item, user),
         )
         .map((item) => ({
           id: `nav:${item.to}`,
@@ -113,7 +114,7 @@ export function CommandPalette({
       ...navEntries.filter(matches),
       ...studentEntries,
     ].slice(0, 40);
-  }, [query, can, persona, studentSearch.data]);
+  }, [query, can, persona, user, studentSearch.data]);
 
   useEffect(() => setActiveIndex(0), [entries.length]);
 

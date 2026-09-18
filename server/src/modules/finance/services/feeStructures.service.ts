@@ -16,6 +16,11 @@ import {
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
+import {
+  WhatsAppShareService,
+  type WhatsAppShare,
+} from '../../../shared/services/whatsappShare.service';
+import { buildFeeSchedulePdf } from '../../../shared/utils/financePdf';
 import { InvoicesService, type IssueLine } from './invoices.service';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
@@ -61,6 +66,7 @@ export class FeeStructuresService {
     private readonly schools = SchoolRepository.Instance,
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly sharing = WhatsAppShareService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -103,6 +109,64 @@ export class FeeStructuresService {
       schoolPhone: website.contactPhone || school.phone,
       schoolEmail: website.contactEmail || school.email,
     };
+  }
+
+  /**
+   * Stores this fee schedule's PDF and hands back a WhatsApp message carrying
+   * its link. The schedule is a statement of what a term costs, not a bill to
+   * anyone, so it is addressed to "Parent/Guardian" and the sender picks the
+   * chat in WhatsApp themselves.
+   *
+   * `note` is what was typed on the print page — nothing is saved for it, so it
+   * has to come with the request to end up on the PDF as it does on paper.
+   */
+  async shareOnWhatsApp(
+    context: RequestContext,
+    id: string,
+    input: { note?: string },
+  ): Promise<WhatsAppShare> {
+    const structure = await this.fetchOne(context, id);
+    const schoolName = structure.schoolName ?? context.membership.schoolName;
+
+    // The same line the print page shows under the title.
+    const scopeLine = [
+      `${structure.sessionName} Session`,
+      structure.termName ?? 'Every term',
+      structure.levelNames.length > 0 ? structure.levelNames.join(', ') : 'All levels',
+    ].join(' · ');
+
+    const pdf = await buildFeeSchedulePdf({
+      schoolName,
+      schoolLogoUrl: structure.schoolLogoUrl,
+      schoolPhone: structure.schoolPhone,
+      schoolEmail: structure.schoolEmail,
+      name: structure.name,
+      scopeLine,
+      lines: structure.lines,
+      mandatoryTotal: structure.mandatoryTotal,
+      optionalTotal: structure.optionalTotal,
+      note: input.note?.trim() || null,
+    });
+
+    const share = await this.sharing.shareDocument({
+      kind: 'fee-schedule',
+      pdf,
+      name: `fee-schedule-${structure.id.slice(0, 8)}`,
+      greeting: 'Parent/Guardian',
+      subject: `the fee schedule for ${structure.name}`,
+      confidential: false,
+      schoolName,
+      contactEmail: structure.schoolEmail,
+    });
+
+    await this.audit.record(context, {
+      action: 'feeStructure.whatsappShared',
+      entityType: 'FeeStructure',
+      entityId: structure.id,
+      entityLabel: structure.name,
+    });
+
+    return share;
   }
 
   /**

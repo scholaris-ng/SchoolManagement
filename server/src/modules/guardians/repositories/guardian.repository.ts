@@ -187,6 +187,23 @@ export class GuardianRepository extends TenantRepository<Guardian> {
     );
   }
 
+  /**
+   * Everyone linked to this child, in the order a bill should be offered to
+   * them: whoever is marked as paying the fees first, then the primary contact
+   * (`linksForStudent` already lists them ahead of the rest), then the others.
+   */
+  async findContactsForStudent(schoolId: string, studentId: string): Promise<Guardian[]> {
+    const links = await this.linksForStudent(schoolId, studentId);
+    const ordered = [
+      ...links.filter((link) => link.isFinanciallyResponsible),
+      ...links.filter((link) => !link.isFinanciallyResponsible),
+    ];
+    const guardians = await Promise.all(
+      ordered.map((link) => this.findByIdScoped(schoolId, link.guardianId)),
+    );
+    return guardians.filter((guardian): guardian is Guardian => guardian !== null);
+  }
+
   async linksForGuardian(schoolId: string, guardianId: string): Promise<StudentGuardianLinkDTO[]> {
     return this.repo.query(
       `SELECT ${LINK_PROJECTION}

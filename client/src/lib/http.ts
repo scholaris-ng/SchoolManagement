@@ -17,15 +17,19 @@ type UnauthorizedHandler = () => void;
 let getToken: TokenProvider = async () => null;
 let getTenantId: TenantProvider = () => null;
 let onUnauthorized: UnauthorizedHandler = () => {};
+let onSubscriptionExpired: UnauthorizedHandler = () => {};
 
 export function configureHttp(options: {
   tokenProvider?: TokenProvider;
   tenantProvider?: TenantProvider;
   onUnauthorized?: UnauthorizedHandler;
+  /** Called when the server refuses a request because the school's trial or subscription has ended. */
+  onSubscriptionExpired?: UnauthorizedHandler;
 }): void {
   if (options.tokenProvider) getToken = options.tokenProvider;
   if (options.tenantProvider) getTenantId = options.tenantProvider;
   if (options.onUnauthorized) onUnauthorized = options.onUnauthorized;
+  if (options.onSubscriptionExpired) onSubscriptionExpired = options.onSubscriptionExpired;
 }
 
 export interface RequestOptions {
@@ -163,6 +167,7 @@ async function request<T>(
           });
 
     if (error.isUnauthenticated) onUnauthorized();
+    if (error.isSubscriptionExpired) onSubscriptionExpired();
     throw error;
   }
 

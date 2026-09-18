@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Mail, MessageCircle, Phone, Printer } from 'lucide-react';
+import { Mail, Phone, Printer } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 import { contrastingTextColor } from '@/lib/utils';
-import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useFeeStructure } from './api';
 import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
+import { ShareFeeScheduleButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Badge, Card, CardContent, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -89,18 +89,7 @@ export function FeeStructurePrintPage() {
           breadcrumbs={[...breadcrumbs, { label: record.name }]}
           actions={
             <>
-              <Button
-                data-cy="finance-structure-print-whatsapp"
-                variant="outline"
-                onClick={() =>
-                  toast.info('Coming soon', {
-                    description: 'Sending a fee schedule straight to WhatsApp is on the way.',
-                  })
-                }
-              >
-                <MessageCircle />
-                Send to WhatsApp
-              </Button>
+              <ShareFeeScheduleButton structureId={record.id} note={note} />
               <Button data-cy="finance-structure-print" onClick={() => window.print()}>
                 <Printer />
                 Print

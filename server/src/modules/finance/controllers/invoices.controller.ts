@@ -78,6 +78,15 @@ export class InvoicesController {
     }
   }
 
+  static async shareWhatsApp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      res.status(200).json(ApiResponse.ok(await service().shareInvoiceOnWhatsApp(contextOf(req), id)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * A batch is not all-or-nothing — see `InvoicesService.deleteInvoices`.
    * `200` with a body, not `204`: the caller needs to know which of several

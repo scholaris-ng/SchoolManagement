@@ -1,10 +1,10 @@
 import { useParams } from 'react-router-dom';
-import { Landmark, Mail, MessageCircle, Phone, Printer } from 'lucide-react';
+import { Landmark, Mail, Phone, Printer } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { contrastingTextColor } from '@/lib/utils';
-import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useCustomBill } from './use-custom-bills';
+import { ShareCustomBillButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -66,18 +66,7 @@ export function CustomBillPrintPage() {
           breadcrumbs={[...breadcrumbs, { label: record.payerName }]}
           actions={
             <>
-              <Button
-                data-cy="custom-bill-print-whatsapp"
-                variant="outline"
-                onClick={() =>
-                  toast.info('Coming soon', {
-                    description: 'Sending a bill straight to WhatsApp is on the way.',
-                  })
-                }
-              >
-                <MessageCircle />
-                Send to WhatsApp
-              </Button>
+              <ShareCustomBillButton billId={record.id} />
               <Button data-cy="custom-bill-print-action" onClick={() => window.print()}>
                 <Printer />
                 Print

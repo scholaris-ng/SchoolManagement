@@ -38,6 +38,28 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Route guard for the people who may activate schools.
+ *
+ * Not a permission: it is a list of email addresses in the server's
+ * configuration, so it cannot be granted from a school's own roles screen.
+ */
+export function RequireSubscriptionAdmin({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.canManageSubscriptions) return <>{children}</>;
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+      <EmptyState
+        icon={<Lock />}
+        data-cy="access-denied"
+        title="You do not have access to this page"
+        description="This area is only for the people who manage school subscriptions."
+      />
+    </div>
+  );
+}
+
 /** Route guard: requires a specific permission, else shows a clear refusal. */
 export function RequirePermission({
   require: requirement,

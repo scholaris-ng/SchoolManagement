@@ -41,6 +41,11 @@ export async function tenantMiddleware(
     const blocked = service.staffBlockReason(row);
     if (blocked) throw AppError.forbidden(blocked);
 
+    // Every school-scoped route runs through here, so this is the one place the
+    // trial is enforced. `/auth/session` does not, which is what lets a locked
+    // school's users still load the page that tells them why.
+    service.assertAccessOpen(row, user);
+
     req.context = buildRequestContext({
       user: service.toUserContext(user),
       membership: service.toMembershipContext(row, user.isPlatformAdmin),

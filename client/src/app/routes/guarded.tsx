@@ -1,6 +1,15 @@
 import { Outlet } from 'react-router-dom';
-import { RequirePermission } from '@/components/guards/permission-gate';
+import { RequirePermission, RequireSubscriptionAdmin } from '@/components/guards/permission-gate';
 import type { PermissionRequirement } from '@/lib/permissions';
+
+/** Wraps a subtree for the people who may activate schools. See `RequireSubscriptionAdmin`. */
+export function guardedSubscriptionAdmin() {
+  return (
+    <RequireSubscriptionAdmin>
+      <Outlet />
+    </RequireSubscriptionAdmin>
+  );
+}
 
 /**
  * Wraps a subtree in a route-level permission check.
