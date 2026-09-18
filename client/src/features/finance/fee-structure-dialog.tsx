@@ -97,6 +97,9 @@ export function FeeStructureDialog({
   const mandatoryTotal = lines
     .filter((line) => !line.isOptional)
     .reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+  const optionalTotal = lines
+    .filter((line) => line.isOptional)
+    .reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
 
   const toggleItem = (itemId: string, checked: boolean) => {
     setLines((current) => {
@@ -406,12 +409,22 @@ export function FeeStructureDialog({
                 );
               })}
             </ul>
-            <p className="text-right text-sm text-muted-foreground">
-              Every pupil in scope:{' '}
-              <span className="font-medium tabular-nums text-foreground">
-                {formatCurrency(mandatoryTotal, currency, { showDecimals: false })}
-              </span>
-            </p>
+            <div className="space-y-1 text-right text-sm text-muted-foreground">
+              <p>
+                Every pupil in scope:{' '}
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatCurrency(mandatoryTotal, currency, { showDecimals: false })}
+                </span>
+              </p>
+              {optionalTotal > 0 && (
+                <p>
+                  With every optional charge:{' '}
+                  <span className="font-medium tabular-nums text-foreground">
+                    {formatCurrency(mandatoryTotal + optionalTotal, currency, { showDecimals: false })}
+                  </span>
+                </p>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               Optional charges are billed on top. Boarding is only billed to boarders; other
               optional charges go to everyone the structure covers.

@@ -121,7 +121,8 @@ export interface FeeStructureDTO {
 export interface ResolveFeeStructureResultDTO {
   structureId: string | null;
   structureName: string | null;
-  lines: { feeItemId: string; isOptional: boolean }[];
+  /** `amount` is this structure's own price for the line, which can disagree with the fee item's school-wide default. */
+  lines: { feeItemId: string; amount: number; isOptional: boolean }[];
 }
 
 /** What one bulk-billing run did. Mirrors `GenerateInvoicesResult` on the client. */

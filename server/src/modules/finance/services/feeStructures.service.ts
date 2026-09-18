@@ -134,6 +134,7 @@ export class FeeStructuresService {
       structureName: match.name,
       lines: definitions.map((line) => ({
         feeItemId: line.feeItemId,
+        amount: line.amount,
         isOptional: line.isOptional,
       })),
     };

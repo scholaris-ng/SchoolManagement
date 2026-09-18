@@ -10,6 +10,7 @@ import { StudentAccessService } from '../../students/services/studentAccess.serv
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
+import { FeeStructureRepository } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
@@ -93,6 +94,7 @@ export class InvoicesService {
     private readonly ledger = LedgerRepository.Instance,
     private readonly students = StudentRepository.Instance,
     private readonly feeItems = FeeItemRepository.Instance,
+    private readonly feeStructures = FeeStructureRepository.Instance,
     private readonly terms = TermRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
     private readonly websites = WebsiteService.Instance,
@@ -192,12 +194,22 @@ export class InvoicesService {
     // `createInvoiceSchema` for why the browser does not get to name a price.
     const items = await this.feeItems.fetchForSchool(context.schoolId);
     const byId = new Map(items.map((item) => [item.id, item]));
+    // A fee structure can override an item's price for this pupil's class —
+    // see `structureAmountsFor`. A manual invoice follows the same prices
+    // "Add all standard fees" showed the bursar, never the item's school-wide
+    // default for a charge the structure has repriced.
+    const structureAmounts = await this.structureAmountsFor(
+      context.schoolId,
+      student.id,
+      term.id,
+    );
 
     const lines: IssueLine[] = input.lines.map((line) => {
       const item = byId.get(line.feeItemId);
       if (!item) throw AppError.validation('One of those charges is not a fee item of this school.');
 
-      const gross = Math.round(item.amount * line.quantity * MONEY_SCALE);
+      const unitAmount = structureAmounts.get(line.feeItemId) ?? item.amount;
+      const gross = Math.round(unitAmount * line.quantity * MONEY_SCALE);
       const discount = Math.round(line.discountAmount * MONEY_SCALE);
       if (discount > gross) {
         throw AppError.validation(
@@ -210,7 +222,7 @@ export class InvoicesService {
         description: item.name,
         category: item.category,
         quantity: line.quantity,
-        unitAmount: item.amount,
+        unitAmount,
         discountAmount: line.discountAmount,
         isOptional: item.isOptional,
         // Narrowed to whichever accounts the bursar picked for this charge,
@@ -433,6 +445,11 @@ export class InvoicesService {
 
       const items = await this.feeItems.fetchForSchool(context.schoolId);
       const byId = new Map(items.map((item) => [item.id, item]));
+      const structureAmounts = await this.structureAmountsFor(
+        context.schoolId,
+        existing.studentId,
+        existing.termId,
+      );
 
       let subtotalKobo = 0;
       let discountKobo = 0;
@@ -442,7 +459,8 @@ export class InvoicesService {
           throw AppError.validation('One of those charges is not a fee item of this school.');
         }
 
-        const gross = Math.round(item.amount * line.quantity * MONEY_SCALE);
+        const unitAmount = structureAmounts.get(line.feeItemId) ?? item.amount;
+        const gross = Math.round(unitAmount * line.quantity * MONEY_SCALE);
         const discount = Math.round(line.discountAmount * MONEY_SCALE);
         if (discount > gross) {
           throw AppError.validation(`The discount on ${item.name} is more than the charge itself.`);
@@ -455,7 +473,7 @@ export class InvoicesService {
           description: item.name,
           category: item.category,
           quantity: line.quantity,
-          unitAmount: item.amount,
+          unitAmount,
           discountAmount: line.discountAmount,
           isOptional: item.isOptional,
           accounts: accountsFor(item, line.accountIds),
@@ -585,6 +603,27 @@ export class InvoicesService {
     const dto = await this.invoices.findOneDTO(schoolId, id);
     if (!dto) throw AppError.internal();
     return dto;
+  }
+
+  /**
+   * Whatever fee structure is written for this pupil's class and term prices
+   * its own lines differently from a fee item's school-wide default — the
+   * same override `FeeStructuresService.generateInvoices` bills a bulk run
+   * from. A manual invoice (raised by hand, or "Add all standard fees" on
+   * this form) follows those same prices rather than the item's default,
+   * so a bursar's bill never disagrees with the structure it was built from.
+   * Resolved server-side from student and term alone, never from anything
+   * the request names, for the same reason a line's price never is.
+   */
+  private async structureAmountsFor(
+    schoolId: string,
+    studentId: string,
+    termId: string,
+  ): Promise<Map<string, number>> {
+    const match = await this.feeStructures.findApplicable(schoolId, studentId, termId);
+    if (!match) return new Map();
+    const definitions = await this.feeStructures.lineDefinitions(schoolId, match.id);
+    return new Map(definitions.map((line) => [line.feeItemId, line.amount]));
   }
 }
 

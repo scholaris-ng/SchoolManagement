@@ -94,7 +94,8 @@ export interface FeeStructure {
 export interface ResolveFeeStructureResult {
   structureId: string | null;
   structureName: string | null;
-  lines: { feeItemId: string; isOptional: boolean }[];
+  /** `amount` is this structure's own price for the line, which can disagree with the fee item's school-wide default. */
+  lines: { feeItemId: string; amount: number; isOptional: boolean }[];
 }
 
 /**

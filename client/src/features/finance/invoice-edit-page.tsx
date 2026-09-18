@@ -99,14 +99,18 @@ export function InvoiceEditPage() {
   const [structureOptional, setStructureOptional] = useState<Map<string, boolean>>(new Map());
   const isOptionalFor = (feeItemId: string) =>
     structureOptional.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.isOptional ?? false;
+  // Same idea, for price: a structure can charge a fee item at something
+  // other than its school-wide default, and the server bills from that
+  // override once a structure applies — see `InvoicesService.structureAmountsFor`.
+  // Filled in alongside `structureOptional` so this screen's total agrees
+  // with what gets charged instead of quietly pricing off the item's default.
+  const [structureAmounts, setStructureAmounts] = useState<Map<string, number>>(new Map());
+  const amountFor = (feeItemId: string) =>
+    structureAmounts.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.amount ?? 0;
 
   const subtotal = useMemo(
-    () =>
-      lines.reduce(
-        (sum, line) => sum + (items.find((entry) => entry.id === line.feeItemId)?.amount ?? 0) * line.quantity,
-        0,
-      ),
-    [lines, items],
+    () => lines.reduce((sum, line) => sum + amountFor(line.feeItemId) * line.quantity, 0),
+    [lines, items, structureAmounts],
   );
 
   const addLine = () => {
@@ -159,6 +163,7 @@ export function InvoiceEditPage() {
     // so the screen never keeps showing "(optional)" on a charge this
     // particular structure actually bills to everyone.
     setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
+    setStructureAmounts(new Map(result.lines.map((line) => [line.feeItemId, line.amount])));
 
     // Every line on the structure, mandatory and optional alike — "Add all
     // standard fees" means all of them. `isOptional` is only a display label
@@ -435,7 +440,9 @@ export function InvoiceEditPage() {
                               : 'Amount'}
                           </p>
                           <p className="font-medium tabular-nums">
-                            {formatCurrency(item.amount * line.quantity, 'NGN', { showDecimals: false })}
+                            {formatCurrency(amountFor(line.feeItemId) * line.quantity, 'NGN', {
+                              showDecimals: false,
+                            })}
                           </p>
                         </div>
                       )}

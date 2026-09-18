@@ -86,6 +86,13 @@ export function InvoiceFormPage() {
   // once "Add all standard fees" has resolved a structure, so the dropdown
   // stops showing a default that this student's actual bill does not use.
   const [structureOptional, setStructureOptional] = useState<Map<string, boolean>>(new Map());
+  // Same idea, for price: a structure can charge a fee item at something
+  // other than its school-wide default (the whole point of writing one), and
+  // the server bills from that override, never the item's own `amount`, once
+  // a structure applies — see `InvoicesService.structureAmountsFor`. Filled
+  // in alongside `structureOptional` so this screen's total agrees with what
+  // gets charged instead of quietly pricing off the item's default.
+  const [structureAmounts, setStructureAmounts] = useState<Map<string, number>>(new Map());
 
   const effectiveTermId = termId || currentTerm.data?.id || '';
   // Memoised so the totals below are not recomputed on every keystroke just
@@ -93,14 +100,12 @@ export function InvoiceFormPage() {
   const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
   const isOptionalFor = (feeItemId: string) =>
     structureOptional.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.isOptional ?? false;
+  const amountFor = (feeItemId: string) =>
+    structureAmounts.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.amount ?? 0;
 
   const subtotal = useMemo(
-    () =>
-      lines.reduce((sum, line) => {
-        const item = items.find((entry) => entry.id === line.feeItemId);
-        return sum + (item?.amount ?? 0) * line.quantity;
-      }, 0),
-    [lines, items],
+    () => lines.reduce((sum, line) => sum + amountFor(line.feeItemId) * line.quantity, 0),
+    [lines, items, structureAmounts],
   );
 
   const addLine = () => {
@@ -147,6 +152,7 @@ export function InvoiceFormPage() {
     // so the screen never keeps showing "(optional)" on a charge this
     // particular structure actually bills to everyone.
     setStructureOptional(new Map(result.lines.map((line) => [line.feeItemId, line.isOptional])));
+    setStructureAmounts(new Map(result.lines.map((line) => [line.feeItemId, line.amount])));
 
     // Every line on the structure, mandatory and optional alike — "Add all
     // standard fees" means all of them. `isOptional` is only a display label
@@ -433,7 +439,7 @@ export function InvoiceFormPage() {
                           {item?.hasQuantity ? 'Line total' : 'Amount'}
                         </p>
                         <p className="font-medium tabular-nums">
-                          {formatCurrency((item?.amount ?? 0) * line.quantity, 'NGN', {
+                          {formatCurrency(amountFor(line.feeItemId) * line.quantity, 'NGN', {
                             showDecimals: false,
                           })}
                         </p>
