@@ -4,6 +4,11 @@ import type { RequestContext } from '../../../shared/types/context';
 import { AuditService } from '../../audit/services/audit.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
+import {
+  WhatsAppShareService,
+  type WhatsAppShare,
+} from '../../../shared/services/whatsappShare.service';
+import { buildCustomBillPdf } from '../../../shared/utils/financePdf';
 import { CustomBillRepository } from '../repositories/customBill.repository';
 import { PaymentDestinationRepository } from '../repositories/paymentDestination.repository';
 import type { CustomBillDTO } from '../dto/finance.dto';
@@ -32,6 +37,7 @@ export class CustomBillsService {
     private readonly schools = SchoolRepository.Instance,
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly sharing = WhatsAppShareService.Instance,
   ) {}
 
   async fetchAll(
@@ -64,6 +70,52 @@ export class CustomBillsService {
       schoolPhone: website.contactPhone || school.phone,
       schoolEmail: website.contactEmail || school.email,
     };
+  }
+
+  /**
+   * Stores this bill's PDF and hands back a WhatsApp message carrying its link,
+   * addressed to whoever the bill is made out to.
+   *
+   * A custom bill has no student and so no guardian to look a number up on: the
+   * sender picks the chat in WhatsApp themselves.
+   */
+  async shareOnWhatsApp(context: RequestContext, id: string): Promise<WhatsAppShare> {
+    const bill = await this.fetchOne(context, id);
+    const schoolName = bill.schoolName ?? context.membership.schoolName;
+
+    const pdf = await buildCustomBillPdf({
+      schoolName,
+      schoolLogoUrl: bill.schoolLogoUrl,
+      schoolPhone: bill.schoolPhone,
+      schoolEmail: bill.schoolEmail,
+      payerName: bill.payerName,
+      createdAt: bill.createdAt,
+      lines: bill.lines,
+      total: bill.total,
+      note: bill.note,
+      accounts: bill.accounts,
+    });
+
+    const share = await this.sharing.shareDocument({
+      kind: 'bill',
+      pdf,
+      // Not the payer's name: it would sit in a public address.
+      name: `bill-${bill.id.slice(0, 8)}`,
+      greeting: bill.payerName,
+      subject: 'your bill',
+      confidential: true,
+      schoolName,
+      contactEmail: bill.schoolEmail,
+    });
+
+    await this.audit.record(context, {
+      action: 'customBill.whatsappShared',
+      entityType: 'CustomBill',
+      entityId: bill.id,
+      entityLabel: bill.payerName,
+    });
+
+    return share;
   }
 
   async create(context: RequestContext, input: CreateCustomBillInput): Promise<CustomBillDTO> {

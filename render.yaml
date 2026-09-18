@@ -64,3 +64,12 @@ services:
         sync: false
       - key: RAVEN_WEBHOOK_SECRET
         sync: false
+
+      # --- Sharing finance PDFs on WhatsApp (optional) -----------------------
+      # Without all three, "Send to WhatsApp" refuses with a clear message.
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

@@ -68,6 +68,15 @@ export const updateFeeStructureSchema = z.object({
 });
 
 /**
+ * Sharing the printable fee schedule on WhatsApp. The note is the one typed on
+ * the print page — nothing saves it, so it travels with the request.
+ */
+export const shareFeeStructureWhatsAppSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ note: z.string().trim().max(500).optional().or(z.literal('')) }).strict(),
+});
+
+/**
  * Billing a whole cohort in one action.
  *
  * `termId` is required only where the structure has none of its own; the
@@ -99,4 +108,5 @@ export type FetchFeeStructuresQuery = z.infer<typeof fetchFeeStructuresSchema>['
 export type CreateFeeStructureInput = z.infer<typeof createFeeStructureSchema>['body'];
 export type UpdateFeeStructureInput = z.infer<typeof updateFeeStructureSchema>['body'];
 export type GenerateInvoicesInput = z.infer<typeof generateInvoicesSchema>['body'];
+export type ShareFeeStructureWhatsAppInput = z.infer<typeof shareFeeStructureWhatsAppSchema>['body'];
 export type ResolveFeeStructureQuery = z.infer<typeof resolveFeeStructureSchema>['query'];

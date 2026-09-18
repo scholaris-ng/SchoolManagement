@@ -10,7 +10,12 @@ import { StudentAccessService } from '../../students/services/studentAccess.serv
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import { GuardianRepository } from '../../guardians/repositories/guardian.repository';
-import { sendInvoiceEmail } from '../../../shared/utils/mailer';
+import { buildInvoicePdfAttachment, sendInvoiceEmail } from '../../../shared/utils/mailer';
+import { chooseRecipient } from '../../../shared/utils/whatsapp';
+import {
+  WhatsAppShareService,
+  type WhatsAppShare,
+} from '../../../shared/services/whatsappShare.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
@@ -104,6 +109,7 @@ export class InvoicesService {
     private readonly guardians = GuardianRepository.Instance,
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
+    private readonly sharing = WhatsAppShareService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -235,6 +241,71 @@ export class InvoicesService {
     });
 
     return { sent: true, email: guardian.email };
+  }
+
+  /**
+   * Stores this invoice's PDF and hands back a WhatsApp message carrying its
+   * link, addressed to the guardian who pays this child's fees — or, if theirs
+   * has no usable number, to the next guardian who has one. See `chooseRecipient`.
+   *
+   * Nothing is sent from here — the browser opens WhatsApp with the message
+   * typed and the bursar presses Send. Like `emailInvoice`, it never touches
+   * `hasPortalAccess` or anything else `invite()` owns.
+   */
+  async shareInvoiceOnWhatsApp(context: RequestContext, id: string): Promise<WhatsAppShare> {
+    const invoice = await this.fetchInvoice(context, id);
+    const recipient = chooseRecipient(
+      await this.guardians.findContactsForStudent(context.schoolId, invoice.studentId),
+    );
+    const schoolName = invoice.schoolName ?? context.membership.schoolName;
+
+    const pdf = await buildInvoicePdfAttachment({
+      schoolName,
+      schoolLogoUrl: invoice.schoolLogoUrl,
+      schoolAddress: invoice.schoolAddress,
+      schoolPhone: invoice.schoolPhone,
+      schoolEmail: invoice.schoolEmail,
+      studentName: invoice.studentName,
+      admissionNo: invoice.admissionNo,
+      className: invoice.className,
+      invoiceNo: invoice.invoiceNo,
+      issueDate: invoice.issueDate,
+      termName: invoice.termName,
+      sessionName: invoice.sessionName,
+      dueDate: invoice.dueDate,
+      subtotal: invoice.subtotal,
+      discountTotal: invoice.discountTotal,
+      broughtForward: invoice.broughtForward,
+      total: invoice.total,
+      amountPaid: invoice.amountPaid,
+      balance: invoice.balance,
+      note: invoice.note,
+      lines: invoice.lines,
+      accounts: uniqueAccounts(invoice.lines),
+    });
+
+    const share = await this.sharing.shareDocument({
+      kind: 'invoice',
+      pdf,
+      name: invoice.invoiceNo,
+      greeting: recipient.greeting,
+      subject: `${invoice.studentName}'s invoice for ${invoice.termName} (${invoice.sessionName})`,
+      phone: recipient.phone,
+      notice: recipient.notice,
+      confidential: true,
+      schoolName,
+      contactEmail: invoice.schoolEmail,
+    });
+
+    await this.audit.record(context, {
+      action: 'invoice.whatsappShared',
+      entityType: 'Invoice',
+      entityId: invoice.id,
+      entityLabel: `${invoice.invoiceNo} · ${invoice.studentName}`,
+      after: { guardianId: recipient.guardian?.id ?? null },
+    });
+
+    return share;
   }
 
   async fetchLedger(context: RequestContext, studentId: string): Promise<StudentLedgerResultDTO> {

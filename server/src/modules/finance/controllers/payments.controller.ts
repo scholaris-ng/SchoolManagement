@@ -9,6 +9,7 @@ import type {
   ReconcilePaymentInput,
   RecordPaymentInput,
   SendReceiptEmailInput,
+  ShareReceiptWhatsAppInput,
 } from '../validators/payments.schema';
 
 const service = () => PaymentsService.Instance;
@@ -63,6 +64,18 @@ export class PaymentsController {
       const { paymentId } = req.validated!.params as { paymentId: string };
       const body = req.validated!.body as SendReceiptEmailInput;
       res.status(200).json(ApiResponse.ok(await service().emailReceipt(contextOf(req), paymentId, body)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async shareReceiptWhatsApp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { paymentId } = req.validated!.params as { paymentId: string };
+      const body = req.validated!.body as ShareReceiptWhatsAppInput;
+      res
+        .status(200)
+        .json(ApiResponse.ok(await service().shareReceiptOnWhatsApp(contextOf(req), paymentId, body)));
     } catch (error) {
       next(error);
     }

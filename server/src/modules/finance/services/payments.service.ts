@@ -6,7 +6,12 @@ import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { amountInWords } from '../../../shared/utils/numberToWords';
-import { sendReceiptEmail } from '../../../shared/utils/mailer';
+import { buildReceiptPdfAttachment, sendReceiptEmail } from '../../../shared/utils/mailer';
+import { chooseRecipient } from '../../../shared/utils/whatsapp';
+import {
+  WhatsAppShareService,
+  type WhatsAppShare,
+} from '../../../shared/services/whatsappShare.service';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { SchoolRepository } from '../../school/repositories/school.repository';
@@ -74,6 +79,7 @@ export class PaymentsService {
     private readonly raven = RavenClient.Instance,
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
+    private readonly sharing = WhatsAppShareService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -156,6 +162,86 @@ export class PaymentsService {
     });
 
     return { sent: true, email: guardian.email };
+  }
+
+  /**
+   * Stores this receipt's PDF and hands back a WhatsApp message carrying its
+   * link, addressed to whoever pays the student's fees.
+   *
+   * A payment with no student on it is still shareable — the message then goes
+   * to "Parent/Guardian" and the sender picks the chat in WhatsApp themselves.
+   * Otherwise see `InvoicesService.shareInvoiceOnWhatsApp` for who it goes to.
+   * Nothing is sent from here.
+   */
+  async shareReceiptOnWhatsApp(
+    context: RequestContext,
+    paymentId: string,
+    input: { includeCharges: boolean },
+  ): Promise<WhatsAppShare> {
+    const receipt = await this.fetchReceipt(context, paymentId);
+
+    const [school, website, guardians] = await Promise.all([
+      this.schools.findById(context.schoolId),
+      this.websites.getForSchool(context.schoolId),
+      receipt.studentId
+        ? this.guardians.findContactsForStudent(context.schoolId, receipt.studentId)
+        : null,
+    ]);
+    if (!school) throw AppError.internal();
+
+    // No student means no guardian to look for, which is not something to warn
+    // about — unlike a student whose guardians simply have no number.
+    const recipient = guardians
+      ? chooseRecipient(guardians)
+      : { guardian: null, greeting: 'Parent/Guardian', phone: null, notice: null };
+
+    // The same contact details `emailReceipt` gives the emailed copy.
+    const contactEmail = website.contactEmail || school.email;
+
+    const pdf = await buildReceiptPdfAttachment({
+      schoolName: receipt.schoolName,
+      schoolLogoUrl: receipt.schoolLogoUrl,
+      schoolAddress: website.address || receipt.schoolAddress,
+      schoolPhone: website.contactPhone || school.phone,
+      schoolEmail: contactEmail,
+      studentName: receipt.studentName,
+      admissionNo: receipt.admissionNo,
+      className: receipt.className,
+      receiptNo: receipt.receiptNo,
+      paymentId: receipt.paymentId,
+      amount: receipt.amount,
+      amountInWords: receipt.amountInWords,
+      method: receipt.method,
+      paidAt: receipt.paidAt,
+      receivedByName: receipt.receivedByName,
+      allocations: receipt.allocations,
+      balanceAfter: receipt.balanceAfter,
+      verificationCode: receipt.verificationCode,
+      includeCharges: input.includeCharges,
+    });
+
+    const share = await this.sharing.shareDocument({
+      kind: 'receipt',
+      pdf,
+      name: receipt.receiptNo,
+      greeting: recipient.greeting,
+      subject: `your payment receipt for ${receipt.studentName}`,
+      phone: recipient.phone,
+      notice: recipient.notice,
+      confidential: true,
+      schoolName: receipt.schoolName,
+      contactEmail,
+    });
+
+    await this.audit.record(context, {
+      action: 'receipt.whatsappShared',
+      entityType: 'Payment',
+      entityId: receipt.paymentId,
+      entityLabel: `${receipt.receiptNo} · ${receipt.studentName}`,
+      after: { guardianId: recipient.guardian?.id ?? null },
+    });
+
+    return share;
   }
 
   /**

@@ -17,6 +17,7 @@ import type {
   Receipt,
   ResolveFeeStructureResult,
   StudentFinanceSummary,
+  WhatsAppShare,
 } from '@/types/finance';
 
 /** Type alias so it keeps the implicit index signature the transport needs. */
@@ -226,6 +227,10 @@ export const FinanceEndpoints = {
   generateInvoices: (id: string, input: GenerateInvoicesInput) =>
     http.post<GenerateInvoicesResult>(`/fee-structures/${id}/generate`, input),
 
+  /** `note` is the one typed on the print page; nothing saves it, so it travels with the request. */
+  shareFeeStructureWhatsApp: (id: string, note: string) =>
+    http.post<WhatsAppShare>(`/fee-structures/${id}/whatsapp`, { note }),
+
   fetchDiscounts: () => http.get<Discount[]>('/discounts'),
 
   createDiscount: (values: Partial<Discount>) => http.post<Discount>('/discounts', values),
@@ -275,6 +280,13 @@ export const FinanceEndpoints = {
   sendInvoiceEmail: (id: string, guardianId: string) =>
     http.post<{ sent: boolean; email: string }>(`/invoices/${id}/email`, { guardianId }),
 
+  /**
+   * The share endpoints below each store the document as a PDF and return the
+   * WhatsApp message to open around its link. Nothing is sent from the server —
+   * see `WhatsAppShareButton`.
+   */
+  shareInvoiceWhatsApp: (id: string) => http.post<WhatsAppShare>(`/invoices/${id}/whatsapp`, {}),
+
   /* -- Payments ------------------------------------------------------------- */
 
   fetchPayments: (query: ListQuery) => http.get<Paginated<Payment>>('/payments', { query }),
@@ -302,6 +314,9 @@ export const FinanceEndpoints = {
       guardianId,
       includeCharges,
     }),
+
+  shareReceiptWhatsApp: (paymentId: string, includeCharges: boolean) =>
+    http.post<WhatsAppShare>(`/receipts/${paymentId}/whatsapp`, { includeCharges }),
 
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),
@@ -344,6 +359,9 @@ export const FinanceEndpoints = {
     http.get<Paginated<CustomBill>>('/custom-bills', { query }),
 
   fetchCustomBill: (id: string) => http.get<CustomBill>(`/custom-bills/${id}`),
+
+  shareCustomBillWhatsApp: (id: string) =>
+    http.post<WhatsAppShare>(`/custom-bills/${id}/whatsapp`, {}),
 
   createCustomBill: (values: Partial<CustomBillInput>) =>
     http.post<CustomBill>('/custom-bills', values),

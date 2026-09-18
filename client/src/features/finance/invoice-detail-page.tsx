@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CreditCard, Mail, MessageCircle, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
+import { CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { contrastingTextColor } from '@/lib/utils';
-import { toast } from '@/lib/toast-bus';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useDeleteInvoices, useInvoice } from './api';
 import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
+import { ShareInvoiceButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -123,18 +123,7 @@ export function InvoiceDetailPage() {
                   Email invoice
                 </Button>
               </PermissionGate>
-              <Button
-                data-cy="finance-invoice-detail-whatsapp"
-                variant="outline"
-                onClick={() =>
-                  toast.info('Coming soon', {
-                    description: "Sending invoices straight to a guardian's WhatsApp is on the way.",
-                  })
-                }
-              >
-                <MessageCircle />
-                Send to WhatsApp
-              </Button>
+              <ShareInvoiceButton invoiceId={record.id} />
               {record.status !== 'CANCELLED' && (
                 <PermissionGate require="invoice.manage">
                   <Button data-cy="finance-invoice-detail-edit" variant="outline" asChild>

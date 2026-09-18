@@ -1,14 +1,14 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Mail, MessageCircle, Printer } from 'lucide-react';
+import { Mail, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
-import { toast } from '@/lib/toast-bus';
 import { useReceipt } from './api';
 import { EmailReceiptDialog } from './email-receipt-dialog';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { POS_RECEIPT_SELECTOR, POS_WIDTH_MM, PosReceipt } from './receipt-pos';
+import { ShareReceiptButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -118,18 +118,7 @@ export function ReceiptPage() {
             breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
             actions={
               <>
-                <Button
-                  data-cy="finance-receipt-whatsapp"
-                  variant="outline"
-                  onClick={() =>
-                    toast.info('Coming soon', {
-                      description: "Sending receipts straight to a guardian's WhatsApp is on the way.",
-                    })
-                  }
-                >
-                  <MessageCircle />
-                  Send to WhatsApp
-                </Button>
+                <ShareReceiptButton paymentId={record.paymentId} includeCharges={showItems} />
                 <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
                   <Button
                     data-cy="finance-receipt-email"

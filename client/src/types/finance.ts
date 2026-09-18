@@ -405,3 +405,18 @@ export interface Receipt {
   balanceAfter: number;
   verificationCode: string;
 }
+
+/**
+ * What opening WhatsApp needs once a finance document has been stored: a link
+ * to it, the message to type around that link, and who it goes to when the
+ * server could work that out. Mirrors `WhatsAppShare` in
+ * `server/src/shared/services/whatsappShare.service.ts`.
+ */
+export interface WhatsAppShare {
+  fileUrl: string;
+  message: string;
+  /** International digits for `wa.me`; `null` means the sender picks the chat. */
+  phone: string | null;
+  /** Why there is no `phone` when there should have been one — for the sender to be told. */
+  notice: string | null;
+}

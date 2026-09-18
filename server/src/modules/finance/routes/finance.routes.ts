@@ -22,6 +22,7 @@ import {
   fetchFeeStructuresSchema,
   generateInvoicesSchema,
   resolveFeeStructureSchema,
+  shareFeeStructureWhatsAppSchema,
   updateFeeStructureSchema,
 } from '../validators/feeStructures.schema';
 import { createDiscountSchema, updateDiscountSchema } from '../validators/discounts.schema';
@@ -43,6 +44,7 @@ import {
   reconcilePaymentSchema,
   recordPaymentSchema,
   sendReceiptEmailSchema,
+  shareReceiptWhatsAppSchema,
   studentIdParamSchema,
 } from '../validators/payments.schema';
 import {
@@ -180,6 +182,19 @@ router.post(
   authorise('invoice.manage'),
   validate(generateInvoicesSchema),
   FeeStructuresController.generate,
+);
+
+/**
+ * Stores the fee schedule as a PDF and returns a WhatsApp message linking to
+ * it — see `FeeStructuresService.shareOnWhatsApp`. Anyone who may print the
+ * schedule from the fee screens may share it; the link is public, so this is
+ * deliberately not open to `finance.read`, which a parent holds.
+ */
+router.post(
+  '/fee-structures/:id/whatsapp',
+  authorise('fee.manage', 'invoice.manage'),
+  validate(shareFeeStructureWhatsAppSchema),
+  FeeStructuresController.shareWhatsApp,
 );
 
 /** The client types discounts as a bare array, not a page. */
@@ -325,6 +340,18 @@ router.post(
   InvoicesController.sendEmail,
 );
 
+/**
+ * Stores one invoice as a PDF and returns a WhatsApp message linking to it —
+ * see `InvoicesService.shareInvoiceOnWhatsApp`. `invoice.manage`, same as
+ * emailing it: the link is public, so it is not open to `finance.read`.
+ */
+router.post(
+  '/invoices/:id/whatsapp',
+  authorise('invoice.manage'),
+  validate(invoiceParamSchema),
+  InvoicesController.shareWhatsApp,
+);
+
 router.get(
   '/payments',
   authorise('finance.read', 'payment.manage'),
@@ -376,6 +403,13 @@ router.post(
   authorise('payment.manage', 'invoice.manage'),
   validate(sendReceiptEmailSchema),
   PaymentsController.sendReceiptEmail,
+);
+
+router.post(
+  '/receipts/:paymentId/whatsapp',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(shareReceiptWhatsAppSchema),
+  PaymentsController.shareReceiptWhatsApp,
 );
 
 router.get(
@@ -476,6 +510,13 @@ router.patch(
   authorise('invoice.manage'),
   validate(updateCustomBillSchema),
   CustomBillsController.update,
+);
+
+router.post(
+  '/custom-bills/:id/whatsapp',
+  authorise('invoice.manage'),
+  validate(customBillParamSchema),
+  CustomBillsController.shareWhatsApp,
 );
 
 router.delete(

@@ -87,6 +87,12 @@ const schema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().default(300),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(20),
 
+  // Cloudinary — where a finance PDF is put so a "Send to WhatsApp" message can
+  // carry a link to it. From the dashboard's Programmable Media → API Keys.
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+
   PAYSTACK_SECRET_KEY: z.string().optional(),
 
   // Raven Atlas (getravenbank.com) — the collection accounts families pay
@@ -183,6 +189,16 @@ export const env = {
     windowMs: raw.RATE_LIMIT_WINDOW_MS,
     max: raw.RATE_LIMIT_MAX,
     authMax: raw.AUTH_RATE_LIMIT_MAX,
+  },
+
+  cloudinary: {
+    cloudName: raw.CLOUDINARY_CLOUD_NAME,
+    apiKey: raw.CLOUDINARY_API_KEY,
+    apiSecret: raw.CLOUDINARY_API_SECRET,
+    /** All three are needed to sign an upload. */
+    configured: Boolean(
+      raw.CLOUDINARY_CLOUD_NAME && raw.CLOUDINARY_API_KEY && raw.CLOUDINARY_API_SECRET,
+    ),
   },
 
   paystack: { secretKey: raw.PAYSTACK_SECRET_KEY },
