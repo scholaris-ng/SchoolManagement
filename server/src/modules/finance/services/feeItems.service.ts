@@ -66,6 +66,7 @@ export class FeeItemsService {
       isActive: input.isActive,
       hasQuantity: input.hasQuantity,
       paymentDestinationIds,
+      priceOptions: input.priceOptions ?? [],
     });
 
     await this.audit.record(context, {

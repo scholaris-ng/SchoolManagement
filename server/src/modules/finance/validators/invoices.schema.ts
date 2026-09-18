@@ -56,6 +56,14 @@ const invoiceLine = z
      * screen.
      */
     accountIds: z.array(z.string().uuid()).max(10).optional(),
+    /**
+     * Which of the fee item's own named `priceOptions` (`fee-item-dialog.tsx`)
+     * this charge is billed at, instead of the item's own `amount` — still
+     * picked from a list the school already set up, not a figure the browser
+     * names, same discipline as the unit amount itself. Omitted, or an id
+     * that isn't actually one of the item's options, bills the item's `amount`.
+     */
+    priceOptionId: z.string().uuid().optional(),
   })
   .strict();
 

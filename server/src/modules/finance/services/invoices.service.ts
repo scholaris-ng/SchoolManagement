@@ -208,7 +208,7 @@ export class InvoicesService {
       const item = byId.get(line.feeItemId);
       if (!item) throw AppError.validation('One of those charges is not a fee item of this school.');
 
-      const unitAmount = structureAmounts.get(line.feeItemId) ?? item.amount;
+      const unitAmount = this.resolveUnitAmount(item, line.priceOptionId, structureAmounts);
       const gross = Math.round(unitAmount * line.quantity * MONEY_SCALE);
       const discount = Math.round(line.discountAmount * MONEY_SCALE);
       if (discount > gross) {
@@ -459,7 +459,7 @@ export class InvoicesService {
           throw AppError.validation('One of those charges is not a fee item of this school.');
         }
 
-        const unitAmount = structureAmounts.get(line.feeItemId) ?? item.amount;
+        const unitAmount = this.resolveUnitAmount(item, line.priceOptionId, structureAmounts);
         const gross = Math.round(unitAmount * line.quantity * MONEY_SCALE);
         const discount = Math.round(line.discountAmount * MONEY_SCALE);
         if (discount > gross) {
@@ -624,6 +624,25 @@ export class InvoicesService {
     if (!match) return new Map();
     const definitions = await this.feeStructures.lineDefinitions(schoolId, match.id);
     return new Map(definitions.map((line) => [line.feeItemId, line.amount]));
+  }
+
+  /**
+   * What one line actually bills at, in the order a bursar's own choices
+   * should win: the named price option they picked for this line (see
+   * `FeeItem.priceOptions`) beats the structure's own price for the item,
+   * which beats the item's plain default. An id that doesn't match one of
+   * the item's own options is treated the same as not picking one — the
+   * same leniency `accountIds` gets — rather than refused.
+   */
+  private resolveUnitAmount(
+    item: FeeItemDTO,
+    priceOptionId: string | undefined,
+    structureAmounts: Map<string, number>,
+  ): number {
+    const picked = priceOptionId
+      ? item.priceOptions.find((option) => option.id === priceOptionId)
+      : undefined;
+    return picked?.amount ?? structureAmounts.get(item.id) ?? item.amount;
   }
 }
 

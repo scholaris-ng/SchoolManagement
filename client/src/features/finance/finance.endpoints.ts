@@ -54,6 +54,8 @@ export interface FeeItemInput {
   hasQuantity: boolean;
   /** Omitted leaves the existing accounts alone; present, even `[]`, replaces them all. */
   paymentDestinationIds?: string[];
+  /** Omitted leaves the existing price options alone; present, even `[]`, replaces them all. */
+  priceOptions?: { id: string; label: string; amount: number }[];
 }
 
 /**
@@ -67,6 +69,8 @@ export interface InvoiceLineInput {
   quantity: number;
   discountAmount: number;
   accountIds?: string[];
+  /** One of the fee item's own `priceOptions`; omitted bills the item's own `amount`. */
+  priceOptionId?: string;
 }
 
 export interface CreateInvoiceInput {

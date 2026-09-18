@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { humanizeEnum } from '@/lib/utils';
 import { usePaymentDestinations } from './use-payment-destinations';
 import { Toggle } from './fees-page-parts';
@@ -25,6 +26,12 @@ import { CATEGORIES } from './fees-page-constants';
  * the limit in section 17 of the frontend guide.
  */
 
+interface PriceOptionDraft {
+  id: string;
+  label: string;
+  amount: string;
+}
+
 export function FeeItemDialog({
   state,
   onOpenChange,
@@ -50,6 +57,13 @@ export function FeeItemDialog({
   const [paymentDestinationIds, setPaymentDestinationIds] = useState<string[]>(
     (state.item?.accounts ?? []).map((account) => account.id),
   );
+  const [priceOptions, setPriceOptions] = useState<PriceOptionDraft[]>(
+    (state.item?.priceOptions ?? []).map((option) => ({
+      id: option.id,
+      label: option.label,
+      amount: String(option.amount),
+    })),
+  );
 
   const valid = name.trim() && Number(amount) > 0;
 
@@ -57,6 +71,18 @@ export function FeeItemDialog({
     setPaymentDestinationIds((current) =>
       current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
     );
+
+  const addPriceOption = () =>
+    setPriceOptions((current) => [...current, { id: crypto.randomUUID(), label: '', amount: '' }]);
+  const removePriceOption = (index: number) =>
+    setPriceOptions((current) => current.filter((_, position) => position !== index));
+  const patchPriceOption = (index: number, patch: Partial<PriceOptionDraft>) =>
+    setPriceOptions((current) =>
+      current.map((option, position) => (position === index ? { ...option, ...patch } : option)),
+    );
+  const validPriceOptions = priceOptions.filter(
+    (option) => option.label.trim() && Number(option.amount) >= 0 && option.amount.trim() !== '',
+  );
 
   return (
     <Dialog open={state.open} onOpenChange={onOpenChange}>
@@ -169,6 +195,60 @@ export function FeeItemDialog({
           </fieldset>
 
           <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="text-sm font-medium">
+              Other price options
+              <span className="ml-1 font-normal text-muted-foreground">
+                (optional — a bursar picks one of these instead of the amount above when raising an
+                invoice by hand)
+              </span>
+            </legend>
+            <ul className="space-y-2">
+              {priceOptions.map((option, index) => (
+                <li key={option.id} className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    {index === 0 && (
+                      <Label htmlFor={`fee-price-option-label-${option.id}`}>Label</Label>
+                    )}
+                    <Input
+                      data-cy="fee-price-option-label"
+                      id={`fee-price-option-label-${option.id}`}
+                      value={option.label}
+                      onChange={(event) => patchPriceOption(index, { label: event.target.value })}
+                      placeholder="e.g. Zone B"
+                    />
+                  </div>
+                  <div className="w-36 space-y-1.5">
+                    {index === 0 && (
+                      <Label htmlFor={`fee-price-option-amount-${option.id}`}>Amount</Label>
+                    )}
+                    <Input
+                      data-cy="fee-price-option-amount"
+                      id={`fee-price-option-amount-${option.id}`}
+                      type="number"
+                      min={0}
+                      value={option.amount}
+                      onChange={(event) => patchPriceOption(index, { amount: event.target.value })}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removePriceOption(index)}
+                    aria-label={`Remove ${option.label || `price option ${index + 1}`}`}
+                  >
+                    <Trash2 />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <Button type="button" variant="outline" size="sm" onClick={addPriceOption}>
+              <Plus />
+              Add price option
+            </Button>
+          </fieldset>
+
+          <fieldset className="space-y-2 sm:col-span-2">
             <legend className="sr-only">Fee item options</legend>
             <Toggle
               label="Optional charge"
@@ -211,6 +291,11 @@ export function FeeItemDialog({
                 isActive,
                 hasQuantity,
                 paymentDestinationIds,
+                priceOptions: validPriceOptions.map((option) => ({
+                  id: option.id,
+                  label: option.label.trim(),
+                  amount: Number(option.amount),
+                })),
               })
             }
           >

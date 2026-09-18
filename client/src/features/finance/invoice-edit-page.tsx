@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
@@ -28,6 +28,8 @@ interface LineDraft {
   accountIds: string[];
   /** The line's own snapshot at billing time — shown only if the fee item has since been deleted, so it can still be identified and removed. */
   description: string;
+  /** One of the fee item's own named prices; unset bills the item's own `amount`. */
+  priceOptionId?: string;
 }
 
 /**
@@ -79,11 +81,19 @@ export function InvoiceEditPage() {
               ),
             )
             .map((account) => account.id) ?? [];
+        // The line snapshots only the amount it was actually billed at, not
+        // which named price option (if any) produced it — inferred back by
+        // matching that amount against the item's current options, since
+        // they may have been renamed, reordered or repriced since.
+        const matchedPriceOption = item?.priceOptions.find(
+          (option) => option.amount === line.unitAmount,
+        );
         return {
           feeItemId: line.feeItemId,
           quantity: line.quantity,
           accountIds: matched.length > 0 ? matched : (item?.accounts.map((a) => a.id) ?? []),
           description: line.description,
+          priceOptionId: matchedPriceOption?.id,
         };
       }),
     );
@@ -105,12 +115,27 @@ export function InvoiceEditPage() {
   // Filled in alongside `structureOptional` so this screen's total agrees
   // with what gets charged instead of quietly pricing off the item's default.
   const [structureAmounts, setStructureAmounts] = useState<Map<string, number>>(new Map());
-  const amountFor = (feeItemId: string) =>
-    structureAmounts.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.amount ?? 0;
+  // A line's own picked price option (see `FeeItem.priceOptions`) beats a
+  // structure's price for the item, which beats the item's plain default —
+  // the same priority `InvoicesService.resolveUnitAmount` bills from.
+  const amountFor = useCallback(
+    (feeItemId: string, priceOptionId?: string) => {
+      const item = items.find((entry) => entry.id === feeItemId);
+      const picked = priceOptionId
+        ? item?.priceOptions.find((option) => option.id === priceOptionId)
+        : undefined;
+      return picked?.amount ?? structureAmounts.get(feeItemId) ?? item?.amount ?? 0;
+    },
+    [items, structureAmounts],
+  );
 
   const subtotal = useMemo(
-    () => lines.reduce((sum, line) => sum + amountFor(line.feeItemId) * line.quantity, 0),
-    [lines, items, structureAmounts],
+    () =>
+      lines.reduce(
+        (sum, line) => sum + amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+        0,
+      ),
+    [lines, amountFor],
   );
 
   const addLine = () => {
@@ -265,6 +290,7 @@ export function InvoiceEditPage() {
                   quantity: line.quantity,
                   discountAmount: 0,
                   accountIds: line.accountIds,
+                  priceOptionId: line.priceOptionId,
                 })),
               }),
         },
@@ -395,6 +421,7 @@ export function InvoiceEditPage() {
                                         quantity: 1,
                                         accountIds: next?.accounts.map((a) => a.id) ?? [],
                                         description: next?.name ?? entry.description,
+                                        priceOptionId: undefined,
                                       }
                                     : entry,
                                 ),
@@ -410,6 +437,35 @@ export function InvoiceEditPage() {
                           </NativeSelect>
                         )}
                       </div>
+                      {!missing && item.priceOptions.length > 0 && (
+                        <div className="w-36 shrink-0 space-y-1.5">
+                          <Label htmlFor={`edit-line-price-${index}`}>Price</Label>
+                          <NativeSelect
+                            data-cy="finance-invoice-edit-price-option"
+                            id={`edit-line-price-${index}`}
+                            value={line.priceOptionId ?? ''}
+                            disabled={amountLocked}
+                            onChange={(event) => {
+                              const priceOptionId = event.target.value || undefined;
+                              setLines((current) =>
+                                current.map((entry, i) =>
+                                  i === index ? { ...entry, priceOptionId } : entry,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="">
+                              Standard — {formatCurrency(item.amount, 'NGN', { showDecimals: false })}
+                            </option>
+                            {item.priceOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label} —{' '}
+                                {formatCurrency(option.amount, 'NGN', { showDecimals: false })}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </div>
+                      )}
                       {!missing && item.hasQuantity && !amountLocked && (
                         <div className="w-20 shrink-0 space-y-1.5">
                           <Label htmlFor={`edit-line-qty-${index}`}>Qty</Label>
@@ -442,9 +498,11 @@ export function InvoiceEditPage() {
                               : 'Amount'}
                           </p>
                           <p className="font-medium tabular-nums">
-                            {formatCurrency(amountFor(line.feeItemId) * line.quantity, 'NGN', {
-                              showDecimals: false,
-                            })}
+                            {formatCurrency(
+                              amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+                              'NGN',
+                              { showDecimals: false },
+                            )}
                           </p>
                         </div>
                       )}

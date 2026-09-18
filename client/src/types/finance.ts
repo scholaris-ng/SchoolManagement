@@ -28,6 +28,13 @@ export interface PaymentDestinationDuplicateGroup {
   destinations: PaymentDestination[];
 }
 
+/** A named alternative to a fee item's own `amount` — "Zone A" transport at one price, "Zone B" at another. */
+export interface FeeItemPriceOption {
+  id: string;
+  label: string;
+  amount: number;
+}
+
 export interface FeeItem {
   id: string;
   schoolId: string;
@@ -44,6 +51,8 @@ export interface FeeItem {
   hasQuantity: boolean;
   /** Where families can pay this charge into, resolved for display. */
   accounts: PaymentDestination[];
+  /** Extra named prices for this same charge, offered alongside `amount` when raising an invoice by hand. */
+  priceOptions: FeeItemPriceOption[];
 }
 
 export interface FeeStructureLine {

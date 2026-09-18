@@ -35,6 +35,13 @@ export interface PaymentDestinationDuplicateGroupDTO {
   destinations: PaymentDestinationDTO[];
 }
 
+/** A named alternative to a fee item's own `amount`. Mirrors `FeeItemPriceOption` on the server. */
+export interface FeeItemPriceOptionDTO {
+  id: string;
+  label: string;
+  amount: number;
+}
+
 /** Mirrors `client/src/types/finance.ts` — the client's copy is the contract. */
 export interface FeeItemDTO {
   id: string;
@@ -51,6 +58,8 @@ export interface FeeItemDTO {
   hasQuantity: boolean;
   /** Where families can pay this charge into — a fee item may have more than one, resolved for display. */
   accounts: PaymentDestinationDTO[];
+  /** Extra named prices for this same charge, offered alongside `amount` when raising an invoice by hand. */
+  priceOptions: FeeItemPriceOptionDTO[];
 }
 
 /** Mirrors `Discount` in `client/src/types/finance.ts`. */

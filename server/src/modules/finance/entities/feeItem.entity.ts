@@ -22,6 +22,19 @@ export const FEE_CATEGORIES: readonly FeeCategory[] = [
 ];
 
 /**
+ * A named alternative to a fee item's own `amount` — "Zone A" transport at
+ * one price, "Zone B" at another, the same charge either way. A bursar
+ * raising a bill by hand picks one of these per invoice line instead of
+ * always billing the item's default; a fee structure line still sets its
+ * own flat amount regardless, unaffected by any of these.
+ */
+export interface FeeItemPriceOption {
+  id: string;
+  label: string;
+  amount: number;
+}
+
+/**
  * A single chargeable line a school bills for (spec section 9).
  *
  * Amounts are `numeric(12,2)`: money is never a float, and Postgres hands
@@ -81,4 +94,12 @@ export class FeeItem extends SoftDeletableEntity {
    */
   @Column({ name: 'payment_destination_ids', type: 'jsonb', default: [] })
   paymentDestinationIds: string[];
+
+  /**
+   * Extra named prices a bursar can choose between for this same charge on a
+   * hand-raised invoice — `amount` stays the default when none is picked.
+   * See `FeeItemPriceOption`.
+   */
+  @Column({ name: 'price_options', type: 'jsonb', default: [] })
+  priceOptions: FeeItemPriceOption[];
 }

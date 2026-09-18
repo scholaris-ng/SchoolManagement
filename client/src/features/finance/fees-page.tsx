@@ -285,6 +285,11 @@ export function FeesPage() {
                         {item.isOptional && <Badge tone="info">Optional</Badge>}
                         {item.isRecurring && <Badge tone="outline">Every term</Badge>}
                         {item.hasQuantity && <Badge tone="outline">By quantity</Badge>}
+                        {item.priceOptions.length > 0 && (
+                          <Badge tone="outline">
+                            +{item.priceOptions.length} price{item.priceOptions.length === 1 ? '' : 's'}
+                          </Badge>
+                        )}
                         {!item.isActive && <Badge tone="warning">Inactive</Badge>}
                       </div>
                       <span className="w-28 shrink-0 text-right font-medium tabular-nums">

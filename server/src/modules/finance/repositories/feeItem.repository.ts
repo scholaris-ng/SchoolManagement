@@ -23,6 +23,7 @@ function toDTO(row: FeeItem, accounts: PaymentDestinationDTO[]): FeeItemDTO {
     isActive: row.isActive,
     hasQuantity: row.hasQuantity,
     accounts,
+    priceOptions: row.priceOptions,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
@@ -28,6 +28,8 @@ interface LineDraft {
   quantity: number;
   /** Which of the fee item's own accounts this charge is billed under. */
   accountIds: string[];
+  /** One of the fee item's own named prices; unset bills the item's own `amount`. */
+  priceOptionId?: string;
 }
 
 /**
@@ -100,12 +102,27 @@ export function InvoiceFormPage() {
   const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
   const isOptionalFor = (feeItemId: string) =>
     structureOptional.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.isOptional ?? false;
-  const amountFor = (feeItemId: string) =>
-    structureAmounts.get(feeItemId) ?? items.find((item) => item.id === feeItemId)?.amount ?? 0;
+  // A line's own picked price option (see `FeeItem.priceOptions`) beats a
+  // structure's price for the item, which beats the item's plain default —
+  // the same priority `InvoicesService.resolveUnitAmount` bills from.
+  const amountFor = useCallback(
+    (feeItemId: string, priceOptionId?: string) => {
+      const item = items.find((entry) => entry.id === feeItemId);
+      const picked = priceOptionId
+        ? item?.priceOptions.find((option) => option.id === priceOptionId)
+        : undefined;
+      return picked?.amount ?? structureAmounts.get(feeItemId) ?? item?.amount ?? 0;
+    },
+    [items, structureAmounts],
+  );
 
   const subtotal = useMemo(
-    () => lines.reduce((sum, line) => sum + amountFor(line.feeItemId) * line.quantity, 0),
-    [lines, items, structureAmounts],
+    () =>
+      lines.reduce(
+        (sum, line) => sum + amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+        0,
+      ),
+    [lines, amountFor],
   );
 
   const addLine = () => {
@@ -398,6 +415,7 @@ export function InvoiceFormPage() {
                                       feeItemId: event.target.value,
                                       quantity: 1,
                                       accountIds: next?.accounts.map((a) => a.id) ?? [],
+                                      priceOptionId: undefined,
                                     }
                                   : entry,
                               ),
@@ -412,6 +430,34 @@ export function InvoiceFormPage() {
                           ))}
                         </NativeSelect>
                       </div>
+                      {item && item.priceOptions.length > 0 && (
+                        <div className="w-36 shrink-0 space-y-1.5">
+                          <Label htmlFor={`line-price-${index}`}>Price</Label>
+                          <NativeSelect
+                            data-cy="finance-invoice-form-price-option"
+                            id={`line-price-${index}`}
+                            value={line.priceOptionId ?? ''}
+                            onChange={(event) => {
+                              const priceOptionId = event.target.value || undefined;
+                              setLines((current) =>
+                                current.map((entry, i) =>
+                                  i === index ? { ...entry, priceOptionId } : entry,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="">
+                              Standard — {formatCurrency(item.amount, 'NGN', { showDecimals: false })}
+                            </option>
+                            {item.priceOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label} —{' '}
+                                {formatCurrency(option.amount, 'NGN', { showDecimals: false })}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </div>
+                      )}
                       {item?.hasQuantity && (
                         <div className="w-20 shrink-0 space-y-1.5">
                           <Label htmlFor={`line-qty-${index}`}>Qty</Label>
@@ -439,9 +485,11 @@ export function InvoiceFormPage() {
                           {item?.hasQuantity ? 'Line total' : 'Amount'}
                         </p>
                         <p className="font-medium tabular-nums">
-                          {formatCurrency(amountFor(line.feeItemId) * line.quantity, 'NGN', {
-                            showDecimals: false,
-                          })}
+                          {formatCurrency(
+                            amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+                            'NGN',
+                            { showDecimals: false },
+                          )}
                         </p>
                       </div>
                       <Button
