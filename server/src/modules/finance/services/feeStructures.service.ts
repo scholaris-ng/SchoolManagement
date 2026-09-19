@@ -14,6 +14,7 @@ import {
   type FeeStructureLineDefinition,
 } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
+import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import {
@@ -67,6 +68,7 @@ export class FeeStructuresService {
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
+    private readonly grants = StudentDiscountRepository.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -395,7 +397,18 @@ export class FeeStructuresService {
       );
     }
 
+    // Each pupil's granted discounts for this term, in one query for the whole
+    // cohort. Applied inside `issueInvoice`, so the bill they land on is the
+    // same one a hand-raised invoice for that pupil would produce.
+    const discountsByStudent = await this.grants.fetchApplicable(
+      context.schoolId,
+      students.map((student) => student.studentId),
+      structure.sessionId,
+      termId,
+    );
+
     let skipped = eligible.length - students.length;
+    let discounted = 0;
     const invoiceIds: string[] = [];
 
     await AppDataSource.transaction(async (manager) => {
@@ -425,9 +438,11 @@ export class FeeStructuresService {
           sequence: first + invoiceIds.length,
           note: input.note ? input.note : null,
           lines,
+          discounts: discountsByStudent.get(student.studentId) ?? [],
           createdByUserId: context.user.id,
         });
         invoiceIds.push(invoice.id);
+        if (invoice.appliedDiscounts.length > 0) discounted += 1;
       }
     });
 
@@ -436,10 +451,10 @@ export class FeeStructuresService {
       entityType: 'FeeStructure',
       entityId: structure.id,
       entityLabel: `${structure.name} · ${term.name}`,
-      after: { created: invoiceIds.length, skipped, termId, dueDate: input.dueDate },
+      after: { created: invoiceIds.length, skipped, discounted, termId, dueDate: input.dueDate },
     });
 
-    return { created: invoiceIds.length, skipped, invoiceIds };
+    return { created: invoiceIds.length, skipped, discounted, invoiceIds };
   }
 
   /* -- Shared ----------------------------------------------------------------- */

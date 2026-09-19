@@ -20,6 +20,7 @@ import { PermissionGate } from '@/components/guards/permission-gate';
 // the note above its commented-out usage below.
 // import { PaymentAccountsCard } from './payment-accounts-card';
 import { Field, Row } from './invoice-detail-page-parts';
+import { describeDiscountValue } from './discount-scope';
 
 /** Ships with the app for a school that has not uploaded its own crest yet. */
 const DEFAULT_LOGO = '/site/logo.png';
@@ -267,11 +268,22 @@ export function InvoiceDetailPage() {
                 label="Subtotal"
                 value={formatCurrency(record.subtotal, currency, { showDecimals: false })}
               />
-              {record.discountTotal > 0 && (
-                <Row
-                  label="Discounts"
-                  value={`− ${formatCurrency(record.discountTotal, currency, { showDecimals: false })}`}
-                />
+              {record.appliedDiscounts.length > 0 ? (
+                record.appliedDiscounts.map((discount) => (
+                  <Row
+                    key={discount.discountId}
+                    label={discount.name}
+                    hint={describeDiscountValue(discount)}
+                    value={`− ${formatCurrency(discount.amount, currency, { showDecimals: false })}`}
+                  />
+                ))
+              ) : (
+                record.discountTotal > 0 && (
+                  <Row
+                    label="Discounts"
+                    value={`− ${formatCurrency(record.discountTotal, currency, { showDecimals: false })}`}
+                  />
+                )
               )}
               {record.broughtForward > 0 && (
                 <Row

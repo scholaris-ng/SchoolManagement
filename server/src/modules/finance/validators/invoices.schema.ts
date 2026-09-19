@@ -76,6 +76,14 @@ const invoiceLines = z
     'The same fee item appears twice — change the quantity instead',
   );
 
+/**
+ * Discounts the bursar ticked for this one bill, by id — on top of whatever
+ * the student has been granted (`StudentDiscount`), which always applies. The
+ * amounts are worked out server-side from the discount's own definition, never
+ * accepted from the request, for the same reason a line's price never is.
+ */
+const discountIds = z.array(z.string().uuid()).max(10, 'That is more discounts than one invoice needs');
+
 export const createInvoiceSchema = z.object({
   body: z
     .object({
@@ -83,6 +91,7 @@ export const createInvoiceSchema = z.object({
       termId: z.string().uuid('Choose the term this bill covers'),
       dueDate: isoDate,
       lines: invoiceLines,
+      discountIds: discountIds.default([]),
       note: z.string().trim().max(2000).optional().or(z.literal('')),
     })
     .strict(),
@@ -105,6 +114,8 @@ export const updateInvoiceSchema = z.object({
       dueDate: isoDate.optional(),
       note: z.string().trim().max(2000).optional().or(z.literal('')),
       lines: invoiceLines.optional(),
+      /** Only read alongside `lines`. Omitted, the invoice keeps the discounts it already carries. */
+      discountIds: discountIds.optional(),
     })
     .strict(),
 });

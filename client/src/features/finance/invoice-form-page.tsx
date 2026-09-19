@@ -6,7 +6,16 @@ import { isApiError } from '@/lib/api-error';
 import { toast } from '@/lib/toast-bus';
 import { useCurrentTerm, useTerms } from '@/features/academics/api';
 import { useStudent, useStudentSearch } from '@/features/students/api';
-import { useCreateInvoice, useFeeItems, useResolveFeeStructure } from './api';
+import {
+  useCreateInvoice,
+  useDiscounts,
+  useFeeItems,
+  useResolveFeeStructure,
+  useStudentDiscounts,
+} from './api';
+import { grantReachesTerm } from './discount-scope';
+import { previewDiscounts } from './discount-math';
+import { InvoiceDiscountsPicker } from './invoice-discounts-picker';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Card,
@@ -97,6 +106,32 @@ export function InvoiceFormPage() {
   const [structureAmounts, setStructureAmounts] = useState<Map<string, number>>(new Map());
 
   const effectiveTermId = termId || currentTerm.data?.id || '';
+
+  // The server applies whatever this student has been granted, plus any
+  // discount ticked here, when the invoice is created. The figures below are a
+  // preview of that — the server works the real amounts out itself.
+  const discounts = useDiscounts();
+  const studentDiscounts = useStudentDiscounts(student?.id);
+  const [chosenDiscountIds, setChosenDiscountIds] = useState<string[]>([]);
+  const selectedTerm = (terms.data ?? []).find((term) => term.id === effectiveTermId);
+  const activeDiscounts = useMemo(
+    () => (discounts.data ?? []).filter((discount) => discount.isActive),
+    [discounts.data],
+  );
+  const grantedIds = useMemo(
+    () =>
+      selectedTerm
+        ? (studentDiscounts.data ?? [])
+            .filter(
+              (grant) =>
+                grantReachesTerm(grant, selectedTerm) &&
+                activeDiscounts.some((discount) => discount.id === grant.discountId),
+            )
+            .map((grant) => grant.discountId)
+        : [],
+    [selectedTerm, studentDiscounts.data, activeDiscounts],
+  );
+
   // Memoised so the totals below are not recomputed on every keystroke just
   // because the fallback array is a new reference.
   const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
@@ -124,6 +159,20 @@ export function InvoiceFormPage() {
       ),
     [lines, amountFor],
   );
+
+  // Granted discounts first, then the ones ticked for this bill — the order
+  // the server takes them in.
+  const discountPreview = useMemo(() => {
+    const ids = Array.from(new Set([...grantedIds, ...chosenDiscountIds]));
+    return previewDiscounts(
+      lines.map((line) => ({
+        feeItemId: line.feeItemId,
+        unitAmount: amountFor(line.feeItemId, line.priceOptionId),
+        quantity: line.quantity,
+      })),
+      ids.flatMap((id) => activeDiscounts.find((discount) => discount.id === id) ?? []),
+    );
+  }, [lines, amountFor, grantedIds, chosenDiscountIds, activeDiscounts]);
 
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
@@ -248,6 +297,7 @@ export function InvoiceFormPage() {
         termId: effectiveTermId,
         dueDate,
         lines: lines.map((line) => ({ ...line, discountAmount: 0 })),
+        discountIds: chosenDiscountIds,
         note: note.trim() || undefined,
       });
       navigate(`/finance/invoices/${invoice.id}`);
@@ -554,10 +604,35 @@ export function InvoiceFormPage() {
             />
           </div>
 
+          {student && (
+            <InvoiceDiscountsPicker
+              discounts={activeDiscounts}
+              grantedIds={grantedIds}
+              selectedIds={chosenDiscountIds}
+              onChange={setChosenDiscountIds}
+              applied={discountPreview.applied}
+              studentName={student.name}
+            />
+          )}
+
           <dl className="space-y-1 border-t border-border pt-3 text-sm">
+            {discountPreview.applied.length > 0 && (
+              <>
+                <Row label="Subtotal" value={formatCurrency(subtotal, 'NGN', { showDecimals: false })} />
+                {discountPreview.applied.map((entry) => (
+                  <Row
+                    key={entry.discountId}
+                    label={entry.name}
+                    value={`− ${formatCurrency(entry.amount, 'NGN', { showDecimals: false })}`}
+                  />
+                ))}
+              </>
+            )}
             <Row
               label="Total for this term"
-              value={formatCurrency(subtotal, 'NGN', { showDecimals: false })}
+              value={formatCurrency(subtotal - discountPreview.total, 'NGN', {
+                showDecimals: false,
+              })}
               emphasis
             />
           </dl>

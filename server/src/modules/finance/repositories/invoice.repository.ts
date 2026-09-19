@@ -37,6 +37,7 @@ const PROJECTION = `
   to_char(i.due_date, 'YYYY-MM-DD') AS "dueDate",
   i.subtotal::float AS subtotal,
   i.discount_total::float AS "discountTotal",
+  i.applied_discounts AS "appliedDiscounts",
   i.brought_forward::float AS "broughtForward",
   i.total::float AS total,
   COALESCE(pd.paid, 0)::float AS "amountPaid",
@@ -539,7 +540,10 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   async updateFields(
     id: string,
     fields: Partial<
-      Pick<Invoice, 'dueDate' | 'note' | 'subtotal' | 'discountTotal' | 'total' | 'status'>
+      Pick<
+        Invoice,
+        'dueDate' | 'note' | 'subtotal' | 'discountTotal' | 'appliedDiscounts' | 'total' | 'status'
+      >
     >,
     manager?: EntityManager,
   ): Promise<void> {

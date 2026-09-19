@@ -4,7 +4,17 @@ import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
 import { isApiError } from '@/lib/api-error';
 import { toast } from '@/lib/toast-bus';
-import { useFeeItems, useInvoice, useResolveFeeStructure, useUpdateInvoice } from './api';
+import {
+  useDiscounts,
+  useFeeItems,
+  useInvoice,
+  useResolveFeeStructure,
+  useStudentDiscounts,
+  useUpdateInvoice,
+} from './api';
+import { grantReachesTerm } from './discount-scope';
+import { previewDiscounts } from './discount-math';
+import { InvoiceDiscountsPicker } from './invoice-discounts-picker';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Card,
@@ -46,6 +56,8 @@ export function InvoiceEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const invoice = useInvoice(id);
+  const studentDiscounts = useStudentDiscounts(invoice.data?.studentId);
+  const discounts = useDiscounts();
   const feeItems = useFeeItems();
   const updateInvoice = useUpdateInvoice();
   const resolveFeeStructure = useResolveFeeStructure();
@@ -53,6 +65,9 @@ export function InvoiceEditPage() {
   const [dueDate, setDueDate] = useState('');
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([]);
+  // Starts as the discounts the invoice already carries, so saving without
+  // touching the picker keeps them; the server drops any that are no longer active.
+  const [chosenDiscountIds, setChosenDiscountIds] = useState<string[]>([]);
   const [initialised, setInitialised] = useState(false);
 
   // Waits on both the invoice and the fee item list: reconstructing which
@@ -62,6 +77,7 @@ export function InvoiceEditPage() {
     if (!invoice.data || !feeItems.data || initialised) return;
     setDueDate(toDateInputValue(invoice.data.dueDate));
     setNote(invoice.data.note ?? '');
+    setChosenDiscountIds(invoice.data.appliedDiscounts.map((entry) => entry.discountId));
     setLines(
       invoice.data.lines.map((line) => {
         const item = feeItems.data.items.find((entry) => entry.id === line.feeItemId);
@@ -137,6 +153,36 @@ export function InvoiceEditPage() {
       ),
     [lines, amountFor],
   );
+
+  const activeDiscounts = useMemo(
+    () => (discounts.data ?? []).filter((discount) => discount.isActive),
+    [discounts.data],
+  );
+  const grantedIds = useMemo(() => {
+    const record = invoice.data;
+    if (!record) return [];
+    return (studentDiscounts.data ?? [])
+      .filter(
+        (grant) =>
+          grantReachesTerm(grant, { id: record.termId, sessionId: record.sessionId }) &&
+          activeDiscounts.some((discount) => discount.id === grant.discountId),
+      )
+      .map((grant) => grant.discountId);
+  }, [invoice.data, studentDiscounts.data, activeDiscounts]);
+
+  // Granted discounts first, then the ones ticked for this bill — the order
+  // the server takes them in. A preview only; the server prices the real bill.
+  const discountPreview = useMemo(() => {
+    const ids = Array.from(new Set([...grantedIds, ...chosenDiscountIds]));
+    return previewDiscounts(
+      lines.map((line) => ({
+        feeItemId: line.feeItemId,
+        unitAmount: amountFor(line.feeItemId, line.priceOptionId),
+        quantity: line.quantity,
+      })),
+      ids.flatMap((id) => activeDiscounts.find((discount) => discount.id === id) ?? []),
+    );
+  }, [lines, amountFor, grantedIds, chosenDiscountIds, activeDiscounts]);
 
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
@@ -292,6 +338,7 @@ export function InvoiceEditPage() {
                   accountIds: line.accountIds,
                   priceOptionId: line.priceOptionId,
                 })),
+                discountIds: chosenDiscountIds,
               }),
         },
       });
@@ -568,14 +615,54 @@ export function InvoiceEditPage() {
             />
           </div>
 
-          <dl className="space-y-1 border-t border-border pt-3 text-sm">
-            <Row
-              label="Total for this term"
-              value={formatCurrency(amountLocked ? record.subtotal - record.discountTotal : subtotal, 'NGN', {
-                showDecimals: false,
-              })}
-              emphasis
+          {/* Once money has landed the charges lock, and so do the discounts
+              taken off them — the invoice's own figures are shown instead. */}
+          {!amountLocked && (
+            <InvoiceDiscountsPicker
+              discounts={activeDiscounts}
+              grantedIds={grantedIds}
+              selectedIds={chosenDiscountIds}
+              onChange={setChosenDiscountIds}
+              applied={discountPreview.applied}
+              studentName={record.studentName}
             />
+          )}
+
+          <dl className="space-y-1 border-t border-border pt-3 text-sm">
+            {amountLocked ? (
+              <Row
+                label="Total for this term"
+                value={formatCurrency(record.subtotal - record.discountTotal, 'NGN', {
+                  showDecimals: false,
+                })}
+                emphasis
+              />
+            ) : (
+              <>
+                {discountPreview.applied.length > 0 && (
+                  <>
+                    <Row
+                      label="Subtotal"
+                      value={formatCurrency(subtotal, 'NGN', { showDecimals: false })}
+                    />
+                    {discountPreview.applied.map((entry) => (
+                      <Row
+                        key={entry.discountId}
+                        label={entry.name}
+                        value={`− ${formatCurrency(entry.amount, 'NGN', { showDecimals: false })}`}
+                      />
+                    ))}
+                  </>
+                )}
+                <Row
+                  label="Total for this term"
+                  value={formatCurrency(subtotal - discountPreview.total, 'NGN', {
+                    showDecimals: false,
+                  })}
+                  emphasis
+                />
+              </>
+            )}
           </dl>
         </CardContent>
       </Card>

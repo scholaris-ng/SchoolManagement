@@ -6,6 +6,7 @@ import { cn, humanizeEnum } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useStudentLedger } from '../api';
 import { useDeleteInvoices } from '@/features/finance/api';
+import { StudentDiscountsCard } from '@/features/finance/student-discounts-card';
 // Raven's collection-account flow (`PaymentAccountsCard`) is disabled — see
 // the note above each commented-out usage below.
 // import { PaymentAccountsCard } from '@/features/finance/payment-accounts-card';
@@ -225,6 +226,8 @@ export function StudentFinanceTab({ studentId }: { studentId: string }) {
           </Button>
         </PermissionGate>
       </div>
+
+      <StudentDiscountsCard studentId={studentId} />
 
       {entries.length === 0 ? (
         <Card>

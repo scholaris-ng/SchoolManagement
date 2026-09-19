@@ -115,6 +115,8 @@ export interface ResolveFeeStructureResult {
 export interface GenerateInvoicesResult {
   created: number;
   skipped: number;
+  /** Of `created`, how many carry at least one granted discount. */
+  discounted: number;
   invoiceIds: string[];
 }
 
@@ -141,11 +143,26 @@ export interface StudentDiscount {
   type: DiscountType;
   mode: 'PERCENTAGE' | 'FIXED';
   value: number;
-  sessionId?: string | null;
-  termId?: string | null;
+  /** Empty means the discount reaches every charge on a bill. */
+  appliesToFeeItemIds: string[];
+  /** Which bills it reaches: a term, every term of a session, or (both null) until revoked. */
+  sessionId: string | null;
+  sessionName: string | null;
+  termId: string | null;
+  termName: string | null;
   grantedByName: string;
   grantedAt: string;
-  note?: string | null;
+  note: string | null;
+}
+
+/** What a discount actually took off one invoice, as it stood when the bill was raised. */
+export interface AppliedDiscount {
+  discountId: string;
+  name: string;
+  type: DiscountType;
+  mode: 'PERCENTAGE' | 'FIXED';
+  value: number;
+  amount: number;
 }
 
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PART_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
@@ -188,6 +205,8 @@ export interface Invoice {
   lines: InvoiceLine[];
   subtotal: number;
   discountTotal: number;
+  /** Which discounts made up `discountTotal` — the reason for a reduced bill. */
+  appliedDiscounts: AppliedDiscount[];
   /** Unpaid balance carried in from a previous term (spec section 26). */
   broughtForward: number;
   total: number;

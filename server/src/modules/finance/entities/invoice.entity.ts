@@ -6,6 +6,7 @@ import { AcademicSession } from '../../academics/entities/academicSession.entity
 import { Term } from '../../academics/entities/term.entity';
 import { SchoolClass } from '../../academics/entities/schoolClass.entity';
 import { FeeStructure } from './feeStructure.entity';
+import type { AppliedDiscount } from '../services/discountCalculator';
 
 /**
  * The money states an invoice is *stored* in. `OVERDUE` is deliberately not
@@ -121,6 +122,14 @@ export class Invoice extends BaseEntity {
   /** The invoices that made up `broughtForward`, so cancelling can reopen them. */
   @Column({ name: 'brought_forward_from', type: 'jsonb', default: [] })
   broughtForwardFrom: BroughtForwardSource[];
+
+  /**
+   * Which discounts took money off this bill, and how much each took — a
+   * snapshot, so the reason for a reduced invoice survives the discount being
+   * edited or the grant being revoked. See `applyDiscounts`.
+   */
+  @Column({ name: 'applied_discounts', type: 'jsonb', default: [] })
+  appliedDiscounts: AppliedDiscount[];
 
   /** `subtotal - discountTotal + broughtForward`. */
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })

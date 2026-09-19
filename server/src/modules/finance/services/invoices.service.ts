@@ -20,6 +20,9 @@ import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
+import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
+import { DiscountRepository } from '../repositories/discount.repository';
+import { applyDiscounts, type ApplicableDiscount } from './discountCalculator';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
@@ -69,6 +72,13 @@ export interface IssueInvoiceParams {
   sequence: number;
   note: string | null;
   lines: IssueLine[];
+  /**
+   * What the student's granted discounts (`StudentDiscount`) take off these
+   * lines. Resolved by the caller — one query for a whole bulk run rather
+   * than one per pupil — and applied here, so a hand-raised bill and a
+   * generated one cannot disagree about what a scholarship is worth.
+   */
+  discounts?: ApplicableDiscount[];
   createdByUserId: string | null;
 }
 
@@ -110,6 +120,8 @@ export class InvoicesService {
     private readonly access = StudentAccessService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
+    private readonly grants = StudentDiscountRepository.Instance,
+    private readonly discountDefinitions = DiscountRepository.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -381,6 +393,14 @@ export class InvoicesService {
       };
     });
 
+    const discounts = await this.discountsFor(
+      context.schoolId,
+      student.id,
+      term.sessionId,
+      term.id,
+      input.discountIds,
+    );
+
     const invoice = await AppDataSource.transaction(async (manager) => {
       const sequence = await this.invoices.nextSequence(manager, context.schoolId, term.sessionId);
       return this.issueInvoice(manager, {
@@ -398,6 +418,7 @@ export class InvoicesService {
         sequence,
         note: input.note ? input.note : null,
         lines,
+        discounts,
         createdByUserId: context.user.id,
       });
     });
@@ -412,6 +433,7 @@ export class InvoicesService {
         broughtForward: invoice.broughtForward,
         termId: term.id,
         lines: lines.length,
+        discounts: invoice.appliedDiscounts.map((discount) => discount.name),
       },
     });
 
@@ -433,9 +455,15 @@ export class InvoicesService {
       `invoice:student:${params.studentId}`,
     ]);
 
+    const { lineDiscounts, applied } = applyDiscounts(params.lines, params.discounts ?? []);
+    const lines = params.lines.map((line, index) => ({
+      ...line,
+      discountAmount: lineDiscounts[index],
+    }));
+
     let subtotalKobo = 0;
     let discountKobo = 0;
-    for (const line of params.lines) {
+    for (const line of lines) {
       subtotalKobo += Math.round(line.unitAmount * line.quantity * MONEY_SCALE);
       discountKobo += Math.round(line.discountAmount * MONEY_SCALE);
     }
@@ -474,6 +502,7 @@ export class InvoicesService {
         dueDate: params.dueDate,
         subtotal: fromKobo(subtotalKobo),
         discountTotal: fromKobo(discountKobo),
+        appliedDiscounts: applied,
         broughtForward: fromKobo(broughtForwardKobo),
         broughtForwardFrom,
         total: fromKobo(totalKobo),
@@ -488,7 +517,7 @@ export class InvoicesService {
     );
 
     await this.invoices.createLines(
-      params.lines.map((line, index) => ({
+      lines.map((line, index) => ({
         schoolId: params.schoolId,
         invoiceId: invoice.id,
         feeItemId: line.feeItemId,
@@ -600,9 +629,7 @@ export class InvoicesService {
         existing.termId,
       );
 
-      let subtotalKobo = 0;
-      let discountKobo = 0;
-      newLines = input.lines.map((line) => {
+      const priced: IssueLine[] = input.lines.map((line) => {
         const item = byId.get(line.feeItemId);
         if (!item) {
           throw AppError.validation('One of those charges is not a fee item of this school.');
@@ -614,8 +641,6 @@ export class InvoicesService {
         if (discount > gross) {
           throw AppError.validation(`The discount on ${item.name} is more than the charge itself.`);
         }
-        subtotalKobo += gross;
-        discountKobo += discount;
 
         return {
           feeItemId: item.id,
@@ -629,11 +654,36 @@ export class InvoicesService {
         };
       });
 
+      // Re-priced from whatever the student is entitled to now, plus the
+      // discounts ticked on the form — the edit is a fresh pricing of the
+      // same charges, and the amounts typed on the form are always zero. A
+      // caller that names none keeps the ones the bill already carried, and
+      // one of those that has since been switched off is dropped quietly
+      // rather than failing an edit that never asked for it.
+      const discounts = await this.discountsFor(
+        context.schoolId,
+        existing.studentId,
+        existing.sessionId,
+        existing.termId,
+        input.discountIds ?? existing.appliedDiscounts.map((entry) => entry.discountId),
+        input.discountIds !== undefined,
+      );
+      const { lineDiscounts, applied } = applyDiscounts(priced, discounts);
+      newLines = priced.map((line, index) => ({ ...line, discountAmount: lineDiscounts[index] }));
+
+      let subtotalKobo = 0;
+      let discountKobo = 0;
+      for (const line of newLines) {
+        subtotalKobo += Math.round(line.unitAmount * line.quantity * MONEY_SCALE);
+        discountKobo += Math.round(line.discountAmount * MONEY_SCALE);
+      }
+
       const broughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
       const totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
 
       fields.subtotal = fromKobo(subtotalKobo);
       fields.discountTotal = fromKobo(discountKobo);
+      fields.appliedDiscounts = applied;
       fields.total = fromKobo(totalKobo);
       // Only reachable with nothing paid yet, so the only two states an edit
       // can land on are the same ones a fresh invoice can — never PART_PAID.
@@ -752,6 +802,51 @@ export class InvoicesService {
     const dto = await this.invoices.findOneDTO(schoolId, id);
     if (!dto) throw AppError.internal();
     return dto;
+  }
+
+  /**
+   * Every discount one bill carries: what the pupil has been granted for this
+   * session and term, then any others the bursar ticked for this bill alone.
+   * A ticked discount the pupil already holds is not applied twice.
+   *
+   * `strict` refuses an id that is not an active discount of this school;
+   * without it such an id is skipped, for callers replaying a bill's own
+   * earlier discounts rather than taking a choice from the browser.
+   */
+  private async discountsFor(
+    schoolId: string,
+    studentId: string,
+    sessionId: string,
+    termId: string,
+    chosenIds: string[] = [],
+    strict = true,
+  ): Promise<ApplicableDiscount[]> {
+    const byStudent = await this.grants.fetchApplicable(schoolId, [studentId], sessionId, termId);
+    const granted = byStudent.get(studentId) ?? [];
+
+    const extraIds = Array.from(new Set(chosenIds)).filter(
+      (id) => !granted.some((discount) => discount.discountId === id),
+    );
+    if (extraIds.length === 0) return granted;
+
+    const definitions = await this.discountDefinitions.fetchForSchool(schoolId);
+    const chosen: ApplicableDiscount[] = [];
+    for (const id of extraIds) {
+      const definition = definitions.find((entry) => entry.id === id && entry.isActive);
+      if (!definition) {
+        if (strict) throw AppError.validation('One of those discounts is not available.');
+        continue;
+      }
+      chosen.push({
+        discountId: definition.id,
+        name: definition.name,
+        type: definition.type,
+        mode: definition.mode,
+        value: definition.value,
+        appliesToFeeItemIds: definition.appliesToFeeItemIds,
+      });
+    }
+    return [...granted, ...chosen];
   }
 
   /**

@@ -16,12 +16,25 @@ import type {
   PaymentReceiptSubmission,
   Receipt,
   ResolveFeeStructureResult,
+  StudentDiscount,
   StudentFinanceSummary,
   WhatsAppShare,
 } from '@/types/finance';
 
 /** Type alias so it keeps the implicit index signature the transport needs. */
 export type FinanceOverviewQuery = { termId?: string };
+
+/**
+ * `termId` alone is enough — the server derives the session — and neither
+ * means "until revoked". A `sessionId` with no `termId` covers every term of
+ * that session.
+ */
+export interface GrantStudentDiscountInput {
+  discountId: string;
+  sessionId?: string | null;
+  termId?: string | null;
+  note?: string | null;
+}
 
 /**
  * What the server accepts for a payment destination, which is *not* a
@@ -79,6 +92,12 @@ export interface CreateInvoiceInput {
   termId: string;
   dueDate: string;
   lines: InvoiceLineInput[];
+  /**
+   * Discounts ticked for this bill alone, by id — on top of whatever the
+   * student has been granted, which always applies. The server works out the
+   * amounts; nothing here names one.
+   */
+  discountIds?: string[];
   note?: string;
 }
 
@@ -91,6 +110,8 @@ export interface UpdateInvoiceInput {
   dueDate?: string;
   note?: string;
   lines?: InvoiceLineInput[];
+  /** Read only alongside `lines`; omitted, the invoice keeps the discounts it already carries. */
+  discountIds?: string[];
 }
 
 /** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */
@@ -237,6 +258,15 @@ export const FinanceEndpoints = {
 
   updateDiscount: (id: string, values: Partial<Discount>) =>
     http.patch<Discount>(`/discounts/${id}`, values),
+
+  fetchStudentDiscounts: (studentId: string) =>
+    http.get<StudentDiscount[]>(`/students/${studentId}/discounts`),
+
+  grantStudentDiscount: (studentId: string, input: GrantStudentDiscountInput) =>
+    http.post<StudentDiscount>(`/students/${studentId}/discounts`, input),
+
+  revokeStudentDiscount: (studentId: string, grantId: string) =>
+    http.delete<void>(`/students/${studentId}/discounts/${grantId}`),
 
   /**
    * The school's own bank accounts, managed once in one place — see

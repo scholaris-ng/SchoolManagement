@@ -10,6 +10,7 @@ import type {
   FeeStructureInput,
   FinanceOverviewQuery,
   GenerateInvoicesInput,
+  GrantStudentDiscountInput,
 } from './finance.endpoints';
 
 /**
@@ -155,11 +156,16 @@ export function useGenerateInvoices() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.debtors(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
 
+      const notes = [
+        result.discounted > 0
+          ? `${result.discounted} with a discount applied`
+          : null,
+        result.skipped > 0 ? `${result.skipped} already billed for this term` : null,
+      ].filter(Boolean);
+
       toast.success(
         `${result.created} invoice${result.created === 1 ? '' : 's'} created`,
-        result.skipped > 0
-          ? { description: `${result.skipped} already billed for this term` }
-          : undefined,
+        notes.length > 0 ? { description: notes.join(' · ') } : undefined,
       );
     },
   });
@@ -184,6 +190,49 @@ export function useSaveDiscount() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.discounts(schoolId) });
       toast.success('Discount saved');
+    },
+  });
+}
+
+/** The discounts one student holds — what their next invoice will carry. */
+export function useStudentDiscounts(studentId: string | undefined) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.finance.studentDiscounts(schoolId, studentId ?? ''),
+    queryFn: () => FinanceEndpoints.fetchStudentDiscounts(studentId ?? ''),
+    enabled: Boolean(schoolId && studentId),
+  });
+}
+
+export function useGrantStudentDiscount(studentId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: GrantStudentDiscountInput) =>
+      FinanceEndpoints.grantStudentDiscount(studentId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.studentDiscounts(schoolId, studentId),
+      });
+      toast.success('Discount granted', {
+        description: 'It applies to invoices raised from now on. Existing invoices are unchanged.',
+      });
+    },
+  });
+}
+
+export function useRevokeStudentDiscount(studentId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (grantId: string) => FinanceEndpoints.revokeStudentDiscount(studentId, grantId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.studentDiscounts(schoolId, studentId),
+      });
+      toast.success('Discount removed');
     },
   });
 }

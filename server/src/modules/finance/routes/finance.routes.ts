@@ -5,6 +5,7 @@ import { singleFileUpload } from '../../../shared/middleware/upload.middleware';
 import { FeeItemsController } from '../controllers/feeItems.controller';
 import { FeeStructuresController } from '../controllers/feeStructures.controller';
 import { DiscountsController } from '../controllers/discounts.controller';
+import { StudentDiscountsController } from '../controllers/studentDiscounts.controller';
 import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
 import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
@@ -26,6 +27,11 @@ import {
   updateFeeStructureSchema,
 } from '../validators/feeStructures.schema';
 import { createDiscountSchema, updateDiscountSchema } from '../validators/discounts.schema';
+import {
+  grantStudentDiscountSchema,
+  revokeStudentDiscountSchema,
+  studentDiscountsParamSchema,
+} from '../validators/studentDiscounts.schema';
 import {
   bulkDeleteInvoicesSchema,
   cancelInvoiceSchema,
@@ -217,6 +223,34 @@ router.patch(
   authorise('discount.manage'),
   validate(updateDiscountSchema),
   DiscountsController.update,
+);
+
+/**
+ * Who holds which discount. Granting one is `discount.manage` — the same
+ * permission that defines them — and it reaches only invoices raised after
+ * the grant; see `StudentDiscountsService`. Readable under `invoice.manage`
+ * too, since the invoice form shows what will be applied to the pupil it is
+ * raising a bill for.
+ */
+router.get(
+  '/students/:id/discounts',
+  authorise('finance.read', 'discount.manage', 'invoice.manage'),
+  validate(studentDiscountsParamSchema),
+  StudentDiscountsController.fetchForStudent,
+);
+
+router.post(
+  '/students/:id/discounts',
+  authorise('discount.manage'),
+  validate(grantStudentDiscountSchema),
+  StudentDiscountsController.grant,
+);
+
+router.delete(
+  '/students/:id/discounts/:grantId',
+  authorise('discount.manage'),
+  validate(revokeStudentDiscountSchema),
+  StudentDiscountsController.revoke,
 );
 
 /**

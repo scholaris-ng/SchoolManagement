@@ -28,6 +28,9 @@ export const teachingKeys = {
       scoped(schoolId, 'fee-structures', query ?? {}),
     structure: (schoolId: Scope, id: string) => scoped(schoolId, 'fee-structures', id),
     discounts: (schoolId: Scope) => scoped(schoolId, 'discounts'),
+    /** The discounts granted to one student — what their next invoice will carry. */
+    studentDiscounts: (schoolId: Scope, studentId: string) =>
+      scoped(schoolId, 'student-discounts', studentId),
     /** The school's own bank accounts, managed once centrally — see `PaymentDestination`. */
     paymentDestinations: (schoolId: Scope) => scoped(schoolId, 'payment-destinations'),
     paymentDestinationDuplicates: (schoolId: Scope) =>

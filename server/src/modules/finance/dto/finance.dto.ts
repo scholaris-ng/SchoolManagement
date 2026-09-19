@@ -1,5 +1,6 @@
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type { DiscountMode, DiscountType } from '../entities/discount.entity';
+import type { AppliedDiscount } from '../services/discountCalculator';
 import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentAccount.entity';
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
 import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
@@ -139,7 +140,33 @@ export interface GenerateInvoicesResultDTO {
   created: number;
   /** Already had a live invoice for this structure and term — not an error. */
   skipped: number;
+  /** Of `created`, how many carry at least one granted discount. */
+  discounted: number;
   invoiceIds: string[];
+}
+
+/**
+ * A discount granted to one student — mirrors `StudentDiscount` on the
+ * client. `sessionId`/`termId` say which bills it reaches; both null means
+ * "until revoked".
+ */
+export interface StudentDiscountDTO {
+  id: string;
+  studentId: string;
+  studentName: string;
+  discountId: string;
+  discountName: string;
+  type: DiscountType;
+  mode: DiscountMode;
+  value: number;
+  appliesToFeeItemIds: string[];
+  sessionId: string | null;
+  sessionName: string | null;
+  termId: string | null;
+  termName: string | null;
+  grantedByName: string;
+  grantedAt: string;
+  note: string | null;
 }
 
 /**
@@ -199,6 +226,8 @@ export interface InvoiceDTO {
   lines: InvoiceLineDTO[];
   subtotal: number;
   discountTotal: number;
+  /** Which discounts made up `discountTotal`, so a reduced bill always says why. */
+  appliedDiscounts: AppliedDiscount[];
   broughtForward: number;
   total: number;
   amountPaid: number;

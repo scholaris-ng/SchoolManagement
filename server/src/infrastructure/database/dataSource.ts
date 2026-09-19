@@ -56,6 +56,7 @@ import { StaffClassAssignment } from '../../modules/staff/entities/staffClassAss
 import { FeeItem } from '../../modules/finance/entities/feeItem.entity';
 import { PaymentDestination } from '../../modules/finance/entities/paymentDestination.entity';
 import { Discount } from '../../modules/finance/entities/discount.entity';
+import { StudentDiscount } from '../../modules/finance/entities/studentDiscount.entity';
 import { FeeStructure } from '../../modules/finance/entities/feeStructure.entity';
 import { FeeStructureLine } from '../../modules/finance/entities/feeStructureLine.entity';
 import { Invoice } from '../../modules/finance/entities/invoice.entity';
@@ -134,6 +135,7 @@ export const entities = [
   FeeItem,
   PaymentDestination,
   Discount,
+  StudentDiscount,
   FeeStructure,
   FeeStructureLine,
   Invoice,
