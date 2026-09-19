@@ -553,6 +553,8 @@ export class PatientRepository extends BaseRepository<Patient> {
 | **Select only required fields** | Never `SELECT *` when only a few fields are needed |
 | **Avoid N+1** | Use `leftJoinAndSelect` or batch loading |
 | **Transactions for multi-step writes** | Use `queryRunner` for atomicity |
+| **Cohort writes are set-based** | A method that acts on many rows takes an array and issues a bounded number of statements — never one statement per element in a caller's loop (§23.3) |
+| **Chunk multi-row INSERTs** | PostgreSQL rejects a statement carrying more than 65,535 bind parameters; chunk by `65535 / columnCount` with room to spare (§23.3) |
 
 ---
 
@@ -1202,6 +1204,8 @@ AI agents building features in this codebase MUST:
 - Never expose raw error messages to the client
 - Always use the `ApiResponse` envelope for every response
 - Always use the singleton pattern for services and repositories
+- Index a fetched collection into a `Map`/`Set` before looking into it repeatedly — never `.find()`/`.filter()` the same array inside a loop over a related one (§23.1)
+- Write cohort operations as a bounded number of set-based statements, and share one pure compute function between the single-record and batch paths (§23.3)
 - Always update the Postman collection in the same change as the endpoint — one request per endpoint, one saved example response per status code (see Section 21)
 - Rely on the global `authMiddleware`/`tenantMiddleware` pair in `app.ts` for any new fully-protected route file — wire only `authorise(...)` and `validate(...)` in the router itself (§14.1)
 
@@ -1215,6 +1219,8 @@ AI agents MUST NOT:
 - Bypass the repository and query the database directly from a service
 - Import an entity class in a service or controller
 - Use `find()` without `take` / `limit` on any query that can return multiple rows
+- Call a single-record write method in a loop over a cohort — batch it (§23.3)
+- Build a group with `map.set(k, [...(map.get(k) ?? []), item])`, or spread a tenant-sized array into a function's arguments (§23.2, §23.4)
 - Skip writing the entity `@Index` decorators
 - Use `SELECT *` — always specify required columns
 - Place business methods or domain logic inside an entity class
@@ -1850,8 +1856,117 @@ AI agents MUST NOT:
 
 ---
 
-## 23. Final Principle
+## 23. In-Memory Data Handling & Batch Writes
 
-> **"Validation gates. Controllers coordinate. Services decide. Repositories store. Indexes make it fast. Storage abstracts the cloud. Email informs with one consistent voice. The collection documents it all."**
+> Sections 8–11 cover getting the right rows out of PostgreSQL efficiently. This section covers what happens **after** they arrive. A perfectly indexed query is still an O(n²) endpoint if the service then joins its results with `.filter()` in a loop.
+
+### 23.1 Index Once, Then Look Up
+
+A service that fetches one flat array and then searches it repeatedly is doing a nested-loop join in JavaScript. Build a `Map` once — O(n) — and look up in O(1).
+
+```typescript
+// BAD — rescans every entry in the term for each (sheet, pupil) pair.
+// With R pupils, S sheets and C components, entries.length is R·S·C,
+// so this is O(R²·S²·C): ~691,000 predicate calls for one class of 40.
+const rows = roster.map((pupil) => {
+  for (const sheet of sheets) {
+    const mark = summarise(scheme, entries.filter(
+      (e) => e.scoreSheetId === sheet.id && e.studentId === pupil.studentId,
+    ));
+  }
+});
+
+// GOOD — one pass to index, O(1) per cell. O(E + R·S) overall.
+const index = indexEntries(entries); // Map<sheetId, Map<studentId, EntryRow[]>>
+const rows = roster.map((pupil) => {
+  for (const sheet of sheets) {
+    const mark = summarise(scheme, entriesFor(index, sheet.id, pupil.studentId));
+  }
+});
+```
+
+The same applies to a single `.find()` inside a `.map()` over the same collection — that is O(n²) for a lookup the caller usually already holds:
+
+```typescript
+// BAD — `row` is already the item; the find is a pointless linear scan
+rows.map(({ hasMarks, ...rest }) => ({ ...rest, position: positions.get(rows.find((r) => r.studentId === row.studentId)!) }))
+
+// GOOD — keep the original object as the key and destructure in the body
+rows.map((row) => {
+  const { hasMarks: _hasMarks, ...rest } = row;
+  return { ...rest, position: positions.get(row) ?? 0 };
+})
+```
+
+**Compute shared derived values once.** If two passes over the same data need the same figure — a report card's subject lines and its class positions both need every pupil's mark per sheet — work it out once into a `Map` and have both read it, rather than recomputing in the second pass.
+
+### 23.2 Grouping — Push, Never Spread
+
+```typescript
+// BAD — copies the whole group on every append: O(k²) time and O(k²) garbage
+for (const row of rows) byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
+
+// GOOD — O(k)
+for (const row of rows) {
+  const group = byKey.get(row.key);
+  if (group) group.push(row);
+  else byKey.set(row.key, [row]);
+}
+```
+
+### 23.3 Cohort Writes Are Set-Based
+
+A bulk operation must not be the single-record path in a loop. Bulk fee generation once ran five to six round trips per pupil — roughly **12,000 sequential statements** for a 2,000-invoice run, all inside one transaction holding its locks the whole time. The same work is a fixed handful of statements:
+
+| Per-record step | Batched form |
+|---|---|
+| `pg_advisory_xact_lock($1)` per row | one `SELECT pg_advisory_xact_lock(hashtext(k)) FROM unnest($1::text[]) AS k`, keys **sorted** so concurrent runs queue rather than deadlock |
+| `WHERE student_id = $2` per row | `WHERE student_id = ANY($2::uuid[])`, grouped into a `Map` on return |
+| `repo.save()` per row | `repo.insert(rows)` chunked, `identifiers` read back positionally |
+| per-row `UPDATE` with its own target | one `UPDATE … FROM unnest($1::uuid[], $2::uuid[], …) AS v(…) WHERE t.id = v.id` |
+
+Parallel `unnest` arrays are the workhorse: they carry any number of rows in a **fixed** number of bind parameters, so only multi-row `INSERT`s need chunking.
+
+**Keep one arithmetic path.** When splitting a single-record method into single and batch forms, extract the computation into one pure function both call. The batch path must differ from the single path only in how many statements it issues — never in what it works out.
+
+```typescript
+// The pure part: no IO, shared by both paths.
+function computeInvoice(params: IssueInvoiceParams, carried: CarryForwardCandidate[]): ComputedInvoice
+
+async issueInvoice(manager, params)  { return (await this.issueInvoices(manager, [params]))[0]; }
+async issueInvoices(manager, batch)  { /* lock all → read all → compute each → insert chunked */ }
+```
+
+### 23.4 Never Spread a Large Array Into Arguments
+
+`Math.max(...arr)` passes one argument per element and throws `RangeError: Maximum call stack size exceeded` past roughly 65k of them. Over a class roster it is fine; over a whole school's marks it is a 500.
+
+```typescript
+// BAD — arity grows with the data
+highest: Math.max(...row.percentages)
+
+// GOOD — folds, no limit
+highest: row.percentages.reduce((high, v) => (v > high ? v : high), -Infinity)
+```
+
+### 23.5 Rules
+
+| Rule | Description |
+|---|---|
+| **No linear search in a loop** | A `.find()`, `.filter()`, `.some()` or `.includes()` inside a `map`/`for` over a related collection must become a `Map`/`Set` lookup — unless **both** sides are provably small and bounded (a page of 50, six grade bands) |
+| **Group with `push`** | Never `[...(map.get(k) ?? []), item]` |
+| **Compute shared figures once** | Two passes needing the same derived value read one `Map`; they do not each recompute it |
+| **Batch cohort writes** | A bounded number of statements regardless of cohort size (§23.3) |
+| **One arithmetic path** | Single and batch forms share a pure compute function |
+| **Bounded spread** | Never `f(...arr)` where `arr` grows with tenant data |
+| **Justify the complexity you keep** | O(n²) is acceptable when n is small and bounded — say so in a comment rather than leaving the next reader to guess |
+
+> **Do not over-engineer.** These rules exist to remove quadratic behaviour from paths that grow with a school's data. Introducing a trie, a heap or a custom structure where a `Map` or a plain array does the job is the opposite failure, and is equally a review comment.
+
+---
+
+## 24. Final Principle
+
+> **"Validation gates. Controllers coordinate. Services decide. Repositories store. Indexes make it fast. Maps keep it fast once the rows are in memory. Storage abstracts the cloud. Email informs with one consistent voice. The collection documents it all."**
 
 This sequence is non-negotiable on every request, for every feature, on every project scaffolded from this guide.

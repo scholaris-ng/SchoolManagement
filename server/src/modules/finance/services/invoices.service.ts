@@ -1,4 +1,4 @@
-import type { EntityManager } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -18,13 +18,13 @@ import {
 } from '../../../shared/services/whatsappShare.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
-import { InvoiceRepository } from '../repositories/invoice.repository';
+import { InvoiceRepository, type CarryForwardCandidate } from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { DiscountRepository } from '../repositories/discount.repository';
 import { applyDiscounts, type ApplicableDiscount } from './discountCalculator';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
-import type { InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
+import type { InvoiceLine, InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
   DeleteInvoicesResultDTO,
@@ -451,100 +451,75 @@ export class InvoicesService {
    * charged their arrears twice.
    */
   async issueInvoice(manager: EntityManager, params: IssueInvoiceParams): Promise<Invoice> {
-    await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-      `invoice:student:${params.studentId}`,
-    ]);
+    const [invoice] = await this.issueInvoices(manager, [params]);
+    return invoice;
+  }
 
-    const { lineDiscounts, applied } = applyDiscounts(params.lines, params.discounts ?? []);
-    const lines = params.lines.map((line, index) => ({
-      ...line,
-      discountAmount: lineDiscounts[index],
-    }));
+  /**
+   * The same path, for a whole cohort at once.
+   *
+   * A bulk run used to be this method's body in a loop, which meant five or
+   * six round trips per pupil — around twelve thousand of them for a run of
+   * two thousand bills, all inside one transaction holding its locks open the
+   * whole time. The work per invoice is identical; only the number of
+   * statements changes, because each step is now set-based: one lock, one
+   * carry-forward read, and chunked inserts.
+   *
+   * The arithmetic lives in `computeInvoice` and is shared with the single
+   * call above, so a generated bill and a hand-raised one still cannot
+   * disagree about a total, a discount or a carry.
+   */
+  async issueInvoices(manager: EntityManager, batch: IssueInvoiceParams[]): Promise<Invoice[]> {
+    if (batch.length === 0) return [];
 
-    let subtotalKobo = 0;
-    let discountKobo = 0;
-    for (const line of lines) {
-      subtotalKobo += Math.round(line.unitAmount * line.quantity * MONEY_SCALE);
-      discountKobo += Math.round(line.discountAmount * MONEY_SCALE);
+    // Sorted so that two runs over the same pupils queue in the same order
+    // rather than deadlocking half way through each other.
+    await this.invoices.lockStudentsForInvoicing(
+      manager,
+      [...new Set(batch.map((params) => `invoice:student:${params.studentId}`))].sort(),
+    );
+
+    // One carry-forward read per distinct "which term is earlier" key. A bulk
+    // run bills a single term, so in practice that is one read for the cohort.
+    const carriedByStudent = new Map<string, CarryForwardCandidate[]>();
+    for (const [, group] of groupBy(batch, (params) => `${params.sessionStartDate}|${params.termSequence}`)) {
+      const carried = await this.invoices.lockOpenEarlierInvoices(
+        manager,
+        group[0].schoolId,
+        [...new Set(group.map((params) => params.studentId))],
+        { sessionStartDate: group[0].sessionStartDate, termSequence: group[0].termSequence },
+      );
+      for (const [studentId, rows] of carried) carriedByStudent.set(studentId, rows);
     }
 
-    const carried = await this.invoices.lockOpenEarlierInvoices(
-      manager,
-      params.schoolId,
-      params.studentId,
-      { sessionStartDate: params.sessionStartDate, termSequence: params.termSequence },
+    const computed = batch.map((params) =>
+      computeInvoice(params, carriedByStudent.get(params.studentId) ?? []),
     );
-    const absorbed = carried.filter((row) => Math.round(row.balance * MONEY_SCALE) > 0);
-    const broughtForwardKobo = absorbed.reduce(
-      (sum, row) => sum + Math.round(row.balance * MONEY_SCALE),
-      0,
-    );
-    const broughtForwardFrom: BroughtForwardSource[] = absorbed.map((row) => ({
-      invoiceId: row.id,
-      invoiceNo: row.invoiceNo,
-      amount: row.balance,
-    }));
 
-    const totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
-    const invoiceNo = invoiceNumber(params.sessionName, params.sequence);
-
-    const invoice = await this.invoices.create(
-      {
-        schoolId: params.schoolId,
-        studentId: params.studentId,
-        invoiceNo,
-        sequence: params.sequence,
-        sessionId: params.sessionId,
-        termId: params.termId,
-        classId: params.classId,
-        feeStructureId: params.feeStructureId,
-        issueDate: params.issueDate,
-        dueDate: params.dueDate,
-        subtotal: fromKobo(subtotalKobo),
-        discountTotal: fromKobo(discountKobo),
-        appliedDiscounts: applied,
-        broughtForward: fromKobo(broughtForwardKobo),
-        broughtForwardFrom,
-        total: fromKobo(totalKobo),
-        // A bill for nothing — everything waived, or a zero carry — is settled
-        // the moment it is raised. Reporting it as owing would put a family on
-        // the debtors list for ₦0.
-        status: totalKobo <= 0 ? 'PAID' : 'ISSUED',
-        note: params.note,
-        createdByUserId: params.createdByUserId,
-      },
+    const ids = await this.invoices.createMany(
+      computed.map((entry) => entry.row),
       manager,
     );
 
     await this.invoices.createLines(
-      lines.map((line, index) => ({
-        schoolId: params.schoolId,
-        invoiceId: invoice.id,
-        feeItemId: line.feeItemId,
-        description: line.description,
-        category: line.category,
-        quantity: line.quantity,
-        unitAmount: line.unitAmount.toFixed(2),
-        discountAmount: line.discountAmount.toFixed(2),
-        lineTotal: fromKobo(
-          Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
-            Math.round(line.discountAmount * MONEY_SCALE),
-        ),
-        isOptional: line.isOptional,
-        sortOrder: index,
-        accounts: line.accounts,
-      })),
+      computed.flatMap((entry, index) => entry.lines.map((line) => ({ ...line, invoiceId: ids[index] }))),
       manager,
     );
 
     await this.invoices.closeCarriedForward(
       manager,
-      absorbed.map((row) => row.id),
-      { invoiceId: invoice.id, invoiceNo },
-      params.createdByUserId,
+      computed.flatMap((entry, index) =>
+        entry.absorbed.map((row) => ({
+          id: row.id,
+          intoInvoiceId: ids[index],
+          intoInvoiceNo: entry.invoiceNo,
+          closedByUserId: batch[index].createdByUserId,
+        })),
+      ),
     );
 
-    return invoice;
+    const repo = manager.getRepository(Invoice);
+    return computed.map((entry, index) => repo.create({ ...entry.row, id: ids[index] }));
   }
 
   /* -- Withdrawing one -------------------------------------------------------- */
@@ -898,6 +873,108 @@ export class InvoicesService {
  * digits rather than four: a large school issues one invoice per pupil per
  * term, which reaches four figures in a single session.
  */
+/** One invoice worked out in full, before a single row is written. */
+interface ComputedInvoice {
+  invoiceNo: string;
+  row: DeepPartial<Invoice>;
+  /** Without `invoiceId`: that only exists once the invoice row is in. */
+  lines: DeepPartial<InvoiceLine>[];
+  absorbed: CarryForwardCandidate[];
+}
+
+/**
+ * Everything one bill comes to — discounts, totals, carry-forward, status —
+ * with no IO of its own, so the single and bulk paths run the identical
+ * arithmetic over the identical inputs.
+ */
+function computeInvoice(
+  params: IssueInvoiceParams,
+  carried: CarryForwardCandidate[],
+): ComputedInvoice {
+  const { lineDiscounts, applied } = applyDiscounts(params.lines, params.discounts ?? []);
+  const lines = params.lines.map((line, index) => ({
+    ...line,
+    discountAmount: lineDiscounts[index],
+  }));
+
+  let subtotalKobo = 0;
+  let discountKobo = 0;
+  for (const line of lines) {
+    subtotalKobo += Math.round(line.unitAmount * line.quantity * MONEY_SCALE);
+    discountKobo += Math.round(line.discountAmount * MONEY_SCALE);
+  }
+
+  const absorbed = carried.filter((row) => Math.round(row.balance * MONEY_SCALE) > 0);
+  const broughtForwardKobo = absorbed.reduce(
+    (sum, row) => sum + Math.round(row.balance * MONEY_SCALE),
+    0,
+  );
+  const broughtForwardFrom: BroughtForwardSource[] = absorbed.map((row) => ({
+    invoiceId: row.id,
+    invoiceNo: row.invoiceNo,
+    amount: row.balance,
+  }));
+
+  const totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
+  const invoiceNo = invoiceNumber(params.sessionName, params.sequence);
+
+  return {
+    invoiceNo,
+    absorbed,
+    row: {
+      schoolId: params.schoolId,
+      studentId: params.studentId,
+      invoiceNo,
+      sequence: params.sequence,
+      sessionId: params.sessionId,
+      termId: params.termId,
+      classId: params.classId,
+      feeStructureId: params.feeStructureId,
+      issueDate: params.issueDate,
+      dueDate: params.dueDate,
+      subtotal: fromKobo(subtotalKobo),
+      discountTotal: fromKobo(discountKobo),
+      appliedDiscounts: applied,
+      broughtForward: fromKobo(broughtForwardKobo),
+      broughtForwardFrom,
+      total: fromKobo(totalKobo),
+      // A bill for nothing — everything waived, or a zero carry — is settled
+      // the moment it is raised. Reporting it as owing would put a family on
+      // the debtors list for ₦0.
+      status: totalKobo <= 0 ? 'PAID' : 'ISSUED',
+      note: params.note,
+      createdByUserId: params.createdByUserId,
+    },
+    lines: lines.map((line, index) => ({
+      schoolId: params.schoolId,
+      feeItemId: line.feeItemId,
+      description: line.description,
+      category: line.category,
+      quantity: line.quantity,
+      unitAmount: line.unitAmount.toFixed(2),
+      discountAmount: line.discountAmount.toFixed(2),
+      lineTotal: fromKobo(
+        Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
+          Math.round(line.discountAmount * MONEY_SCALE),
+      ),
+      isOptional: line.isOptional,
+      sortOrder: index,
+      accounts: line.accounts,
+    })),
+  };
+}
+
+function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+  return groups;
+}
+
 export function invoiceNumber(sessionName: string, sequence: number): string {
   const session = sessionName
     .replace(/[^\w]+/g, '-')

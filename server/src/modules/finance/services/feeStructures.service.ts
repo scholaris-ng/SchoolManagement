@@ -414,6 +414,10 @@ export class FeeStructuresService {
     await AppDataSource.transaction(async (manager) => {
       const first = await this.invoices.nextSequence(manager, context.schoolId, structure.sessionId);
 
+      // Built in full first, then raised in one batch: the numbering is the
+      // same running sequence the pupil-at-a-time version handed out, and a
+      // pupil who takes nothing on the structure still does not consume one.
+      const toIssue = [];
       for (const student of students) {
         const lines = linesFor(definitions, student.boardingStatus);
         if (lines.length === 0) {
@@ -423,7 +427,7 @@ export class FeeStructuresService {
           continue;
         }
 
-        const invoice = await this.invoicing.issueInvoice(manager, {
+        toIssue.push({
           schoolId: context.schoolId,
           studentId: student.studentId,
           classId: student.classId,
@@ -435,12 +439,16 @@ export class FeeStructuresService {
           feeStructureId: structure.id,
           issueDate: todayIso(),
           dueDate: input.dueDate,
-          sequence: first + invoiceIds.length,
+          sequence: first + toIssue.length,
           note: input.note ? input.note : null,
           lines,
           discounts: discountsByStudent.get(student.studentId) ?? [],
           createdByUserId: context.user.id,
         });
+      }
+
+      const issued = await this.invoicing.issueInvoices(manager, toIssue);
+      for (const invoice of issued) {
         invoiceIds.push(invoice.id);
         if (invoice.appliedDiscounts.length > 0) discounted += 1;
       }

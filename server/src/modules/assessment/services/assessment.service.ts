@@ -15,7 +15,7 @@ import { StudentRepository } from '../../students/repositories/student.repositor
 import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { BehaviourService } from '../../behaviour/services/behaviour.service';
 import { AssessmentRepository, type EntryRow, type RosterRow, type SheetRow } from '../repositories/assessment.repository';
-import { average, rank, summarise } from './grading';
+import { average, rank, summarise, type MarkSummary } from './grading';
 import type { ResultStatus } from '../entities/scoreSheet.entity';
 import type {
   BroadsheetDTO,
@@ -366,13 +366,22 @@ export class AssessmentService {
     ]);
     if (!school) throw AppError.notFound('School');
     const schemeById = new Map(schemes.map((scheme) => [scheme.id, scheme]));
+    const index = indexEntries(entries);
+
+    // Every pupil's mark on every sheet, worked out once: the subject lines
+    // below and the position in class further down both read the same figures.
+    const marksBySheet = new Map<string, Map<string, MarkSummary>>();
+    for (const sheet of sheets) {
+      const scheme = schemeById.get(sheet.gradingSchemeId);
+      if (scheme) marksBySheet.set(sheet.id, classSummaries(scheme, index.get(sheet.id)));
+    }
 
     const lines: SubjectResultLineDTO[] = [];
     for (const sheet of sheets) {
       const scheme = schemeById.get(sheet.gradingSchemeId);
       if (!scheme) continue;
-      const sheetEntries = entries.filter((entry) => entry.scoreSheetId === sheet.id);
-      const classTotals = classSummaries(scheme, sheetEntries);
+      const myEntries = entriesFor(index, sheet.id, studentId);
+      const classTotals = marksBySheet.get(sheet.id)!;
       const mine = classTotals.get(studentId) ?? summarise(scheme, []);
       const positions = rank([...classTotals.keys()], (id) => classTotals.get(id)?.total ?? null);
       const totals = [...classTotals.values()].map((s) => s.total).filter((t): t is number => t !== null);
@@ -383,7 +392,7 @@ export class AssessmentService {
           componentId: component.id,
           name: component.name,
           maxScore: component.maxScore,
-          score: sheetEntries.find((e) => e.studentId === studentId && e.componentId === component.id)?.score ?? null,
+          score: myEntries.find((e) => e.componentId === component.id)?.score ?? null,
         })),
         total: mine.total,
         grade: mine.grade,
@@ -405,11 +414,8 @@ export class AssessmentService {
     // Position in class: every pupil's average across the same sheets.
     const averages = new Map<string, number | null>();
     for (const pupil of roster) {
-      const totals = sheets.map((sheet) => {
-        const scheme = schemeById.get(sheet.gradingSchemeId);
-        if (!scheme) return null;
-        return summarise(scheme, entries.filter((e) => e.scoreSheetId === sheet.id && e.studentId === pupil.studentId)).percentage;
-      }).filter((p): p is number => p !== null);
+      const totals = sheets.map((sheet) => marksBySheet.get(sheet.id)?.get(pupil.studentId)?.percentage ?? null)
+        .filter((p): p is number => p !== null);
       averages.set(pupil.studentId, totals.length > 0 ? average(totals) : null);
     }
     if (!averages.has(studentId)) averages.set(studentId, scored.length > 0 ? average(scored.map((l) => (l.total ?? 0))) : null);
@@ -536,6 +542,7 @@ export class AssessmentService {
     ]);
     const entries = await this.assessment.entriesForSheets(schoolId, sheets.map((sheet) => sheet.id));
     const schemeById = new Map(schemes.map((scheme) => [scheme.id, scheme]));
+    const index = indexEntries(entries);
     const className = sheets[0]?.className ?? (await this.classNameOf(schoolId, classId));
 
     const rows = roster.map((pupil) => {
@@ -544,9 +551,7 @@ export class AssessmentService {
       let total = 0;
       for (const sheet of sheets) {
         const scheme = schemeById.get(sheet.gradingSchemeId);
-        const mark = scheme
-          ? summarise(scheme, entries.filter((e) => e.scoreSheetId === sheet.id && e.studentId === pupil.studentId))
-          : null;
+        const mark = scheme ? summarise(scheme, entriesFor(index, sheet.id, pupil.studentId)) : null;
         subjects[sheet.subjectId] = mark?.total ?? null;
         if (mark?.total !== null && mark?.total !== undefined) {
           total += mark.total;
@@ -570,7 +575,10 @@ export class AssessmentService {
       sessionName: term.sessionName,
       subjects: sheets.map((sheet) => ({ subjectId: sheet.subjectId, subjectName: sheet.subjectName })),
       rows: rows
-        .map(({ hasMarks: _hasMarks, ...row }) => ({ ...row, position: positions.get(rows.find((r) => r.studentId === row.studentId)!) ?? 0 }))
+        .map((row) => {
+          const { hasMarks: _hasMarks, ...rest } = row;
+          return { ...rest, position: positions.get(row) ?? 0 };
+        })
         .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.studentName.localeCompare(b.studentName)),
       classAverage: average(rows.filter((row) => row.hasMarks).map((row) => row.average)),
     };
@@ -603,20 +611,27 @@ export class AssessmentService {
     ]);
     const entries = await this.assessment.entriesForSheets(schoolId, sheets.map((sheet) => sheet.id));
     const schemeById = new Map(schemes.map((scheme) => [scheme.id, scheme]));
+    const index = indexEntries(entries);
 
     const bySession = new Map<string, SheetRow[]>();
     for (const sheet of sheets) {
-      bySession.set(sheet.sessionId, [...(bySession.get(sheet.sessionId) ?? []), sheet]);
+      const group = bySession.get(sheet.sessionId);
+      if (group) group.push(sheet);
+      else bySession.set(sheet.sessionId, [sheet]);
     }
 
     const years = [...bySession.values()].map((sessionSheets) => {
       const byTerm = new Map<string, SheetRow[]>();
-      for (const sheet of sessionSheets) byTerm.set(sheet.termId, [...(byTerm.get(sheet.termId) ?? []), sheet]);
+      for (const sheet of sessionSheets) {
+        const group = byTerm.get(sheet.termId);
+        if (group) group.push(sheet);
+        else byTerm.set(sheet.termId, [sheet]);
+      }
       const terms = [...byTerm.values()].map((termSheets) => {
         const subjects = termSheets.flatMap((sheet) => {
           const scheme = schemeById.get(sheet.gradingSchemeId);
           if (!scheme) return [];
-          const mark = summarise(scheme, entries.filter((e) => e.scoreSheetId === sheet.id && e.studentId === studentId));
+          const mark = summarise(scheme, entriesFor(index, sheet.id, studentId));
           return mark.total === null ? [] : [{ subjectName: sheet.subjectName, total: mark.total, grade: mark.grade ?? '—', percentage: mark.percentage ?? 0 }];
         });
         return {
@@ -734,6 +749,7 @@ export class AssessmentService {
     ]);
     const entries = await this.assessment.entriesForTerm(schoolId, term.id, STAFF_VISIBLE);
     const schemeById = new Map(schemes.map((scheme) => [scheme.id, scheme]));
+    const index = indexEntries(entries);
 
     const bySubject = new Map<string, { subjectName: string; percentages: number[]; passes: number }>();
     const byClass = new Map<string, { className: string; percentages: number[]; passes: number }>();
@@ -743,7 +759,7 @@ export class AssessmentService {
     for (const sheet of sheets) {
       const scheme = schemeById.get(sheet.gradingSchemeId);
       if (!scheme) continue;
-      for (const [studentId, mark] of classSummaries(scheme, entries.filter((e) => e.scoreSheetId === sheet.id))) {
+      for (const [studentId, mark] of classSummaries(scheme, index.get(sheet.id))) {
         if (mark.percentage === null) continue;
         const subject = bySubject.get(sheet.subjectId) ?? { subjectName: sheet.subjectName, percentages: [], passes: 0 };
         subject.percentages.push(mark.percentage);
@@ -753,7 +769,9 @@ export class AssessmentService {
         cls.percentages.push(mark.percentage);
         if (mark.isPass) cls.passes += 1;
         byClass.set(sheet.classId, cls);
-        byStudent.set(studentId, [...(byStudent.get(studentId) ?? []), mark.percentage]);
+        const forStudent = byStudent.get(studentId);
+        if (forStudent) forStudent.push(mark.percentage);
+        else byStudent.set(studentId, [mark.percentage]);
         if (mark.grade) {
           const band = scheme.bands.find((b) => b.label === mark.grade);
           const entry = grades.get(mark.grade) ?? { count: 0, color: band?.color ?? null };
@@ -777,8 +795,10 @@ export class AssessmentService {
         averageScore: average(row.percentages),
         passRate: pct(row.passes, row.percentages.length),
         studentsAssessed: row.percentages.length,
-        highest: Math.max(...row.percentages),
-        lowest: Math.min(...row.percentages),
+        // Folded rather than spread: this is every mark in the subject across
+        // the school, and a spread of that many arguments overflows the stack.
+        highest: row.percentages.reduce((high, value) => (value > high ? value : high), -Infinity),
+        lowest: row.percentages.reduce((low, value) => (value < low ? value : low), Infinity),
       })),
       gradeDistribution: [...grades.entries()].map(([grade, row]) => ({ grade, count: row.count, color: row.color })),
       classComparison: [...byClass.values()].map((row) => ({
@@ -809,14 +829,14 @@ export class AssessmentService {
       if (!term) return { average: null as number | null, sheets: [] as SheetRow[] };
       const sheets = await this.assessment.sheetsForStudent(schoolId, studentId, term.id, PUBLIC_VISIBLE);
       if (sheets.length === 0) return { average: null as number | null, sheets };
-      const entries = await this.assessment.entriesForSheets(schoolId, sheets.map((sheet) => sheet.id));
+      const index = indexEntries(await this.assessment.entriesForSheets(schoolId, sheets.map((sheet) => sheet.id)));
       const percentages = sheets
         .map((sheet) => {
           const scheme = schemeById.get(sheet.gradingSchemeId);
-          return scheme ? summarise(scheme, entries.filter((e) => e.scoreSheetId === sheet.id && e.studentId === studentId)).percentage : null;
+          return scheme ? summarise(scheme, entriesFor(index, sheet.id, studentId)).percentage : null;
         })
         .filter((p): p is number => p !== null);
-      return { average: percentages.length > 0 ? average(percentages) : null, sheets, entries };
+      return { average: percentages.length > 0 ? average(percentages) : null, sheets, index };
     };
 
     const lastTerm = currentTerm
@@ -826,14 +846,14 @@ export class AssessmentService {
 
     let position: number | null = null;
     let classSize: number | null = null;
-    if (current.sheets.length > 0 && current.entries) {
+    if (current.sheets.length > 0 && current.index) {
       const roster = await this.assessment.rosterForClass(schoolId, current.sheets[0].classId);
       const averages = new Map(
         roster.map((pupil) => {
           const percentages = current.sheets
             .map((sheet) => {
               const scheme = schemeById.get(sheet.gradingSchemeId);
-              return scheme ? summarise(scheme, current.entries!.filter((e) => e.scoreSheetId === sheet.id && e.studentId === pupil.studentId)).percentage : null;
+              return scheme ? summarise(scheme, entriesFor(current.index!, sheet.id, pupil.studentId)).percentage : null;
             })
             .filter((p): p is number => p !== null);
           return [pupil.studentId, percentages.length > 0 ? average(percentages) : null] as const;
@@ -895,15 +915,17 @@ export class AssessmentService {
     ]);
     if (!scheme) throw AppError.internal();
 
+    const byStudent = indexEntries(entries).get(sheet.id) ?? NO_SHEET_ENTRIES;
     const marks = new Map(
       roster.map((pupil) => [
         pupil.studentId,
-        summarise(scheme, entries.filter((entry) => entry.studentId === pupil.studentId)),
+        summarise(scheme, byStudent.get(pupil.studentId) ?? NO_ENTRIES),
       ]),
     );
     const positions = rank(roster, (pupil) => marks.get(pupil.studentId)?.total ?? null);
     const rows: StudentSubjectScoreDTO[] = roster.map((pupil) => {
       const mark = marks.get(pupil.studentId)!;
+      const pupilEntries = byStudent.get(pupil.studentId) ?? NO_ENTRIES;
       return {
         id: `${sheet.id}:${pupil.studentId}`,
         studentId: pupil.studentId,
@@ -912,7 +934,7 @@ export class AssessmentService {
         photoUrl: pupil.photoUrl,
         scores: scheme.components.map((component) => ({
           componentId: component.id,
-          score: entries.find((e) => e.studentId === pupil.studentId && e.componentId === component.id)?.score ?? null,
+          score: pupilEntries.find((e) => e.componentId === component.id)?.score ?? null,
         })),
         total: mark.total,
         grade: mark.grade,
@@ -992,10 +1014,43 @@ function schemeFor(schemes: GradingSchemeDTO[], levelId: string): GradingSchemeD
   );
 }
 
-function classSummaries(scheme: GradingSchemeDTO, entries: EntryRow[]) {
-  const byStudent = new Map<string, EntryRow[]>();
-  for (const entry of entries) byStudent.set(entry.studentId, [...(byStudent.get(entry.studentId) ?? []), entry]);
-  return new Map([...byStudent.entries()].map(([studentId, rows]) => [studentId, summarise(scheme, rows)]));
+/** The marks on one sheet, by pupil. */
+type SheetEntries = Map<string, EntryRow[]>;
+
+/** Every sheet's marks, by sheet and then by pupil. */
+type EntryIndex = Map<string, SheetEntries>;
+
+const NO_ENTRIES: EntryRow[] = [];
+const NO_SHEET_ENTRIES: SheetEntries = new Map();
+
+/**
+ * The marks indexed the way every results screen reads them: by sheet, then
+ * by pupil. Built once in a single pass over the rows, because a card,
+ * broadsheet or analytics run otherwise rescans every mark in the term for
+ * each sheet-and-pupil pair it prints.
+ */
+function indexEntries(entries: EntryRow[]): EntryIndex {
+  const bySheet: EntryIndex = new Map();
+  for (const entry of entries) {
+    let byStudent = bySheet.get(entry.scoreSheetId);
+    if (!byStudent) {
+      byStudent = new Map();
+      bySheet.set(entry.scoreSheetId, byStudent);
+    }
+    const rows = byStudent.get(entry.studentId);
+    if (rows) rows.push(entry);
+    else byStudent.set(entry.studentId, [entry]);
+  }
+  return bySheet;
+}
+
+/** What one pupil scored on one sheet, or nothing entered. */
+function entriesFor(index: EntryIndex, sheetId: string, studentId: string): EntryRow[] {
+  return index.get(sheetId)?.get(studentId) ?? NO_ENTRIES;
+}
+
+function classSummaries(scheme: GradingSchemeDTO, sheetEntries: SheetEntries = NO_SHEET_ENTRIES) {
+  return new Map([...sheetEntries].map(([studentId, rows]) => [studentId, summarise(scheme, rows)]));
 }
 
 function toSheetHeader(sheet: SheetRow): Omit<ScoreSheetDTO, 'components' | 'rows' | 'classAverage' | 'highest' | 'lowest'> {

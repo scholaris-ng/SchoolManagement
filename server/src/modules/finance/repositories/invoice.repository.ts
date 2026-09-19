@@ -127,6 +127,20 @@ export interface CarryForwardCandidate {
   balance: number;
 }
 
+/**
+ * Rows per INSERT. PostgreSQL caps a statement at 65,535 bind parameters, so
+ * the ceiling is that divided by the table's column count; these leave room to
+ * spare for a column being added later.
+ */
+const INVOICE_INSERT_CHUNK = 500;
+const LINE_INSERT_CHUNK = 1_000;
+
+function* chunked<T>(rows: T[], size: number): Generator<T[]> {
+  for (let index = 0; index < rows.length; index += size) {
+    yield rows.slice(index, index + size);
+  }
+}
+
 export class InvoiceRepository extends TenantRepository<Invoice> {
   static Instance = new InvoiceRepository();
 
@@ -338,10 +352,46 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     return repo.save(repo.create(data));
   }
 
+  /**
+   * A whole bulk run's invoices in as few statements as the wire allows, in
+   * the order given — `identifiers` comes back positionally, and the caller
+   * pairs each new id with the lines it was worked out from.
+   *
+   * Chunked because PostgreSQL refuses a statement carrying more than 65,535
+   * bind parameters, and a run of two thousand bills is well past that.
+   */
+  async createMany(rows: DeepPartial<Invoice>[], manager: EntityManager): Promise<string[]> {
+    if (rows.length === 0) return [];
+    const repo = manager.getRepository(Invoice);
+    const ids: string[] = [];
+    for (const batch of chunked(rows, INVOICE_INSERT_CHUNK)) {
+      const result = await repo.insert(batch as never);
+      ids.push(...result.identifiers.map((row) => String(row.id)));
+    }
+    return ids;
+  }
+
   async createLines(rows: DeepPartial<InvoiceLine>[], manager?: EntityManager): Promise<void> {
     if (rows.length === 0) return;
     const repo = manager ? manager.getRepository(InvoiceLine) : this.lines;
-    await repo.insert(rows as never);
+    for (const batch of chunked(rows, LINE_INSERT_CHUNK)) {
+      await repo.insert(batch as never);
+    }
+  }
+
+  /**
+   * Takes the per-pupil advisory lock for a whole cohort in one statement.
+   *
+   * The keys are sorted by the caller so that two runs covering the same
+   * pupils take their locks in the same order and cannot deadlock against
+   * each other; `unnest` yields rows in array order, so the sort is the lock
+   * order.
+   */
+  async lockStudentsForInvoicing(manager: EntityManager, keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    await manager.query(`SELECT pg_advisory_xact_lock(hashtext(k)) FROM unnest($1::text[]) AS k`, [
+      keys,
+    ]);
   }
 
   /**
@@ -387,26 +437,29 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   async lockOpenEarlierInvoices(
     manager: EntityManager,
     schoolId: string,
-    studentId: string,
+    studentIds: string[],
     before: { sessionStartDate: string; termSequence: number },
-  ): Promise<CarryForwardCandidate[]> {
+  ): Promise<Map<string, CarryForwardCandidate[]>> {
+    const byStudent = new Map<string, CarryForwardCandidate[]>();
+    if (studentIds.length === 0) return byStudent;
+
     const ids: { id: string }[] = await manager.query(
       `SELECT i.id
          FROM invoices i
          JOIN terms t ON t.id = i.term_id
          JOIN academic_sessions ses ON ses.id = i.session_id
         WHERE i.school_id = $1
-          AND i.student_id = $2
+          AND i.student_id = ANY($2::uuid[])
           AND i.status IN ('ISSUED', 'PART_PAID')
           AND (ses.start_date, t.sequence) < ($3::date, $4::int)
         ORDER BY ses.start_date, t.sequence, i.id
         FOR UPDATE OF i`,
-      [schoolId, studentId, before.sessionStartDate, before.termSequence],
+      [schoolId, studentIds, before.sessionStartDate, before.termSequence],
     );
-    if (ids.length === 0) return [];
+    if (ids.length === 0) return byStudent;
 
-    return manager.query(
-      `SELECT i.id, i.invoice_no AS "invoiceNo",
+    const rows: (CarryForwardCandidate & { studentId: string })[] = await manager.query(
+      `SELECT i.id, i.student_id AS "studentId", i.invoice_no AS "invoiceNo",
               (i.total - COALESCE(pd.paid, 0))::float AS balance
          FROM invoices i
          JOIN terms t ON t.id = i.term_id
@@ -421,6 +474,15 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
         ORDER BY ses.start_date, t.sequence, i.id`,
       [ids.map((row) => row.id)],
     );
+
+    // Grouped rather than filtered per pupil: a cohort's carry-forward is one
+    // read, and each bill then takes its own arrears out of it in O(1).
+    for (const { studentId, ...candidate } of rows) {
+      const group = byStudent.get(studentId);
+      if (group) group.push(candidate);
+      else byStudent.set(studentId, [candidate]);
+    }
+    return byStudent;
   }
 
   /**
@@ -432,21 +494,33 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
    */
   async closeCarriedForward(
     manager: EntityManager,
-    ids: string[],
-    into: { invoiceId: string; invoiceNo: string },
-    userId: string | null,
+    closures: {
+      id: string;
+      intoInvoiceId: string;
+      intoInvoiceNo: string;
+      closedByUserId: string | null;
+    }[],
   ): Promise<void> {
-    if (ids.length === 0) return;
+    if (closures.length === 0) return;
+    // Each absorbed bill points at the one that took it on, so a whole run
+    // closes in one statement: the arrays are four bind parameters however
+    // many rows they carry.
     await manager.query(
-      `UPDATE invoices
+      `UPDATE invoices i
           SET status = 'CANCELLED',
-              carried_forward_to_invoice_id = $2,
+              carried_forward_to_invoice_id = v.into_id,
               cancelled_at = now(),
-              cancel_reason = $3,
-              cancelled_by_user_id = $4,
+              cancel_reason = 'Balance carried forward to ' || v.into_no,
+              cancelled_by_user_id = v.user_id,
               updated_at = now()
-        WHERE id = ANY($1::uuid[])`,
-      [ids, into.invoiceId, `Balance carried forward to ${into.invoiceNo}`, userId],
+         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::uuid[]) AS v(id, into_id, into_no, user_id)
+        WHERE i.id = v.id`,
+      [
+        closures.map((row) => row.id),
+        closures.map((row) => row.intoInvoiceId),
+        closures.map((row) => row.intoInvoiceNo),
+        closures.map((row) => row.closedByUserId),
+      ],
     );
   }
 
