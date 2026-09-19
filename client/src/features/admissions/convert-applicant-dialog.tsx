@@ -116,8 +116,8 @@ export function ConvertApplicantDialog({
                 </li>
                 <li>An enrolment record is opened for the session applied for.</li>
                 <li>
-                  Each guardian without portal access already is emailed an invitation, unless
-                  they already have one from another child.
+                  Each guardian with an email address and no portal access yet is emailed an
+                  invitation. Anyone without an email can be invited later, once one is added.
                 </li>
                 <li>Photo consent starts off, until a guardian gives it.</li>
               </ul>

@@ -33,7 +33,7 @@ export function StudentsListPage() {
 
   const list = useListQuery({
     filterKeys: ['status', 'classId', 'levelId', 'gender', 'houseId'],
-    defaultSortBy: 'lastName',
+    defaultSortBy: 'fullName',
   });
 
   // The list defaults to enrolled students; leavers are one filter click away
@@ -59,7 +59,7 @@ export function StudentsListPage() {
       {
         id: 'student',
         header: 'Student',
-        sortKey: 'lastName',
+        sortKey: 'fullName',
         sticky: true,
         cell: (student) => (
           <div className="flex items-center gap-3">

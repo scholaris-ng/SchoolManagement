@@ -79,7 +79,7 @@ export function useInviteGuardian() {
 }
 
 export function useGuardianOptions(): SelectOption[] {
-  const guardians = useGuardians({ page: 1, pageSize: 200, sortBy: 'lastName' });
+  const guardians = useGuardians({ page: 1, pageSize: 200, sortBy: 'fullName' });
   return (guardians.data?.items ?? []).map((guardian) => ({
     value: guardian.id,
     label: guardian.fullName,

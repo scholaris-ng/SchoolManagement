@@ -57,9 +57,8 @@ export interface ApplicationContact {
    * Optional — a phone-only contact is still reachable. One consequence: a
    * contact with no address here receives none of the emailed updates
    * (`sendApplicationReceivedEmail`, `sendApplicationStatusEmail`,
-   * `sendInterviewScheduledEmail`), and `AdmissionsService.convert` refuses to
-   * promote one into a `Guardian` — that table's `email` is required and
-   * unique, so an address must be added before enrollment.
+   * `sendInterviewScheduledEmail`). It is still promoted into a `Guardian` at
+   * enrolment, just without a portal invitation until an address is added.
    */
   email: string | null;
   phone: string;

@@ -73,7 +73,8 @@ export function GuardianDetailPage() {
   return (
     <PageContainer>
       <PageHeader
-        title={`${record.title ? `${record.title} ` : ''}${record.fullName}`}
+        // `fullName` already carries the title, so adding it here as well printed it twice.
+        title={record.fullName}
         description={record.occupation ?? 'Parent / guardian'}
         breadcrumbs={[
           { label: 'People' },
@@ -137,7 +138,7 @@ export function GuardianDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center gap-3">
-              <Avatar name={record.fullName} src={record.photoUrl} size="lg" />
+              <Avatar name={`${record.firstName} ${record.lastName}`} src={record.photoUrl} size="lg" />
               <div className="min-w-0">
                 <p className="truncate font-medium">{record.fullName}</p>
                 <p className="truncate text-xs text-muted-foreground">

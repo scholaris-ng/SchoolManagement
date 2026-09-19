@@ -20,7 +20,7 @@ const PORTAL_OPTIONS = [
 
 export function GuardiansListPage() {
   const navigate = useNavigate();
-  const list = useListQuery({ filterKeys: ['hasPortalAccess'], defaultSortBy: 'lastName' });
+  const list = useListQuery({ filterKeys: ['hasPortalAccess'], defaultSortBy: 'fullName' });
   const guardians = useGuardians(list.query);
   const invite = useInviteGuardian();
 
@@ -36,17 +36,16 @@ export function GuardiansListPage() {
       {
         id: 'guardian',
         header: 'Guardian',
-        sortKey: 'lastName',
+        sortKey: 'fullName',
         cell: (guardian) => (
           <div className="flex items-center gap-3">
-            <Avatar name={guardian.fullName} src={guardian.photoUrl} size="sm" />
+            <Avatar name={`${guardian.firstName} ${guardian.lastName}`} src={guardian.photoUrl} size="sm" />
             <div className="min-w-0">
               <Link
                 to={`/guardians/${guardian.id}`}
                 className="block truncate font-medium text-foreground hover:text-primary hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >
-                {guardian.title ? `${guardian.title} ` : ''}
                 {guardian.fullName}
               </Link>
               <p className="truncate text-xs text-muted-foreground">

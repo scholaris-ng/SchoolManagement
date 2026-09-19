@@ -128,7 +128,7 @@ export function useStaffPerformance(termId?: string) {
 export function useTeacherOptions(filter: { classId?: string } = {}): SelectOption[] {
   const canReadStaff = usePermission('staff.read');
   const staff = useStaffList(
-    { page: 1, pageSize: 200, sortBy: 'lastName', status: 'ACTIVE' },
+    { page: 1, pageSize: 200, sortBy: 'fullName', status: 'ACTIVE' },
     { enabled: canReadStaff },
   );
   const members = staff.data?.items ?? [];

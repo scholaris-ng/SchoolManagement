@@ -1,6 +1,7 @@
 import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
+import { orderByPersonName } from '../../../shared/pagination/personName';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Guardian } from '../entities/guardian.entity';
 import { StudentGuardian } from '../entities/studentGuardian.entity';
@@ -37,8 +38,12 @@ const LINK_PROJECTION = `
   sg.can_pick_up AS "canPickUp"
 `;
 
+/** A title (Mr, Mrs, Dr) is left out of the sort: ordering by it would file everyone under "Mr". */
+const NAME_COLUMNS = { first: 'g.first_name', last: 'g.last_name' };
+
 const SORTABLE: Record<string, string> = {
-  fullName: 'g.last_name',
+  fullName: 'g.first_name',
+  firstName: 'g.first_name',
   lastName: 'g.last_name',
   email: 'g.email',
   createdAt: 'g.created_at',
@@ -90,7 +95,7 @@ export class GuardianRepository extends TenantRepository<Guardian> {
     }
 
     const whereSql = where.join(' AND ');
-    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'lastName');
+    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'fullName');
     const direction = filter.sortDir === 'desc' ? 'DESC' : 'ASC';
 
     const [countRow] = await this.repo.query(
@@ -103,7 +108,7 @@ export class GuardianRepository extends TenantRepository<Guardian> {
        FROM guardians g
        LEFT JOIN users u ON u.id = g.user_id
        WHERE ${whereSql}
-       ORDER BY ${SORTABLE[orderBy]} ${direction}, g.id ASC
+       ORDER BY ${orderByPersonName(SORTABLE[orderBy], direction, NAME_COLUMNS)}, g.id ASC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
     );
@@ -182,7 +187,7 @@ export class GuardianRepository extends TenantRepository<Guardian> {
        JOIN students  s ON s.id = sg.student_id  AND s.deleted_at IS NULL
        JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
        WHERE sg.school_id = $1 AND sg.student_id = $2
-       ORDER BY sg.is_primary_contact DESC, g.last_name ASC`,
+       ORDER BY sg.is_primary_contact DESC, g.first_name ASC, g.last_name ASC`,
       [schoolId, studentId],
     );
   }
@@ -211,7 +216,7 @@ export class GuardianRepository extends TenantRepository<Guardian> {
        JOIN students  s ON s.id = sg.student_id  AND s.deleted_at IS NULL
        JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
        WHERE sg.school_id = $1 AND sg.guardian_id = $2
-       ORDER BY s.last_name ASC`,
+       ORDER BY s.first_name ASC, s.last_name ASC`,
       [schoolId, guardianId],
     );
   }

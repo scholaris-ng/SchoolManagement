@@ -36,7 +36,7 @@ export function StaffListPage() {
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const list = useListQuery({
     filterKeys: ['status', 'employmentType', 'department', 'classId', 'subjectId'],
-    defaultSortBy: 'lastName',
+    defaultSortBy: 'fullName',
     // The staff query is slower than most list screens, so it gets the
     // longer of the two debounce delays client_arch.md calls for (§12) —
     // waiting the extra time is cheaper than firing a search per keystroke.
@@ -70,7 +70,7 @@ export function StaffListPage() {
       {
         id: 'member',
         header: 'Staff member',
-        sortKey: 'lastName',
+        sortKey: 'fullName',
         cell: (member) => (
           <div className="flex items-center gap-3">
             <Avatar name={member.fullName} src={member.photoUrl} size="sm" />

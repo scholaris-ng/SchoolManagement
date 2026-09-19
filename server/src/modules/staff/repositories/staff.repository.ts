@@ -1,6 +1,7 @@
 import type { DeepPartial } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
+import { orderByPersonName } from '../../../shared/pagination/personName';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Staff } from '../entities/staff.entity';
 import type { StaffMemberDTO } from '../dto/staff.dto';
@@ -111,8 +112,11 @@ const JOINS = `
 `;
 
 /** Only indexed columns, so a sort cannot turn a list into a table scan. */
+const NAME_COLUMNS = { first: 's.first_name', last: 's.last_name' };
+
 const SORTABLE: Record<string, string> = {
-  fullName: 's.last_name',
+  fullName: 's.first_name',
+  firstName: 's.first_name',
   lastName: 's.last_name',
   staffNo: 's.staff_no',
   designation: 's.designation',
@@ -281,7 +285,7 @@ export class StaffRepository extends TenantRepository<Staff> {
     }
 
     const whereSql = where.join(' AND ');
-    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'lastName');
+    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'fullName');
     const direction = filter.sortDir === 'desc' ? 'DESC' : 'ASC';
 
     // Counted without the lateral joins: they only widen each row, never
@@ -296,7 +300,7 @@ export class StaffRepository extends TenantRepository<Staff> {
       `SELECT ${PROJECTION}
        FROM staff s ${JOINS}
        WHERE ${whereSql}
-       ORDER BY ${SORTABLE[orderBy]} ${direction}, s.id ASC
+       ORDER BY ${orderByPersonName(SORTABLE[orderBy], direction, NAME_COLUMNS)}, s.id ASC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
     );
@@ -335,7 +339,7 @@ export class StaffRepository extends TenantRepository<Staff> {
          WHERE cft.staff_id = s.id
        ) ft ON TRUE
        WHERE s.school_id = $1 AND s.status = 'ACTIVE' AND s.deleted_at IS NULL
-       ORDER BY s.last_name, s.first_name`,
+       ORDER BY s.first_name, s.last_name`,
       [schoolId],
     );
   }

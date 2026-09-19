@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { EntityManager } from 'typeorm';
+import { IsNull, type EntityManager } from 'typeorm';
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
@@ -944,19 +944,6 @@ export class AdmissionsService {
       );
     }
 
-    // A contact's email is optional up to this point — a phone-only contact
-    // can still be held on the application — but `Guardian.email` is required
-    // and unique, so one is needed before this contact can become a real
-    // guardian record with a portal account.
-    const contactsMissingEmail = application.contacts.filter((contact) => !contact.email);
-    if (contactsMissingEmail.length > 0) {
-      throw AppError.conflict(
-        `Add an email address for ${contactsMissingEmail
-          .map((contact) => `${contact.firstName} ${contact.lastName}`)
-          .join(', ')} before enrolling the applicant — every guardian needs one for their portal account.`,
-      );
-    }
-
     const schoolClass = await AppDataSource.getRepository(SchoolClass).findOne({
       where: { id: input.classId, schoolId: context.schoolId },
     });
@@ -1294,13 +1281,14 @@ export class AdmissionsService {
    *
    * A linked guardian is already a known `Guardian` row, so it is joined to
    * the new student directly. A plain contact is unverified text, so it is
-   * matched to an existing `Guardian` by email or, failing that, created —
-   * the same as before this method also had linked guardians to consider.
+   * matched to an existing `Guardian` by email (or, with none, by phone and
+   * name) or, failing that, created — the same as before this method also
+   * had linked guardians to consider.
    * Either way, a person named on both (a linked guardian who also happens
    * to appear in `contacts` under the same email) is only ever joined once.
    *
    * Returns the guardians this enrolment should invite to the portal — every
-   * one of them who does not already have access. A parent already using the
+   * one of them who has an email address and does not already have access. A parent already using the
    * portal for another child is left alone rather than re-invited. The
    * invitation itself still goes out through `invite()` once this
    * transaction has committed: it only grants access and sends the code that
@@ -1334,7 +1322,9 @@ export class AdmissionsService {
       if (isPrimaryContact) primaryClaimed = true;
       params = { ...params, isPrimaryContact };
 
-      if (!guardian.hasPortalAccess) guardianIdsToInvite.push(guardian.id);
+      // No address, no invitation: the portal is opened by emailing a code, so
+      // an email-less guardian is invited later, once one has been added.
+      if (guardian.email && !guardian.hasPortalAccess) guardianIdsToInvite.push(guardian.id);
 
       await manager.save(
         manager.create(StudentGuardian, {
@@ -1363,12 +1353,21 @@ export class AdmissionsService {
     }
 
     for (const contact of contacts) {
-      // `convert` already refuses to reach this point with a contact missing
-      // an email, so this is a type narrowing rather than a real check.
-      if (!contact.email) throw AppError.internal();
-
+      // An email is the only reliable way to recognise a parent already on the
+      // roll. Without one, fall back to an exact match on the same phone and
+      // name among guardians who also have no email — narrow on purpose, since
+      // wrongly merging two people who share a household phone is worse than
+      // leaving a duplicate for the office to tidy.
       const existing = await manager.findOne(Guardian, {
-        where: { schoolId, email: contact.email },
+        where: contact.email
+          ? { schoolId, email: contact.email }
+          : {
+              schoolId,
+              email: IsNull(),
+              phone: contact.phone,
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+            },
       });
 
       const guardian =
@@ -1379,7 +1378,7 @@ export class AdmissionsService {
             title: contact.title,
             firstName: contact.firstName,
             lastName: contact.lastName,
-            email: contact.email,
+            email: contact.email ?? null,
             phone: contact.phone,
             occupation: contact.occupation,
             // `Guardian.address` is one free-text field; city and state were

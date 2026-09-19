@@ -1,6 +1,7 @@
 import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
+import { orderByPersonName } from '../../../shared/pagination/personName';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Student } from '../entities/student.entity';
 import type { StudentDTO, StudentSummaryDTO } from '../dto/students.dto';
@@ -46,7 +47,8 @@ const JOINS = `
 
 /** Only indexed columns, so a sort cannot turn a list into a table scan. */
 const SORTABLE: Record<string, string> = {
-  fullName: 's.last_name',
+  fullName: 's.first_name',
+  firstName: 's.first_name',
   lastName: 's.last_name',
   admissionNo: 's.admission_no',
   status: 's.status',
@@ -55,6 +57,8 @@ const SORTABLE: Record<string, string> = {
   currentClassName: 'c.name',
   dateOfBirth: 's.date_of_birth',
 };
+
+const NAME_COLUMNS = { first: 's.first_name', middle: 's.middle_name', last: 's.last_name' };
 
 export interface StudentFilter {
   page: number;
@@ -110,8 +114,9 @@ export class StudentRepository extends TenantRepository<Student> {
     }
 
     const whereSql = where.join(' AND ');
-    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'lastName');
+    const orderBy = safeSortColumn(filter.sortBy, Object.keys(SORTABLE), 'fullName');
     const direction = filter.sortDir === 'desc' ? 'DESC' : 'ASC';
+    const orderClause = `${orderByPersonName(SORTABLE[orderBy], direction, NAME_COLUMNS)}, s.id ASC`;
 
     const [countRow] = await this.repo.query(
       `SELECT COUNT(*)::int AS total FROM students s ${JOINS} WHERE ${whereSql}`,
@@ -123,7 +128,7 @@ export class StudentRepository extends TenantRepository<Student> {
       `SELECT ${PROJECTION}
        FROM students s ${JOINS}
        WHERE ${whereSql}
-       ORDER BY ${SORTABLE[orderBy]} ${direction}, s.id ASC
+       ORDER BY ${orderClause}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
     );
@@ -156,7 +161,7 @@ export class StudentRepository extends TenantRepository<Student> {
        LEFT JOIN school_classes c ON c.id = s.current_class_id
        WHERE s.school_id = $1 AND s.deleted_at IS NULL ${scope}
          AND (s.first_name ILIKE $2 OR s.last_name ILIKE $2 OR s.admission_no ILIKE $2)
-       ORDER BY s.last_name ASC
+       ORDER BY s.first_name ASC, s.middle_name ASC, s.last_name ASC
        LIMIT $3`,
       params,
     );
