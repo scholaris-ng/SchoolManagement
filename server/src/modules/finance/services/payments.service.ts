@@ -318,6 +318,7 @@ export class PaymentsService {
           invoiceNo: allocation.invoiceNo,
           description: brief ? `${brief.termName} · ${brief.sessionName} fees` : 'School fees',
           amount: allocation.amount,
+          invoiceTotal: brief?.total ?? allocation.amount,
           lines: (linesByInvoice.get(allocation.invoiceId) ?? []).map((line) => ({
             description: line.description,
             isOptional: line.isOptional,

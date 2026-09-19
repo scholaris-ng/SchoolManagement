@@ -7,7 +7,7 @@ import { env } from '@/lib/env';
 import { useReceipt } from './api';
 import { EmailReceiptDialog } from './email-receipt-dialog';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
-import { POS_RECEIPT_SELECTOR, POS_WIDTH_MM, PosReceipt } from './receipt-pos';
+import { POS_RECEIPT_SELECTOR, POS_WIDTH_MM, PosReceipt, isPartPayment } from './receipt-pos';
 import { ShareReceiptButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
@@ -196,9 +196,21 @@ export function ReceiptPage() {
                       <Fragment key={index}>
                         <tr>
                           <td className="py-1.5 font-mono text-xs">{allocation.invoiceNo}</td>
-                          <td className="py-1.5">{allocation.description}</td>
+                          <td className="py-1.5">
+                            {allocation.description}
+                            {/* The figure on the right is the invoice's own total, so the
+                                itemised charges below add up to it. What this payment put
+                                towards it is stated underneath, and a part-payment says so. */}
+                            <span className="block text-xs text-muted-foreground">
+                              Paid on this receipt{' '}
+                              {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                              {isPartPayment(allocation) && (
+                                <span className="italic"> · Part payment</span>
+                              )}
+                            </span>
+                          </td>
                           <td className="py-1.5 text-right tabular-nums">
-                            {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                            {formatCurrency(allocation.invoiceTotal, 'NGN', { showDecimals: false })}
                           </td>
                         </tr>
                         {showItems &&

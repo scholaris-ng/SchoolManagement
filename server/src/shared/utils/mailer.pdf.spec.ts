@@ -108,6 +108,7 @@ function receiptParams(overrides: Record<string, unknown> = {}) {
         invoiceNo: 'INV/2026-2027/00003',
         description: 'First Term · 2026/2027 fees',
         amount: 327_500,
+        invoiceTotal: 350_000,
         lines: [
           { description: 'Tuition', isOptional: false, amount: 250_000 },
           { description: 'Transport', isOptional: true, amount: 77_500 },
@@ -208,6 +209,7 @@ describe('emailed PDFs', () => {
       invoiceNo: `INV/2026-2027/${String(index + 1).padStart(5, '0')}`,
       description: 'First Term · 2026/2027 fees',
       amount: 10_000,
+      invoiceTotal: 10_000,
       lines: [
         { description: 'Tuition', isOptional: false, amount: 8_000 },
         { description: 'Exam', isOptional: false, amount: 2_000 },

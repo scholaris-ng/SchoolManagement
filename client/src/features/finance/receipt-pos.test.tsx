@@ -24,6 +24,7 @@ const receipt: Receipt = {
       invoiceNo: 'INV/2026-2027/00003',
       description: 'First Term · 2026/2027 fees',
       amount: 327_500,
+      invoiceTotal: 327_500,
       lines: [
         { description: 'Tuition', isOptional: false, amount: 250_000 },
         { description: 'Transport', isOptional: true, amount: 77_500 },
@@ -69,6 +70,30 @@ describe('PosReceipt', () => {
     expect(slip.getByText('INV/2026-2027/00003')).toBeInTheDocument();
     expect(slip.getByText('E4520DCEB0')).toBeInTheDocument();
     expect(slip.getByText(verifyUrl)).toBeInTheDocument();
+  });
+
+  it('says so when the payment covers only part of the invoice', async () => {
+    const part: Receipt = {
+      ...receipt,
+      amount: 375_000,
+      allocations: [{ ...receipt.allocations[0], amount: 375_000, invoiceTotal: 393_000 }],
+    };
+    render(<PosReceipt record={part} verifyUrl={verifyUrl} showItems={false} />);
+    await qrReady();
+
+    // The figure on the row is the invoice's total; what was paid is the line under it.
+    expect(screen.getByText('₦393,000')).toBeInTheDocument();
+    const paid = screen.getByText(/Paid on this receipt/);
+    expect(paid).toHaveTextContent('375,000');
+    expect(paid).toHaveTextContent('Part payment');
+  });
+
+  it('shows a payment in full the same way, without calling it a part payment', async () => {
+    render(<PosReceipt record={receipt} verifyUrl={verifyUrl} showItems={false} />);
+    await qrReady();
+
+    expect(screen.getByText(/Paid on this receipt/)).toHaveTextContent('327,500');
+    expect(screen.queryByText(/Part payment/)).not.toBeInTheDocument();
   });
 
   it('lists each invoice’s charges only when asked to', async () => {

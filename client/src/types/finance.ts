@@ -398,7 +398,10 @@ export interface Receipt {
   allocations: {
     invoiceNo: string;
     description: string;
+    /** What this payment put towards the invoice — not the invoice's own total. */
     amount: number;
+    /** The invoice's full total, so a part-payment can be shown as one. */
+    invoiceTotal: number;
     /** The invoice's own charges, for the receipt's optional itemised view. */
     lines: { description: string; isOptional: boolean; amount: number }[];
   }[];

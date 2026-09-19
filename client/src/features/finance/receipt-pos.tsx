@@ -10,6 +10,11 @@ export const POS_WIDTH_MM = 78;
 /** Selector the print handler uses to measure the copy it is about to print. */
 export const POS_RECEIPT_SELECTOR = '.pos-receipt-root';
 
+/** Paid less than the invoice's total — compared in kobo, so float dust is not a "part". */
+export function isPartPayment(allocation: { amount: number; invoiceTotal: number }): boolean {
+  return Math.round(allocation.invoiceTotal * 100) > Math.round(allocation.amount * 100);
+}
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-2">
@@ -93,9 +98,14 @@ export function PosReceipt({
                   <div className="flex items-start justify-between gap-2">
                     <span>{allocation.description}</span>
                     <span className="font-semibold tabular-nums">
-                      {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                      {formatCurrency(allocation.invoiceTotal, 'NGN', { showDecimals: false })}
                     </span>
                   </div>
+                  <p className="text-[10px]">
+                    Paid on this receipt{' '}
+                    {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
+                    {isPartPayment(allocation) && <span className="italic"> · Part payment</span>}
+                  </p>
                   {showItems &&
                     allocation.lines.map((line, lineIndex) => (
                       <div

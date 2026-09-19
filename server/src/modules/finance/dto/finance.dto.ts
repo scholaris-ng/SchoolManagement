@@ -296,7 +296,14 @@ export interface ReceiptDTO {
   allocations: {
     invoiceNo: string;
     description: string;
+    /** What *this payment* put towards the invoice — not the invoice's own total. */
     amount: number;
+    /**
+     * The invoice's full total. Sent so a receipt for a part-payment can say
+     * so: without it, the itemised charges (which add up to this) sit under an
+     * amount that is smaller, and read as an arithmetic error.
+     */
+    invoiceTotal: number;
     /**
      * The invoice's own charges — tuition, boarding, exam and so on — for a
      * receipt's optional itemised view. Whether to show them is the

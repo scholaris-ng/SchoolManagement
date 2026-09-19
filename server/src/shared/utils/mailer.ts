@@ -1246,6 +1246,10 @@ export async function sendStaffAccountEmail(params: {
 }
 
 const formatNaira = (value: number) => `₦${value.toLocaleString('en-NG')}`;
+
+/** Paid less than the invoice's total — compared in kobo, so float dust is not a "part". */
+const isPartPayment = (allocation: { amount: number; invoiceTotal: number }) =>
+  Math.round(allocation.invoiceTotal * 100) > Math.round(allocation.amount * 100);
 export const formatPdfCurrency = (value: number) => `NGN ${value.toLocaleString('en-NG')}`;
 
 /** The same day, abbreviated — for the narrow date columns in the PDF header. */
@@ -1453,7 +1457,10 @@ export async function buildReceiptPdfAttachment(params: {
   allocations: Array<{
     invoiceNo: string;
     description: string;
+    /** What this payment put towards the invoice. */
     amount: number;
+    /** The invoice's full total — larger than `amount` for a part-payment. */
+    invoiceTotal: number;
     lines: Array<{ description: string; isOptional: boolean; amount: number }>;
   }>;
   balanceAfter: number;
@@ -1518,8 +1525,18 @@ export async function buildReceiptPdfAttachment(params: {
         }
         doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(allocation.invoiceNo, left, y);
         doc.fillColor(bg).fontSize(9).font('Helvetica').text(allocation.description, left + 120, y, { width: 230 });
-        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(formatPdfCurrency(allocation.amount), left + 360, y, { width: 110, align: 'right' });
+        // The figure on the right is the invoice's own total, so the charges
+        // listed beneath add up to it; what this payment put towards it is
+        // stated on the line below, and a part-payment says so.
+        doc.fillColor(bg).fontSize(10).font('Helvetica-Bold').text(formatPdfCurrency(allocation.invoiceTotal), left + 360, y, { width: 110, align: 'right' });
         y += 18;
+        doc.fillColor(muted).fontSize(8).font('Helvetica').text(
+          `Paid on this receipt ${formatPdfCurrency(allocation.amount)}${isPartPayment(allocation) ? ' · Part payment' : ''}`,
+          left + 120,
+          y - 4,
+          { width: 350 },
+        );
+        y += 12;
         if (params.includeCharges && allocation.lines.length > 0) {
           for (const line of allocation.lines) {
             if (y + 14 > pageBottom) {
@@ -1572,7 +1589,10 @@ export async function sendReceiptEmail(params: {
   allocations: Array<{
     invoiceNo: string;
     description: string;
+    /** What this payment put towards the invoice. */
     amount: number;
+    /** The invoice's full total — larger than `amount` for a part-payment. */
+    invoiceTotal: number;
     lines: Array<{ description: string; isOptional: boolean; amount: number }>;
   }>;
   balanceAfter: number;
