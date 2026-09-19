@@ -57,7 +57,11 @@ export function PaymentsPage() {
     () => [
       {
         id: 'payment',
-        header: 'Receipt',
+        header: 'Receipt / date',
+        // The date is printed under the receipt number, so this is the column
+        // to click to order by date. Without a key here the only sortable
+        // column was Amount, and there was no way back to date order.
+        sortKey: 'paidAt',
         cell: (payment) => (
           <div className="min-w-0">
             <Link
