@@ -33,6 +33,7 @@ const receipt: Receipt = {
   ],
   balanceAfter: 0,
   verificationCode: 'E4520DCEB0',
+  status: 'SUCCESSFUL',
 };
 
 const verifyUrl = 'http://localhost:5173/verify/E4520DCEB0';

@@ -313,6 +313,12 @@ export interface ReceiptDTO {
   }[];
   balanceAfter: number;
   verificationCode: string;
+  /**
+   * A reversed payment's receipt is still readable — the family holds a copy —
+   * but it is no longer proof of anything, and the screen has to say so.
+   */
+  status: PaymentStatus;
+  reversalReason: string | null;
 }
 
 /** Mirrors `PaymentAccount` in `client/src/types/finance.ts`. */
@@ -360,6 +366,8 @@ export interface PaymentDTO {
   isReconciled: boolean;
   receiptNo: string | null;
   note: string | null;
+  reversedAt: string | null;
+  reversalReason: string | null;
 }
 
 /** Mirrors `PaymentReceiptSubmission` in `client/src/types/finance.ts`. */

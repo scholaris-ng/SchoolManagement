@@ -307,6 +307,13 @@ export const FinanceEndpoints = {
   reconcilePayment: (id: string, note?: string) =>
     http.post<Payment>(`/payments/${id}/reconcile`, { note }),
 
+  /**
+   * Undoes a desk payment recorded wrongly. There is no edit: the correction
+   * is to reverse it and record the right amount as a new payment.
+   */
+  reversePayment: (id: string, reason: string) =>
+    http.post<Payment>(`/payments/${id}/reverse`, { reason }),
+
   fetchReceipt: (paymentId: string) => http.get<Receipt>(`/receipts/${paymentId}`),
 
   sendReceiptEmail: (paymentId: string, guardianId: string, includeCharges: boolean) =>

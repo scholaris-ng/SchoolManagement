@@ -92,6 +92,35 @@ export function useReconcilePayment() {
   });
 }
 
+/**
+ * Undoes a payment recorded wrongly. It touches everything a new payment
+ * does, in reverse: the invoices it settled reopen, the student's balance
+ * rises, and the debtors list and dashboards move with them.
+ */
+export function useReversePayment() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      FinanceEndpoints.reversePayment(id, reason),
+    onSuccess: (payment) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.debtors(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.receipt(schoolId, payment.id),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.students.ledger(schoolId, payment.studentId),
+      });
+      toast.success('Payment reversed', { description: payment.receiptNo ?? payment.reference });
+    },
+  });
+}
+
 export function useReceipt(paymentId: string | undefined) {
   const schoolId = useSchoolId();
   return useQuery({

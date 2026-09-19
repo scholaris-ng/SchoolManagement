@@ -130,6 +130,16 @@ export class Payment extends BaseEntity {
   @Column({ name: 'recorded_by_user_id', type: 'uuid', nullable: true })
   recordedByUserId: string | null;
 
+  /** Set together, or not at all: when a `REVERSED` payment was undone, by whom, and why. */
+  @Column({ name: 'reversed_at', type: 'timestamptz', nullable: true })
+  reversedAt: Date | null;
+
+  @Column({ name: 'reversed_by_user_id', type: 'uuid', nullable: true })
+  reversedByUserId: string | null;
+
+  @Column({ name: 'reversal_reason', type: 'text', nullable: true })
+  reversalReason: string | null;
+
   @Column({ name: 'provider_payload', type: 'jsonb', nullable: true })
   providerPayload: Record<string, unknown> | null;
 }

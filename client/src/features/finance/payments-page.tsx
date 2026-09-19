@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCheck, CreditCard, Download, Plus, Receipt } from 'lucide-react';
+import { CheckCheck, CreditCard, Download, Plus, Receipt, Undo2 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { exportRowsToXlsx } from '@/lib/xlsx';
@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import { ReversePaymentDialog, isReversible } from './reverse-payment-dialog';
 
 const METHOD_OPTIONS = [
   { value: 'CASH', label: 'Cash' },
@@ -41,6 +42,7 @@ export function PaymentsPage() {
   const payments = usePayments(list.query);
   const reconcile = useReconcilePayment();
   const [pendingReconcile, setPendingReconcile] = useState<Payment | null>(null);
+  const [pendingReverse, setPendingReverse] = useState<Payment | null>(null);
 
   const currency = 'NGN';
 
@@ -103,10 +105,16 @@ export function PaymentsPage() {
         sortKey: 'amount',
         cell: (payment) => (
           <div>
-            <p className="font-medium tabular-nums">
+            <p
+              className={
+                payment.status === 'REVERSED'
+                  ? 'font-medium tabular-nums text-muted-foreground line-through'
+                  : 'font-medium tabular-nums'
+              }
+            >
               {formatCurrency(payment.amount, currency, { showDecimals: false })}
             </p>
-            {payment.unallocatedAmount > 0 && (
+            {payment.status === 'SUCCESSFUL' && payment.unallocatedAmount > 0 && (
               <p className="text-xs text-warning">
                 {formatCurrency(payment.unallocatedAmount, currency, { showDecimals: false })} on
                 account
@@ -138,7 +146,17 @@ export function PaymentsPage() {
         cell: (payment) => (
           <div className="space-y-1">
             <StatusBadge status={payment.status} />
-            {!payment.isReconciled && <Badge tone="warning">Unreconciled</Badge>}
+            {payment.status === 'SUCCESSFUL' && !payment.isReconciled && (
+              <Badge tone="warning">Unreconciled</Badge>
+            )}
+            {payment.status === 'REVERSED' && payment.reversalReason && (
+              <p
+                className="max-w-[14rem] truncate text-xs text-muted-foreground"
+                title={payment.reversalReason}
+              >
+                {payment.reversalReason}
+              </p>
+            )}
           </div>
         ),
       },
@@ -147,21 +165,45 @@ export function PaymentsPage() {
         header: <span className="sr-only">Actions</span>,
         align: 'right',
         hideOnMobile: true,
-        cell: (payment) =>
-          !payment.isReconciled && can('payment.reconcile') ? (
-            <Button
-              data-cy="finance-payments-reconcile"
-              variant="ghost"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                setPendingReconcile(payment);
-              }}
-            >
-              <CheckCheck />
-              Reconcile
-            </Button>
-          ) : null,
+        cell: (payment) => {
+          const canReconcile =
+            payment.status === 'SUCCESSFUL' && !payment.isReconciled && can('payment.reconcile');
+          const canReverse = isReversible(payment) && can('payment.reconcile');
+          if (!canReconcile && !canReverse) return null;
+
+          return (
+            <div className="flex justify-end gap-1">
+              {canReconcile && (
+                <Button
+                  data-cy="finance-payments-reconcile"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPendingReconcile(payment);
+                  }}
+                >
+                  <CheckCheck />
+                  Reconcile
+                </Button>
+              )}
+              {canReverse && (
+                <Button
+                  data-cy="finance-payments-reverse"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPendingReverse(payment);
+                  }}
+                >
+                  <Undo2 />
+                  Reverse
+                </Button>
+              )}
+            </div>
+          );
+        },
       },
     ],
     [can],
@@ -264,14 +306,35 @@ export function PaymentsPage() {
         }
       />
 
+      <ReversePaymentDialog
+        payment={pendingReverse}
+        onOpenChange={(open) => !open && setPendingReverse(null)}
+      />
+
       <ConfirmDialog
         open={pendingReconcile !== null}
         onOpenChange={(open) => !open && setPendingReconcile(null)}
         title="Mark this payment as reconciled?"
         description={
-          pendingReconcile
-            ? `Confirm that ${formatCurrency(pendingReconcile.amount, currency)} from ${pendingReconcile.studentName} has been matched against the bank statement. This is recorded against your name.`
-            : ''
+          pendingReconcile ? (
+            <>
+              Confirm that {formatCurrency(pendingReconcile.amount, currency)} from{' '}
+              {pendingReconcile.studentName} has been matched against the bank statement. This is
+              recorded against your name.
+              {/* Only a desk payment could have been reversed instead; a bank credit never can. */}
+              {isReversible(pendingReconcile) && (
+                <span
+                  data-cy="finance-payments-reconcile-warning"
+                  className="mt-2 block font-medium text-warning"
+                >
+                  Check the amount first. Once reconciled, this payment can no longer be reversed,
+                  so a wrong amount could not be corrected.
+                </span>
+              )}
+            </>
+          ) : (
+            ''
+          )
         }
         confirmLabel="Reconcile"
         loading={reconcile.isPending}

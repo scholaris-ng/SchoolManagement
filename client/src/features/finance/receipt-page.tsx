@@ -107,6 +107,9 @@ export function ReceiptPage() {
 
   const record = receipt.data;
   const verifyUrl = `${env.appUrl}/verify/${record.verificationCode}`;
+  // Still readable — the family may hold a copy — but no longer proof of
+  // payment, so nothing here offers to print it or send it on.
+  const reversed = record.status === 'REVERSED';
 
   return (
     <>
@@ -117,28 +120,30 @@ export function ReceiptPage() {
             description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
             breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
             actions={
-              <>
-                <ShareReceiptButton paymentId={record.paymentId} includeCharges={showItems} />
-                <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
-                  <Button
-                    data-cy="finance-receipt-email"
-                    variant="outline"
-                    onClick={() => setEmailOpen(true)}
-                  >
-                    <Mail />
-                    Email receipt
+              reversed ? undefined : (
+                <>
+                  <ShareReceiptButton paymentId={record.paymentId} includeCharges={showItems} />
+                  <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
+                    <Button
+                      data-cy="finance-receipt-email"
+                      variant="outline"
+                      onClick={() => setEmailOpen(true)}
+                    >
+                      <Mail />
+                      Email receipt
+                    </Button>
+                  </PermissionGate>
+                  <Button data-cy="finance-receipt-print" onClick={() => setPrintOpen(true)}>
+                    <Printer />
+                    Print
                   </Button>
-                </PermissionGate>
-                <Button data-cy="finance-receipt-print" onClick={() => setPrintOpen(true)}>
-                  <Printer />
-                  Print
-                </Button>
-              </>
+                </>
+              )
             }
           />
         </div>
 
-        {record.allocations.some((allocation) => allocation.lines.length > 0) && (
+        {!reversed && record.allocations.some((allocation) => allocation.lines.length > 0) && (
           <label className="no-print flex items-center gap-2 text-sm text-muted-foreground">
             <input
               data-cy="finance-receipt-show-items"
@@ -153,6 +158,21 @@ export function ReceiptPage() {
 
         <Card className="print-page">
           <CardContent className="space-y-5 pt-6">
+            {/* Inside the card, not above it, so it prints with the receipt too. */}
+            {reversed && (
+              <div
+                role="alert"
+                data-cy="finance-receipt-reversed"
+                className="rounded-md border-2 border-danger bg-danger-subtle p-3 text-danger"
+              >
+                <p className="font-bold uppercase tracking-wide">Reversed · not a valid receipt</p>
+                <p className="mt-0.5 text-sm">
+                  The school reversed this payment
+                  {record.reversalReason ? `: ${record.reversalReason}` : '.'}
+                </p>
+              </div>
+            )}
+
             <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
               {record.schoolLogoUrl ? (
                 <img src={record.schoolLogoUrl} alt="" className="size-14 object-contain" />
@@ -235,14 +255,16 @@ export function ReceiptPage() {
 
             <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border pt-4">
               <div className="space-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Balance after this payment: </span>
-                  <span
-                    className={`font-semibold tabular-nums ${record.balanceAfter > 0 ? 'text-danger' : 'text-success'}`}
-                  >
-                    {formatCurrency(record.balanceAfter, 'NGN')}
-                  </span>
-                </p>
+                {!reversed && (
+                  <p>
+                    <span className="text-muted-foreground">Balance after this payment: </span>
+                    <span
+                      className={`font-semibold tabular-nums ${record.balanceAfter > 0 ? 'text-danger' : 'text-success'}`}
+                    >
+                      {formatCurrency(record.balanceAfter, 'NGN')}
+                    </span>
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Verification code <span className="font-mono">{record.verificationCode}</span>
                 </p>

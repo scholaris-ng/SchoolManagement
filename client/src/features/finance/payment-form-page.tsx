@@ -117,6 +117,10 @@ export function PaymentFormPage() {
   };
 
   const balance = ledger.data?.summary.balance ?? 0;
+  // The commonest keying slip is an extra or a missing zero, and the tell is a
+  // figure larger than the student could possibly owe. A student who owes
+  // nothing is left alone: paying ahead is legitimate.
+  const exceedsBalance = Boolean(ledger.data) && balance > 0 && Number(amount) > balance;
 
   // Reached from a student's own Fees tab, this should hand the bursar back
   // to that student rather than dropping them on the general payments list
@@ -229,6 +233,12 @@ export function PaymentFormPage() {
                 onChange={(event) => setAmount(event.target.value)}
                 placeholder="0.00"
               />
+              {/* 500000 and 50,000 are easy to confuse in a bare number field. */}
+              {Number(amount) > 0 && (
+                <p data-cy="payment-amount-preview" className="text-xs tabular-nums text-muted-foreground">
+                  {formatCurrency(Number(amount), 'NGN')}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="payment-method" required>
@@ -271,6 +281,14 @@ export function PaymentFormPage() {
               />
             </div>
           </div>
+
+          {exceedsBalance && (
+            <Alert tone="warning" title="That is more than this student owes">
+              {formatCurrency(Number(amount), 'NGN')} is above their outstanding{' '}
+              {formatCurrency(balance, 'NGN')}. Check the amount for a mistyped digit before
+              recording.
+            </Alert>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="payment-note">Note</Label>

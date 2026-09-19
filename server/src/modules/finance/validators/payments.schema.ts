@@ -78,6 +78,24 @@ export const reconcilePaymentSchema = z.object({
     .strict(),
 });
 
+/**
+ * A reason is required, not optional: a reversal takes money back off a
+ * family's account, and whoever reads the audit log later needs to know
+ * whether it was a mistyped amount or something that deserves a closer look.
+ */
+export const reversePaymentSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z
+    .object({
+      reason: z
+        .string()
+        .trim()
+        .min(3, 'Say why this payment is being reversed')
+        .max(500, 'Keep the reason under 500 characters'),
+    })
+    .strict(),
+});
+
 export const receiptParamSchema = z.object({
   params: z.object({ paymentId: z.string().uuid() }),
 });
@@ -160,6 +178,7 @@ export const ravenWebhookSchema = z.object({
 export type FetchPaymentsQuery = z.infer<typeof fetchPaymentsSchema>['query'];
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>['body'];
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>['body'];
+export type ReversePaymentInput = z.infer<typeof reversePaymentSchema>['body'];
 export type SendReceiptEmailInput = z.infer<typeof sendReceiptEmailSchema>['body'];
 export type ShareReceiptWhatsAppInput = z.infer<typeof shareReceiptWhatsAppSchema>['body'];
 export type CreatePaymentAccountInput = z.infer<typeof createPaymentAccountSchema>['body'];

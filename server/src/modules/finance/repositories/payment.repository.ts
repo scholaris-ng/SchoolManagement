@@ -53,7 +53,9 @@ const PAYMENT_PROJECTION = `
   (p.amount - COALESCE(alloc.total, 0))::float AS "unallocatedAmount",
   p.is_reconciled AS "isReconciled",
   p.reference AS "receiptNo",
-  p.note
+  p.note,
+  p.reversed_at AS "reversedAt",
+  p.reversal_reason AS "reversalReason"
 `;
 
 const JOINS = `
@@ -205,6 +207,53 @@ export class PaymentRepository extends TenantRepository<Payment> {
       },
     );
     return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * One conditional statement, for the reason `markReconciled` is one: two
+   * people reversing the same payment both run this, and exactly one updates a
+   * row. `isReconciled: false` is in the *where* clause too, so a payment
+   * signed off between the service's check and this write is still refused.
+   */
+  async markReversed(
+    manager: EntityManager,
+    schoolId: string,
+    id: string,
+    userId: string,
+    reason: string,
+  ): Promise<boolean> {
+    const result = await manager.getRepository(Payment).update(
+      { schoolId, id, status: 'SUCCESSFUL', isReconciled: false },
+      {
+        status: 'REVERSED',
+        reversedAt: new Date(),
+        reversedByUserId: userId,
+        reversalReason: reason,
+      },
+    );
+    return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * The bills a payment settled, and whether each has since been folded into a
+   * later invoice — see `PaymentsService.reversePayment` for why that matters.
+   * The allocation rows themselves are never deleted by a reversal: they are
+   * the record of what the payment once did.
+   */
+  async allocatedInvoices(
+    manager: EntityManager,
+    schoolId: string,
+    paymentId: string,
+  ): Promise<{ invoiceId: string; invoiceNo: string; carriedForward: boolean }[]> {
+    return manager.query(
+      `SELECT i.id AS "invoiceId", i.invoice_no AS "invoiceNo",
+              (i.carried_forward_to_invoice_id IS NOT NULL) AS "carriedForward"
+         FROM payment_allocations al
+         JOIN invoices i ON i.id = al.invoice_id
+        WHERE al.school_id = $1 AND al.payment_id = $2
+        ORDER BY i.id`,
+      [schoolId, paymentId],
+    );
   }
 
   async findOneDTO(schoolId: string, id: string): Promise<PaymentDTO | null> {

@@ -8,6 +8,7 @@ import type {
   RavenWebhookBody,
   ReconcilePaymentInput,
   RecordPaymentInput,
+  ReversePaymentInput,
   SendReceiptEmailInput,
   ShareReceiptWhatsAppInput,
 } from '../validators/payments.schema';
@@ -45,6 +46,18 @@ export class PaymentsController {
       res
         .status(200)
         .json(ApiResponse.ok(await service().reconcilePayment(contextOf(req), id, note || undefined)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Undoes a desk payment that was recorded wrongly. The correction is a new payment. */
+  static async reverse(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const { reason } = req.validated!.body as ReversePaymentInput;
+      const payment = await service().reversePayment(contextOf(req), id, reason);
+      res.status(200).json(ApiResponse.ok(payment, `Payment ${payment.reference} reversed`));
     } catch (error) {
       next(error);
     }

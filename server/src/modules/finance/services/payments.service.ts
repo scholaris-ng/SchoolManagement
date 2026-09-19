@@ -54,6 +54,30 @@ export function clampReceiptBalance(balance: number): number {
 }
 
 /**
+ * Why a payment cannot be reversed, or `null` if it can.
+ *
+ * Three things are off limits. A payment that is not `SUCCESSFUL` has nothing
+ * to undo. A Raven credit is money the bank really moved, and only the bank can
+ * move it back — marking it reversed here would make the ledger say the family
+ * owes what they have paid. And a payment somebody has already reconciled has
+ * been signed off against the bank statement; quietly reversing it afterwards
+ * would leave that sign-off vouching for money the ledger no longer counts.
+ */
+export function reversalRefusal(
+  payment: Pick<Payment, 'status' | 'provider' | 'isReconciled'>,
+): string | null {
+  if (payment.status === 'REVERSED') return 'That payment has already been reversed.';
+  if (payment.status !== 'SUCCESSFUL') return 'Only a successful payment can be reversed.';
+  if (payment.provider !== 'MANUAL') {
+    return 'This credit arrived through the bank, so it cannot be undone here.';
+  }
+  if (payment.isReconciled) {
+    return 'This payment has already been reconciled against the bank statement, so it cannot be reversed.';
+  }
+  return null;
+}
+
+/**
  * Money arriving through Raven (spec section 27).
  *
  * Two halves. The office asks for a collection account — a bank account number
@@ -104,6 +128,7 @@ export class PaymentsService {
     input: { guardianId: string; includeCharges: boolean },
   ): Promise<{ sent: boolean; email: string }> {
     const receipt = await this.fetchReceipt(context, paymentId);
+    assertReceiptIssuable(receipt);
     if (!receipt.studentId) {
       throw AppError.validation('This payment is not linked to a student record.');
     }
@@ -179,6 +204,7 @@ export class PaymentsService {
     input: { includeCharges: boolean },
   ): Promise<WhatsAppShare> {
     const receipt = await this.fetchReceipt(context, paymentId);
+    assertReceiptIssuable(receipt);
 
     const [school, website, guardians] = await Promise.all([
       this.schools.findById(context.schoolId),
@@ -328,6 +354,8 @@ export class PaymentsService {
       }),
       balanceAfter: clampReceiptBalance(balanceAfter),
       verificationCode: entity.verificationCode,
+      status: entity.status,
+      reversalReason: entity.reversalReason,
     };
   }
 
@@ -445,6 +473,10 @@ export class PaymentsService {
   ): Promise<PaymentDTO> {
     const existing = await this.payments.findEntity(context.schoolId, id);
     if (!existing) throw AppError.notFound('Payment');
+    // Nothing to check against the bank: the ledger no longer counts this money.
+    if (existing.status !== 'SUCCESSFUL') {
+      throw AppError.conflict('Only a successful payment can be reconciled.');
+    }
 
     const applied = await this.payments.markReconciled(
       context.schoolId,
@@ -464,6 +496,86 @@ export class PaymentsService {
 
     const dto = await this.payments.findOneDTO(context.schoolId, id);
     if (!dto) throw AppError.internal();
+    return dto;
+  }
+
+  /**
+   * Undoes a desk payment that was recorded wrongly — the amount mistyped, the
+   * wrong student, a slip entered twice. To correct one, reverse it and record
+   * the right payment afresh.
+   *
+   * A reversal, not an edit and not a delete. An edit would rewrite a receipt
+   * the family may already hold — printed, emailed or sent on WhatsApp — so the
+   * paper would say one thing and the ledger another. A delete would take the
+   * evidence with it; `Payment` says a reversed row is marked, not removed, so
+   * the ledger keeps adding up to what actually happened. The row and its
+   * allocations survive, and every figure derived from payments already counts
+   * only `SUCCESSFUL` ones, so flipping the status is what makes the ledger,
+   * the debtors list and each invoice's balance correct themselves.
+   *
+   * The invoices it had settled are locked first, the way recording a payment
+   * locks them, so a reversal and a fresh payment against the same bill queue
+   * instead of racing. Their status is then re-derived — a `PAID` bill goes
+   * back to `PART_PAID` or `ISSUED`.
+   *
+   * One case is refused rather than handled: an invoice this payment settled
+   * that has since been carried forward into a later one. That later invoice's
+   * brought-forward figure was struck net of this money, so reversing it would
+   * leave the new bill understating what is owed. Cancelling the later invoice
+   * reopens the old one, and the reversal can go ahead after that.
+   */
+  async reversePayment(context: RequestContext, id: string, reason: string): Promise<PaymentDTO> {
+    const existing = await this.payments.findEntity(context.schoolId, id);
+    if (!existing) throw AppError.notFound('Payment');
+
+    const refusal = reversalRefusal(existing);
+    if (refusal) throw AppError.conflict(refusal);
+
+    await AppDataSource.transaction(async (manager) => {
+      const settled = await this.payments.allocatedInvoices(manager, context.schoolId, id);
+      await this.invoices.lockForAllocation(
+        manager,
+        context.schoolId,
+        settled.map((row) => row.invoiceId),
+      );
+
+      const carried = settled.find((row) => row.carriedForward);
+      if (carried) {
+        throw AppError.conflict(
+          `This payment settled invoice ${carried.invoiceNo}, whose balance has since been carried forward into a later invoice. Cancel that later invoice first, then reverse this payment.`,
+        );
+      }
+
+      const applied = await this.payments.markReversed(
+        manager,
+        context.schoolId,
+        id,
+        context.user.id,
+        reason,
+      );
+      if (!applied) {
+        // Somebody reversed or reconciled it between the check above and now.
+        throw AppError.conflict('That payment can no longer be reversed. Refresh and check its status.');
+      }
+
+      for (const row of settled) {
+        await this.invoices.recalculateStatus(manager, row.invoiceId);
+      }
+    });
+
+    const dto = await this.payments.findOneDTO(context.schoolId, id);
+    if (!dto) throw AppError.internal();
+
+    await this.audit.record(context, {
+      action: 'payment.reversed',
+      entityType: 'Payment',
+      entityId: id,
+      entityLabel: `${dto.reference} · ${dto.studentName}`,
+      before: { status: 'SUCCESSFUL', amount: dto.amount, method: dto.method },
+      after: { status: 'REVERSED', reason },
+      severity: 'WARNING',
+    });
+
     return dto;
   }
 
@@ -893,6 +1005,17 @@ export class PaymentsService {
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
       throw AppError.unauthenticated('Webhook secret does not match.');
     }
+  }
+}
+
+/**
+ * A reversed payment's receipt can still be *read* — the family holds a copy —
+ * but handing out a fresh one, by email or WhatsApp, would be vouching for
+ * money the school no longer counts.
+ */
+function assertReceiptIssuable(receipt: Pick<ReceiptDTO, 'status'>): void {
+  if (receipt.status !== 'SUCCESSFUL') {
+    throw AppError.conflict('This payment was reversed, so its receipt can no longer be sent.');
   }
 }
 

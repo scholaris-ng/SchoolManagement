@@ -302,6 +302,9 @@ export interface Payment {
   isReconciled: boolean;
   receiptNo?: string | null;
   note?: string | null;
+  /** Set on a `REVERSED` payment: when it was undone, and the reason given. */
+  reversedAt?: string | null;
+  reversalReason?: string | null;
 }
 
 /** Balances are derived from the ledger, never stored as a single mutable field. */
@@ -407,6 +410,9 @@ export interface Receipt {
   }[];
   balanceAfter: number;
   verificationCode: string;
+  /** A `REVERSED` receipt is still readable but is no longer proof of payment. */
+  status: PaymentStatus;
+  reversalReason?: string | null;
 }
 
 /**

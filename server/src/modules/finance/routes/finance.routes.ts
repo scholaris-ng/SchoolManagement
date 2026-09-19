@@ -43,6 +43,7 @@ import {
   receiptParamSchema,
   reconcilePaymentSchema,
   recordPaymentSchema,
+  reversePaymentSchema,
   sendReceiptEmailSchema,
   shareReceiptWhatsAppSchema,
   studentIdParamSchema,
@@ -389,6 +390,20 @@ router.post(
   authorise('payment.reconcile'),
   validate(reconcilePaymentSchema),
   PaymentsController.reconcile,
+);
+
+/**
+ * Undoing a payment keyed in wrongly — the amount, the student, a slip counted
+ * twice. `payment.reconcile`, not `payment.manage`: taking money back off a
+ * family's account is a supervisor's call, and holding it apart from recording
+ * means whoever took the cash cannot also make it disappear. It also avoids a
+ * new permission that every school's custom roles would have to be granted.
+ */
+router.post(
+  '/payments/:id/reverse',
+  authorise('payment.reconcile'),
+  validate(reversePaymentSchema),
+  PaymentsController.reverse,
 );
 
 router.get(
