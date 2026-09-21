@@ -51,7 +51,7 @@ export function useListQuery(options: {
     return result;
   }, [filterKeys, params, nameOf]);
 
-  const { setPage, setPageSize, setSearch, setSort, setFilter, reset } = useListQueryActions(
+  const { setPage, setPageSize, setSearch, setSort, setFilter, setFilters, reset } = useListQueryActions(
     setParams,
     nameOf,
     defaultPageSize,
@@ -85,6 +85,7 @@ export function useListQuery(options: {
     setSearch,
     setSort,
     setFilter,
+    setFilters,
     reset,
     isFiltered: Boolean(debouncedSearch) || Object.values(filters).some(Boolean),
     isSearchPending: search !== debouncedSearch,

@@ -3,10 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CheckCheck, CreditCard, Download, Plus, Receipt, Undo2 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
-import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
-import { usePayments, useReconcilePayment } from './api';
+import { useExportPayments, usePayments, useReconcilePayment } from './api';
 import type { Payment } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
@@ -35,11 +34,12 @@ export function PaymentsPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const list = useListQuery({
-    filterKeys: ['method', 'status', 'reconciled'],
+    filterKeys: ['method', 'status', 'reconciled', 'dateFrom', 'dateTo'],
     defaultSortBy: 'paidAt',
     defaultSortDir: 'desc',
   });
   const payments = usePayments(list.query);
+  const exportPayments = useExportPayments();
   const reconcile = useReconcilePayment();
   const [pendingReconcile, setPendingReconcile] = useState<Payment | null>(null);
   const [pendingReverse, setPendingReverse] = useState<Payment | null>(null);
@@ -213,25 +213,6 @@ export function PaymentsPage() {
     [can],
   );
 
-  const exportPayments = () => {
-    void exportRowsToXlsx(
-      `payments-${new Date().toISOString().slice(0, 10)}.xlsx`,
-      (payments.data?.items ?? []).map((payment) => ({
-        Receipt: payment.receiptNo ?? '',
-        Reference: payment.reference,
-        Student: payment.studentName,
-        'Admission no': payment.admissionNo,
-        Amount: payment.amount,
-        Method: payment.method,
-        Status: payment.status,
-        'Paid at': payment.paidAt,
-        Reconciled: payment.isReconciled ? 'Yes' : 'No',
-        'Recorded by': payment.recordedByName ?? '',
-      })),
-      { sheetName: 'Payments' },
-    );
-  };
-
   return (
     <PageContainer>
       <PageHeader
@@ -240,7 +221,14 @@ export function PaymentsPage() {
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }]}
         actions={
           <>
-            <Button data-cy="finance-payments-export" variant="outline" onClick={exportPayments}>
+            <Button
+              data-cy="finance-payments-export"
+              variant="outline"
+              loading={exportPayments.isPending}
+              loadingLabel="Exporting…"
+              // Everything the filters match, dates included — not just this page.
+              onClick={() => exportPayments.mutate(list.query)}
+            >
               <Download />
               Export
             </Button>
@@ -273,6 +261,12 @@ export function PaymentsPage() {
             allLabel: 'All payments',
           },
         ]}
+        dateRange={{
+          label: 'Paid',
+          fromKey: 'dateFrom',
+          toKey: 'dateTo',
+          onChange: list.setFilters,
+        }}
       />
 
       <DataTable

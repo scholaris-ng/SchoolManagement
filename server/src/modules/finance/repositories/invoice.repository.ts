@@ -91,6 +91,9 @@ export interface InvoiceFilter {
   termId?: string;
   classId?: string;
   studentId?: string;
+  /** `YYYY-MM-DD`, inclusive, against the issue date — a plain `date`, so no timezone to reason about. */
+  dateFrom?: string;
+  dateTo?: string;
   /**
    * Row-level restriction for a parent or pupil, exactly as
    * `StudentRepository.fetchPaginated` uses it: `null` is unrestricted, and an
@@ -169,6 +172,8 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     if (filter.studentId) add((i) => `i.student_id = $${i}`, filter.studentId);
     if (filter.termId) add((i) => `i.term_id = $${i}`, filter.termId);
     if (filter.classId) add((i) => `i.class_id = $${i}`, filter.classId);
+    if (filter.dateFrom) add((i) => `i.issue_date >= $${i}::date`, filter.dateFrom);
+    if (filter.dateTo) add((i) => `i.issue_date <= $${i}::date`, filter.dateTo);
     if (filter.search) {
       params.push(`%${filter.search}%`);
       const i = params.length;

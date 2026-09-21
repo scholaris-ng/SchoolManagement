@@ -8,6 +8,7 @@ import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { amountInWords } from '../../../shared/utils/numberToWords';
 import { buildReceiptPdfAttachment, sendReceiptEmail } from '../../../shared/utils/mailer';
 import { chooseRecipient } from '../../../shared/utils/whatsapp';
+import { resolveTimezone } from '../../../shared/utils/timezone';
 import {
   WhatsAppShareService,
   type WhatsAppShare,
@@ -111,11 +112,20 @@ export class PaymentsService {
   async fetchPayments(context: RequestContext, query: FetchPaymentsQuery): Promise<Paginated<PaymentDTO>> {
     // A parent sees their own children's receipts and nobody else's.
     const visibleIds = await this.access.visibleStudentIds(context);
+    // Only a date bound needs the zone, so an unfiltered list pays for no extra read.
+    const timezone =
+      query.dateFrom || query.dateTo ? await this.schoolTimezone(context.schoolId) : undefined;
     return this.payments.fetchPaginated(context.schoolId, {
       ...query,
       reconciled: query.reconciled === undefined ? undefined : query.reconciled === 'true',
+      timezone,
       visibleIds,
     });
+  }
+
+  private async schoolTimezone(schoolId: string): Promise<string> {
+    const school = await this.schools.findById(schoolId);
+    return resolveTimezone(school?.settings?.timezone);
   }
 
   async fetchAccountsForStudent(context: RequestContext, studentId: string): Promise<PaymentAccountDTO[]> {

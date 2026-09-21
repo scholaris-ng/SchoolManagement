@@ -19,6 +19,7 @@ export { FinanceEndpoints } from './finance.endpoints';
 export * from './use-fees';
 export * from './use-invoices';
 export * from './use-payments';
+export * from './use-finance-export';
 export * from './use-payment-receipts';
 export * from './use-custom-bills';
 export * from './use-payment-destinations';

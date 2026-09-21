@@ -16,6 +16,8 @@ export interface ListQueryState {
   setSearch: (search: string) => void;
   setSort: (sortBy: string, sortDir: SortDirection) => void;
   setFilter: (key: string, value: string | undefined) => void;
+  /** Sets or clears several filters in one write; see `useListQueryActions`. */
+  setFilters: (patch: Record<string, string | undefined>) => void;
   reset: () => void;
   isFiltered: boolean;
 }

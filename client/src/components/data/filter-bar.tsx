@@ -3,6 +3,13 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { NativeSelect, SearchInput } from '@/components/ui/input';
+import {
+  DateRangeFilter,
+  dateRangeChips,
+  type DateRangeFilterDefinition,
+} from './date-range-filter';
+
+export type { DateRangeFilterDefinition } from './date-range-filter';
 
 export interface FilterOption {
   value: string;
@@ -24,6 +31,8 @@ export interface FilterBarProps {
   /** Shows a spinner in the search box — a debounce is pending, or the search request is in flight. */
   isSearching?: boolean;
   filters?: FilterDefinition[];
+  /** A from/to pair of date inputs after the dropdowns. Its two keys live in `values` like any other filter. */
+  dateRange?: DateRangeFilterDefinition;
   values?: Record<string, string | undefined>;
   onFilterChange?: (key: string, value: string | undefined) => void;
   onReset?: () => void;
@@ -43,6 +52,7 @@ export function FilterBar({
   searchPlaceholder = 'Search…',
   isSearching,
   filters = [],
+  dateRange,
   values = {},
   onFilterChange,
   onReset,
@@ -50,14 +60,17 @@ export function FilterBar({
   className,
   children,
 }: FilterBarProps) {
-  const activeFilters = filters
-    .map((filter) => {
-      const value = values[filter.key];
-      if (!value) return null;
-      const option = filter.options.find((candidate) => candidate.value === value);
-      return option ? { key: filter.key, label: filter.label, value: option.label } : null;
-    })
-    .filter((entry): entry is { key: string; label: string; value: string } => entry !== null);
+  const activeFilters = [
+    ...filters
+      .map((filter) => {
+        const value = values[filter.key];
+        if (!value) return null;
+        const option = filter.options.find((candidate) => candidate.value === value);
+        return option ? { key: filter.key, label: filter.label, value: option.label } : null;
+      })
+      .filter((entry): entry is { key: string; label: string; value: string } => entry !== null),
+    ...(dateRange ? dateRangeChips(dateRange, values) : []),
+  ];
 
   const hasActive = activeFilters.length > 0 || Boolean(search);
 
@@ -94,6 +107,7 @@ export function FilterBar({
               </NativeSelect>
             </label>
           ))}
+          {dateRange && <DateRangeFilter definition={dateRange} values={values} />}
           {children}
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}

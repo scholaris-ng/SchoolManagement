@@ -2,6 +2,7 @@ import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
+import { DEFAULT_TIMEZONE } from '../../../shared/utils/timezone';
 import { Payment } from '../entities/payment.entity';
 import { PaymentAccount } from '../entities/paymentAccount.entity';
 import { PaymentAllocation } from '../entities/paymentAllocation.entity';
@@ -91,6 +92,11 @@ export interface PaymentFilter {
   provider?: string;
   status?: string;
   reconciled?: boolean;
+  /** `YYYY-MM-DD`, inclusive, read as days in `timezone` — see `fetchPaginated`. */
+  dateFrom?: string;
+  dateTo?: string;
+  /** The school's own zone. Only read when a date bound is set. */
+  timezone?: string;
   search?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
@@ -283,6 +289,24 @@ export class PaymentRepository extends TenantRepository<Payment> {
     if (filter.provider) add((i) => `p.provider = $${i}`, filter.provider);
     if (filter.status) add((i) => `p.status = $${i}`, filter.status);
     if (filter.reconciled !== undefined) add((i) => `p.is_reconciled = $${i}`, filter.reconciled);
+
+    // `paid_at` is an instant, so "the 1st" has to mean midnight in the school's
+    // own zone: a 00:30 credit on the 1st belongs to the new month, and read
+    // against the database's zone it would fall into the old one. Written as a
+    // bare range on the column, rather than casting it to a date, so the
+    // `(school_id, paid_at)` index can still serve it.
+    if (filter.dateFrom || filter.dateTo) {
+      params.push(filter.timezone ?? DEFAULT_TIMEZONE);
+      const zone = `$${params.length}::text`;
+      if (filter.dateFrom) {
+        add((i) => `p.paid_at >= ($${i}::date)::timestamp AT TIME ZONE ${zone}`, filter.dateFrom);
+      }
+      if (filter.dateTo) {
+        // Exclusive of the day after, which is how "through the 30th" includes 23:59.
+        add((i) => `p.paid_at < (($${i}::date) + 1)::timestamp AT TIME ZONE ${zone}`, filter.dateTo);
+      }
+    }
+
     if (filter.search) {
       params.push(`%${filter.search}%`);
       const i = params.length;

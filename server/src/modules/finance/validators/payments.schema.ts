@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../../config/constants';
+import { PERIOD_ORDER_ISSUE, periodIsOrdered, periodQueryFields } from './period.schema';
 
 const PAYMENT_METHODS = ['CASH', 'BANK_TRANSFER', 'POS', 'ONLINE', 'CHEQUE'] as const;
 const PAYMENT_PROVIDERS = ['RAVEN', 'MANUAL'] as const;
@@ -15,19 +16,23 @@ const PAYMENT_STATUSES = ['PENDING', 'SUCCESSFUL', 'FAILED', 'REVERSED'] as cons
 export const MANUAL_METHODS = ['CASH', 'BANK_TRANSFER', 'POS', 'CHEQUE'] as const;
 
 export const fetchPaymentsSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
-    search: z.string().trim().max(120).optional(),
-    studentId: z.string().uuid().optional(),
-    method: z.enum(PAYMENT_METHODS).optional(),
-    provider: z.enum(PAYMENT_PROVIDERS).optional(),
-    status: z.enum(PAYMENT_STATUSES).optional(),
-    // A query string has no booleans; the reconciliation filter sends the word.
-    reconciled: z.enum(['true', 'false']).optional(),
-    sortBy: z.enum(['paidAt', 'amount']).optional(),
-    sortDir: z.enum(['asc', 'desc']).default('desc'),
-  }),
+  query: z
+    .object({
+      page: z.coerce.number().int().min(1).default(1),
+      pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+      search: z.string().trim().max(120).optional(),
+      studentId: z.string().uuid().optional(),
+      method: z.enum(PAYMENT_METHODS).optional(),
+      provider: z.enum(PAYMENT_PROVIDERS).optional(),
+      status: z.enum(PAYMENT_STATUSES).optional(),
+      // A query string has no booleans; the reconciliation filter sends the word.
+      reconciled: z.enum(['true', 'false']).optional(),
+      // The day the money was paid, in the school's own calendar — see `PaymentRepository`.
+      ...periodQueryFields,
+      sortBy: z.enum(['paidAt', 'amount']).optional(),
+      sortDir: z.enum(['asc', 'desc']).default('desc'),
+    })
+    .refine(periodIsOrdered, PERIOD_ORDER_ISSUE),
 });
 
 /**

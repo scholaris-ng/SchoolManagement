@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../../config/constants';
+import { PERIOD_ORDER_ISSUE, periodIsOrdered, periodQueryFields } from './period.schema';
 
 /**
  * Mirrors `CreateInvoiceInput` in `client/src/features/finance/finance.endpoints.ts`
@@ -26,8 +27,11 @@ export const fetchInvoicesSchema = z.object({
       termId: z.string().uuid().optional(),
       classId: z.string().uuid().optional(),
       studentId: z.string().uuid().optional(),
+      // The day the invoice was issued, not the day it falls due.
+      ...periodQueryFields,
     })
-    .strict(),
+    .strict()
+    .refine(periodIsOrdered, PERIOD_ORDER_ISSUE),
 });
 
 export const invoiceParamSchema = z.object({

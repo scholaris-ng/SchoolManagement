@@ -81,6 +81,24 @@ export function useListQueryActions(
     [update, nameOf],
   );
 
+  /**
+   * Several filters in one URL write. `setParams` in react-router v6 does not
+   * queue: two `setFilter` calls in the same tick each start from the params of
+   * the last render, so the second silently undoes the first. Anything that
+   * has to move two keys together — a date range being kept in order — goes
+   * through here instead.
+   */
+  const setFilters = useCallback(
+    (patch: Record<string, string | undefined>) =>
+      update((next) => {
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(nameOf(key));
+          else next.set(nameOf(key), value);
+        }
+      }),
+    [update, nameOf],
+  );
+
   const reset = useCallback(
     () =>
       setParams(
@@ -94,5 +112,5 @@ export function useListQueryActions(
     [setParams, filterKeys, nameOf],
   );
 
-  return { setPage, setPageSize, setSearch, setSort, setFilter, reset };
+  return { setPage, setPageSize, setSearch, setSort, setFilter, setFilters, reset };
 }

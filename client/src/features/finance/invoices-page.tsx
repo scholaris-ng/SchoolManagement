@@ -2,11 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Plus, Receipt, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { exportRowsToXlsx } from '@/lib/xlsx';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useTerms } from '@/features/academics/api';
-import { useDeleteInvoices, useInvoices } from './api';
+import { useDeleteInvoices, useExportInvoices, useInvoices } from './api';
 import type { Invoice } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
@@ -28,11 +27,12 @@ export function InvoicesPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const list = useListQuery({
-    filterKeys: ['status', 'termId', 'classId'],
+    filterKeys: ['status', 'termId', 'classId', 'dateFrom', 'dateTo'],
     defaultSortBy: 'issueDate',
     defaultSortDir: 'desc',
   });
   const invoices = useInvoices(list.query);
+  const exportInvoices = useExportInvoices();
   const terms = useTerms();
   const classes = useClasses();
   const deleteInvoices = useDeleteInvoices();
@@ -135,26 +135,6 @@ export function InvoicesPage() {
     [],
   );
 
-  const exportInvoices = () => {
-    void exportRowsToXlsx(
-      `invoices-${new Date().toISOString().slice(0, 10)}.xlsx`,
-      (invoices.data?.items ?? []).map((invoice) => ({
-        Invoice: invoice.invoiceNo,
-        Student: invoice.studentName,
-        'Admission no': invoice.admissionNo,
-        Class: invoice.className ?? '',
-        Term: invoice.termName,
-        Issued: invoice.issueDate,
-        Due: invoice.dueDate,
-        Total: invoice.total,
-        Paid: invoice.amountPaid,
-        Balance: invoice.balance,
-        Status: invoice.status,
-      })),
-      { sheetName: 'Invoices' },
-    );
-  };
-
   return (
     <PageContainer>
       <PageHeader
@@ -163,7 +143,14 @@ export function InvoicesPage() {
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices' }]}
         actions={
           <>
-            <Button data-cy="finance-invoices-export" variant="outline" onClick={exportInvoices}>
+            <Button
+              data-cy="finance-invoices-export"
+              variant="outline"
+              loading={exportInvoices.isPending}
+              loadingLabel="Exporting…"
+              // Everything the filters match, dates included — not just this page.
+              onClick={() => exportInvoices.mutate(list.query)}
+            >
               <Download />
               Export
             </Button>
@@ -203,6 +190,12 @@ export function InvoicesPage() {
             options: (classes.data ?? []).map((c) => ({ value: c.id, label: c.name })),
           },
         ]}
+        dateRange={{
+          label: 'Issued',
+          fromKey: 'dateFrom',
+          toKey: 'dateTo',
+          onChange: list.setFilters,
+        }}
       />
 
       <SelectionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
