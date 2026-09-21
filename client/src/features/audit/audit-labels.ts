@@ -67,12 +67,6 @@ export function describeRecordType(entityType: string): string {
   return RECORD_TYPES[entityType] ?? sentence(entityType);
 }
 
-export const SEVERITY_TONE = {
-  INFO: 'neutral',
-  WARNING: 'warning',
-  CRITICAL: 'danger',
-} as const;
-
 /**
  * Record types whose `amount`, `total` and `balance` are naira. On anything
  * else — a score sheet's `total` is a mark — the same key is just a number.

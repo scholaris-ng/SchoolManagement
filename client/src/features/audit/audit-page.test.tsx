@@ -135,6 +135,43 @@ describe('AuditPage', () => {
     expect(within(dialog).getByText(/No further details were recorded/)).toBeInTheDocument();
   });
 
+  it('puts every severity badge in the list behind its explanation', () => {
+    useAuditLog.mockReturnValue(result([entry({ severity: 'WARNING' })]));
+
+    renderPage(<AuditPage />, { route: '/audit' });
+
+    // Opening a Radix tooltip in jsdom takes ~25s (it does for any tooltip in
+    // this project), so what is checked here is that the list uses the badge
+    // that carries the tooltip; its wording is covered in audit-severity.test.
+    const badge = screen.getAllByText('WARNING')[0];
+    expect(badge.closest('[data-cy="audit-severity-warning"]')).not.toBeNull();
+  });
+
+  it('opens the detail dialog without a tooltip springing open on the badge', async () => {
+    const user = userEvent.setup({ delay: null });
+    useAuditLog.mockReturnValue(result([entry({ severity: 'WARNING' })]));
+
+    renderPage(<AuditPage />, { route: '/audit' });
+    await user.click(screen.getAllByText('Result published amended')[0]);
+    await screen.findByRole('dialog');
+
+    // The badge is not a tab stop, so the dialog's opening focus cannot land on it.
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    const badge = screen.getByRole('dialog').querySelector('[data-cy="audit-severity-warning"]');
+    expect(badge).not.toHaveAttribute('tabindex');
+  });
+
+  it('spells the meaning out for screen readers in the detail dialog', async () => {
+    const user = userEvent.setup({ delay: null });
+    useAuditLog.mockReturnValue(result([entry({ severity: 'WARNING' })]));
+
+    renderPage(<AuditPage />, { route: '/audit' });
+    await user.click(screen.getAllByText('Result published amended')[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/A sensitive change, such as a deletion/)).toHaveClass('sr-only');
+  });
+
   it('states that the trail cannot be edited from the app', () => {
     useAuditLog.mockReturnValue(result([entry()]));
 

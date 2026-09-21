@@ -9,12 +9,12 @@ import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { SettingsTabs } from '@/features/settings/settings-tabs';
 import { DataTable, type Column } from '@/components/data/data-table';
 import { FilterBar } from '@/components/data/filter-bar';
-import { Avatar, Badge, Card, CardContent } from '@/components/ui/primitives';
+import { Avatar, Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { AuditDetailDialog } from './audit-page-parts';
 import { RECORD_TYPE_OPTIONS } from './audit-filters';
+import { SeverityBadge } from './audit-severity';
 import {
-  SEVERITY_TONE,
   carriesMoney,
   describeAction,
   describeRecordType,
@@ -82,7 +82,7 @@ export function AuditPage() {
         id: 'severity',
         header: 'Severity',
         align: 'center',
-        cell: (row) => <Badge tone={SEVERITY_TONE[row.severity]}>{row.severity}</Badge>,
+        cell: (row) => <SeverityBadge severity={row.severity} />,
       },
       {
         id: 'when',

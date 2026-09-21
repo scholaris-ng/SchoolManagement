@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
 import type { AuditLogEntry } from '@/types/engagement';
-import { Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,8 +13,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { AuditChangeList } from './audit-change-list';
+import { SeverityBadge } from './audit-severity';
 import {
-  SEVERITY_TONE,
   carriesMoney,
   describeAction,
   describeRecordType,
@@ -78,9 +77,7 @@ function AuditDetailBody({ entry }: { entry: AuditLogEntry }) {
         <DialogTitle className="text-base">{describeAction(entry.action)}</DialogTitle>
         <DialogDescription>
           {entry.actorName} · {describeRole(entry.actorRole)} · {formatDateTime(entry.occurredAt)}{' '}
-          <Badge tone={SEVERITY_TONE[entry.severity]} className="ml-1 align-middle">
-            {entry.severity}
-          </Badge>
+          <SeverityBadge severity={entry.severity} describe className="ml-1 align-middle" />
         </DialogDescription>
       </DialogHeader>
 
