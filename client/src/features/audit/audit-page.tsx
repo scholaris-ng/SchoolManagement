@@ -12,12 +12,15 @@ import { FilterBar } from '@/components/data/filter-bar';
 import { Avatar, Badge, Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { AuditDetailDialog } from './audit-page-parts';
-
-const SEVERITY_TONE = {
-  INFO: 'neutral',
-  WARNING: 'warning',
-  CRITICAL: 'danger',
-} as const;
+import { RECORD_TYPE_OPTIONS } from './audit-filters';
+import {
+  SEVERITY_TONE,
+  carriesMoney,
+  describeAction,
+  describeRecordType,
+  describeRole,
+} from './audit-labels';
+import { buildRows, summarise } from './audit-values';
 
 /**
  * The audit trail.
@@ -51,9 +54,12 @@ export function AuditPage() {
         header: 'Action',
         cell: (row) => (
           <div className="min-w-0">
-            <p className="truncate font-mono text-xs font-medium">{row.action}</p>
+            {/* The machine name stays one hover away, for anyone searching logs by it. */}
+            <p className="truncate text-sm font-medium" title={row.action}>
+              {describeAction(row.action)}
+            </p>
             <p className="truncate text-xs text-muted-foreground">
-              {row.entityType}
+              {describeRecordType(row.entityType)}
               {row.entityLabel ? ` · ${row.entityLabel}` : ''}
             </p>
           </div>
@@ -67,7 +73,7 @@ export function AuditPage() {
             <Avatar name={row.actorName} size="xs" />
             <div className="min-w-0">
               <p className="truncate text-sm">{row.actorName}</p>
-              <p className="truncate text-xs text-muted-foreground">{row.actorRole}</p>
+              <p className="truncate text-xs text-muted-foreground">{describeRole(row.actorRole)}</p>
             </div>
           </div>
         ),
@@ -107,15 +113,23 @@ export function AuditPage() {
               void exportRowsToXlsx(
                 `audit-${new Date().toISOString().slice(0, 10)}.xlsx`,
                 rows.map((row) => ({
-                  When: row.occurredAt,
+                  When: formatDateTime(row.occurredAt),
                   Actor: row.actorName,
-                  Role: row.actorRole,
-                  Action: row.action,
-                  'Entity type': row.entityType,
-                  'Entity id': row.entityId,
-                  Entity: row.entityLabel ?? '',
+                  Role: describeRole(row.actorRole),
+                  Action: describeAction(row.action),
+                  'Record type': describeRecordType(row.entityType),
+                  Record: row.entityLabel ?? row.references?.[row.entityId]?.label ?? '',
+                  // What was recorded, in words — the names, not the ids behind them.
+                  Details: summarise(
+                    buildRows(row.before, row.after, {
+                      references: row.references,
+                      money: carriesMoney(row.entityType),
+                    }),
+                  ),
                   Severity: row.severity,
                   'IP address': row.ipAddress ?? '',
+                  'Action code': row.action,
+                  'Record id': row.entityId,
                   'Request id': row.requestId ?? '',
                 })),
                 { sheetName: 'Audit trail' },
@@ -153,15 +167,7 @@ export function AuditPage() {
             key: 'entityType',
             label: 'Record type',
             allLabel: 'All record types',
-            options: [
-              { value: 'Student', label: 'Student' },
-              { value: 'ScoreSheet', label: 'Score sheet' },
-              { value: 'Invoice', label: 'Invoice' },
-              { value: 'Payment', label: 'Payment' },
-              { value: 'Role', label: 'Role' },
-              { value: 'Admission', label: 'Admission' },
-              { value: 'DisciplineIncident', label: 'Discipline' },
-            ],
+            options: RECORD_TYPE_OPTIONS,
           },
         ]}
       />

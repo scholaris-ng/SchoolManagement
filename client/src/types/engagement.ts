@@ -135,6 +135,15 @@ export interface WebsiteContent {
   updatedAt: string;
 }
 
+/** A record an audit entry points at, named by the server when the trail is read. */
+export interface AuditReference {
+  /** The record's type, in the same PascalCase `entityType` uses. */
+  type: string;
+  label: string;
+  /** Deleted since the entry was written: the name is still right, the record is gone. */
+  removed: boolean;
+}
+
 export interface AuditLogEntry {
   id: string;
   schoolId: string;
@@ -152,4 +161,10 @@ export interface AuditLogEntry {
   requestId?: string | null;
   occurredAt: string;
   severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  /**
+   * Names for the ids in `entityId`, `before` and `after`, keyed by id. An id
+   * that is missing here is one the server could not name — a record that was
+   * never in this school, or was removed for good.
+   */
+  references?: Record<string, AuditReference>;
 }

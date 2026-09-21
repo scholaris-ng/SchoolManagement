@@ -2,6 +2,8 @@ import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { AuditLog } from '../entities/auditLog.entity';
 import { paginatedResult } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
+import type { ReferenceType, ResolvedRecord } from '../services/auditReferences';
+import { REFERENCE_TABLES } from './auditReferenceTables';
 
 export interface AuditQuery {
   page: number;
@@ -57,6 +59,31 @@ export class AuditRepository {
 
     const [items, total] = await qb.getManyAndCount();
     return paginatedResult(items, page, pageSize, total);
+  }
+
+  /**
+   * Names for a set of records of one type, scoped to the school so an entry
+   * can never surface another school's data. See `REFERENCE_TABLES`.
+   */
+  async lookupReferences(
+    schoolId: string,
+    type: ReferenceType,
+    ids: string[],
+  ): Promise<Map<string, ResolvedRecord>> {
+    if (ids.length === 0) return new Map();
+    const spec = REFERENCE_TABLES[type];
+    const rows: { id: string; label: string | null; removed: boolean }[] = await this.repo.query(
+      `SELECT t.id, ${spec.label} AS label,
+              ${spec.softDeletable ? '(t.deleted_at IS NOT NULL)' : 'false'} AS removed
+         FROM ${spec.from}
+        WHERE t.school_id = $1 AND t.id = ANY($2::uuid[])`,
+      [schoolId, ids],
+    );
+    return new Map(
+      rows
+        .filter((row) => row.label && row.label.trim() !== '')
+        .map((row) => [row.id, { label: row.label as string, removed: row.removed }]),
+    );
   }
 
   /**

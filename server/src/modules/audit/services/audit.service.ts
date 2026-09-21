@@ -2,6 +2,7 @@ import type { RequestContext } from '../../../shared/types/context';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { AuditRepository, type AuditQuery } from '../repositories/audit.repository';
 import type { AuditLog } from '../entities/auditLog.entity';
+import { attachReferences, type AuditEntryDTO } from './auditReferences';
 import type { Paginated } from '../../../shared/response/apiResponse';
 
 export interface AuditEvent {
@@ -122,8 +123,20 @@ export class AuditService implements IAuditService {
     });
   }
 
-  async fetch(context: RequestContext, query: AuditQuery): Promise<Paginated<AuditLog>> {
-    return this.repo.fetchPaginated(context.schoolId, query);
+  /**
+   * A page of the trail, with the ids in each entry named — see
+   * `auditReferences`. The stored entries are not touched; the names ride
+   * alongside in `references`.
+   */
+  async fetch(context: RequestContext, query: AuditQuery): Promise<Paginated<AuditEntryDTO>> {
+    const page = await this.repo.fetchPaginated(context.schoolId, query);
+    const items = await attachReferences(
+      page.items,
+      (type, ids) => this.repo.lookupReferences(context.schoolId, type, ids),
+      (type, error) =>
+        console.error(`[${context.requestId}] Audit name lookup failed for ${type}:`, error),
+    );
+    return { ...page, items };
   }
 
   private toRow(context: RequestContext, event: AuditEvent): Partial<AuditLog> {
