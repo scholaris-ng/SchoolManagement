@@ -10,6 +10,7 @@ export type {
   StudentAttendanceResult,
   StudentLedgerResult,
   StudentPickupResult,
+  UpdateGuardianLinkInput,
 } from './students.types';
 export { StudentRecordEndpoints } from './student-record.endpoints';
 export { StudentRelationEndpoints } from './student-relations.endpoints';

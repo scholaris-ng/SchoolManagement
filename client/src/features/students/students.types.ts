@@ -20,6 +20,9 @@ export interface LinkGuardianInput {
   canPickUp: boolean;
 }
 
+/** Editing an existing link's terms. The guardian identity itself isn't on offer — that's an unlink-and-relink. */
+export type UpdateGuardianLinkInput = Omit<LinkGuardianInput, 'guardianId'>;
+
 export interface AddStudentDocumentInput {
   name: string;
   category: StudentDocument['category'];

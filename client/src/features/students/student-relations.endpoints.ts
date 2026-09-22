@@ -1,6 +1,10 @@
 import { http } from '@/lib/http';
 import type { StudentDocument, StudentEnrollment, StudentGuardianLink } from '@/types/people';
-import type { AddStudentDocumentInput, LinkGuardianInput } from './students.types';
+import type {
+  AddStudentDocumentInput,
+  LinkGuardianInput,
+  UpdateGuardianLinkInput,
+} from './students.types';
 
 /** Endpoints for what hangs off a student: enrolments, guardians, documents. */
 export const StudentRelationEndpoints = {
@@ -12,6 +16,9 @@ export const StudentRelationEndpoints = {
 
   linkGuardian: (studentId: string, values: LinkGuardianInput) =>
     http.post<StudentGuardianLink>(`/students/${studentId}/guardians`, values),
+
+  updateGuardianLink: (studentId: string, linkId: string, values: UpdateGuardianLinkInput) =>
+    http.patch<StudentGuardianLink>(`/students/${studentId}/guardians/${linkId}`, values),
 
   unlinkGuardian: (studentId: string, linkId: string) =>
     http.delete<void>(`/students/${studentId}/guardians/${linkId}`),

@@ -300,6 +300,14 @@ export class GuardianRepository extends TenantRepository<Guardian> {
       .count({ where: { schoolId, studentId } });
   }
 
+  async updateLink(
+    id: string,
+    patch: DeepPartial<StudentGuardian>,
+    manager?: EntityManager,
+  ): Promise<void> {
+    await (manager ?? this.repo.manager).getRepository(StudentGuardian).update(id, patch as never);
+  }
+
   async deleteLink(schoolId: string, id: string): Promise<boolean> {
     const result = await this.repo.manager
       .getRepository(StudentGuardian)

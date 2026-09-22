@@ -106,3 +106,8 @@ export const guardianLinkSchema = z.object({
 });
 
 export type GuardianLinkValues = z.infer<typeof guardianLinkSchema>;
+
+/** Editing an existing link's terms — the guardian identity itself isn't on offer here. */
+export const guardianLinkEditSchema = guardianLinkSchema.omit({ guardianId: true });
+
+export type GuardianLinkEditValues = z.infer<typeof guardianLinkEditSchema>;

@@ -998,6 +998,7 @@ function LinkApplicationGuardianSheet({
           required
           options={guardianOptions}
           placeholder="Search guardians…"
+          searchable
         />
 
         <SelectField

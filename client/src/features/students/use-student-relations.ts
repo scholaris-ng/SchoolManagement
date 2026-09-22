@@ -3,7 +3,11 @@ import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import { StudentEndpoints } from './students.endpoints';
-import type { AddStudentDocumentInput, LinkGuardianInput } from './students.endpoints';
+import type {
+  AddStudentDocumentInput,
+  LinkGuardianInput,
+  UpdateGuardianLinkInput,
+} from './students.endpoints';
 
 /** What hangs off a student record: enrolments, guardians and documents. */
 
@@ -37,6 +41,22 @@ export function useLinkGuardian(studentId: string) {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.guardians.list(schoolId) });
       toast.success('Guardian linked to student');
+    },
+  });
+}
+
+export function useUpdateGuardianLink(studentId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ linkId, values }: { linkId: string; values: UpdateGuardianLinkInput }) =>
+      StudentEndpoints.updateGuardianLink(studentId, linkId, values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.students.guardians(schoolId, studentId),
+      });
+      toast.success('Guardian details updated');
     },
   });
 }

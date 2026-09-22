@@ -89,7 +89,26 @@ export const unlinkGuardianSchema = z.object({
   params: z.object({ studentId: z.string().uuid(), linkId: z.string().uuid() }),
 });
 
+/**
+ * Editing the terms of an existing link — relationship and responsibilities.
+ * The guardian identity itself is not on offer here: swapping who a link
+ * points at is an unlink-and-relink, not an edit.
+ */
+export const updateGuardianLinkSchema = z.object({
+  params: z.object({ studentId: z.string().uuid(), linkId: z.string().uuid() }),
+  body: z
+    .object({
+      relationship: z.enum(['FATHER', 'MOTHER', 'GUARDIAN', 'SPONSOR', 'OTHER']),
+      isPrimaryContact: z.boolean().default(false),
+      isEmergencyContact: z.boolean().default(false),
+      isFinanciallyResponsible: z.boolean().default(false),
+      canPickUp: z.boolean().default(false),
+    })
+    .strict(),
+});
+
 export type FetchGuardiansQuery = z.infer<typeof fetchGuardiansSchema>['query'];
 export type CreateGuardianInput = z.infer<typeof createGuardianSchema>['body'];
 export type UpdateGuardianInput = z.infer<typeof updateGuardianSchema>['body'];
 export type LinkGuardianInput = z.infer<typeof linkGuardianSchema>['body'];
+export type UpdateGuardianLinkInput = z.infer<typeof updateGuardianLinkSchema>['body'];

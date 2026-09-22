@@ -7,6 +7,7 @@ import type {
   FetchGuardiansQuery,
   LinkGuardianInput,
   UpdateGuardianInput,
+  UpdateGuardianLinkInput,
 } from '../validators/guardians.schema';
 
 const service = () => GuardiansService.Instance;
@@ -108,6 +109,24 @@ export class GuardiansController {
         req.validated!.body as LinkGuardianInput,
       );
       res.status(201).json(ApiResponse.created(link, 'Guardian linked'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateLink(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { studentId, linkId } = req.validated!.params as {
+        studentId: string;
+        linkId: string;
+      };
+      const link = await service().updateGuardianLink(
+        contextOf(req),
+        studentId,
+        linkId,
+        req.validated!.body as UpdateGuardianLinkInput,
+      );
+      res.status(200).json(ApiResponse.ok(link, 'Guardian details updated'));
     } catch (error) {
       next(error);
     }

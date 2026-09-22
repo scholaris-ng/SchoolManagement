@@ -1,5 +1,6 @@
-import { forwardRef, useId } from 'react';
+import { forwardRef, useId, useRef, useState } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Check, ChevronDown, ChevronUp, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -181,6 +182,164 @@ export function Select({
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Combobox — a Select with a type-to-filter search box.                      */
+/* -------------------------------------------------------------------------- */
+
+export interface ComboboxProps extends SelectProps {
+  searchPlaceholder?: string;
+  emptyMessage?: string;
+}
+
+/**
+ * Where `Select` reads fine for a handful of options, a list of guardians,
+ * classes or anything else that can grow past a screenful needs a way to
+ * type and narrow it. Radix's `Select` has no search slot, so this is built
+ * on `Popover` instead: a trigger that looks identical to `Select`, and a
+ * panel with a search box on top and the filtered list below.
+ */
+export function Combobox({
+  value,
+  onValueChange,
+  options,
+  placeholder = 'Select…',
+  searchPlaceholder = 'Search…',
+  emptyMessage = 'No matches',
+  disabled,
+  invalid,
+  className,
+  id,
+  name,
+  'aria-label': ariaLabel,
+  'data-cy': dataCy,
+}: ComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [highlighted, setHighlighted] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const needle = search.trim().toLowerCase();
+  const filtered = needle
+    ? options.filter((option) =>
+        `${option.label} ${option.description ?? ''}`.toLowerCase().includes(needle),
+      )
+    : options;
+
+  const selected = options.find((option) => option.value === value);
+
+  const selectOption = (option: SelectOption) => {
+    if (option.disabled) return;
+    onValueChange?.(option.value);
+    setOpen(false);
+  };
+
+  return (
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        setSearch('');
+        setHighlighted(0);
+      }}
+    >
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          id={id}
+          name={name}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          aria-invalid={invalid || undefined}
+          data-cy={dataCy}
+          className={cn(
+            fieldBase,
+            'h-9 items-center justify-between gap-2 text-left',
+            !selected && 'text-muted-foreground',
+            className,
+          )}
+        >
+          <span className="truncate">{selected ? selected.label : placeholder}</span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            searchRef.current?.focus();
+          }}
+          className="z-50 w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-popover animate-in"
+        >
+          <div className="relative border-b border-border p-1.5">
+            <Search
+              className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHighlighted(0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  setHighlighted((index) => Math.min(index + 1, filtered.length - 1));
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  setHighlighted((index) => Math.max(index - 1, 0));
+                } else if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const option = filtered[highlighted];
+                  if (option) selectOption(option);
+                }
+              }}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              data-cy={dataCy ? `${dataCy}-search` : undefined}
+              className="h-8 w-full rounded-sm bg-transparent pl-7 pr-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="scrollbar-thin max-h-64 overflow-y-auto p-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+            ) : (
+              filtered.map((option, index) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={option.disabled}
+                  data-cy={dataCy ? `${dataCy}-option-${option.value}` : undefined}
+                  onMouseEnter={() => setHighlighted(index)}
+                  onClick={() => selectOption(option)}
+                  className={cn(
+                    'relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-3 text-left text-sm outline-none',
+                    index === highlighted && 'bg-accent',
+                    option.disabled && 'pointer-events-none opacity-50',
+                  )}
+                >
+                  {option.value === value && (
+                    <Check className="absolute left-2 size-4" aria-hidden="true" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate">{option.label}</p>
+                    {option.description && (
+                      <p className="truncate text-xs text-muted-foreground">{option.description}</p>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }
 

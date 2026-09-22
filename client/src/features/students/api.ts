@@ -13,6 +13,7 @@ export type {
   StudentAttendanceResult,
   StudentLedgerResult,
   StudentPickupResult,
+  UpdateGuardianLinkInput,
 } from './students.endpoints';
 export { StudentEndpoints } from './students.endpoints';
 export * from './use-students';

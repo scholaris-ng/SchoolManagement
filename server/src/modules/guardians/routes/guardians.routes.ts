@@ -8,6 +8,7 @@ import {
   guardianScopedParamSchema,
   linkGuardianSchema,
   unlinkGuardianSchema,
+  updateGuardianLinkSchema,
   updateGuardianSchema,
 } from '../validators/guardians.schema';
 import { GuardiansController } from '../controllers/guardians.controller';
@@ -71,6 +72,13 @@ router.post(
   authorise('guardian.manage'),
   validate(linkGuardianSchema),
   GuardiansController.link,
+);
+
+router.patch(
+  '/students/:studentId/guardians/:linkId',
+  authorise('guardian.manage'),
+  validate(updateGuardianLinkSchema),
+  GuardiansController.updateLink,
 );
 
 router.delete(

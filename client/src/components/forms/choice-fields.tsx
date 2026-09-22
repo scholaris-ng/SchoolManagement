@@ -1,6 +1,6 @@
 import { Controller, type FieldValues } from 'react-hook-form';
 import { cn } from '@/lib/utils';
-import { Input, NativeSelect, Select, type SelectOption } from '@/components/ui/input';
+import { Combobox, Input, NativeSelect, Select, type SelectOption } from '@/components/ui/input';
 import { FieldShell, fieldCy, type BaseFieldProps } from './field-shell';
 
 /** Fields where the user picks from a closed set, plus the date input. */
@@ -18,12 +18,17 @@ export function SelectField<T extends FieldValues>({
   options,
   placeholder,
   native,
+  searchable,
+  searchPlaceholder,
   onValueChange,
 }: BaseFieldProps<T> & {
   options: SelectOption[];
   placeholder?: string;
   /** Native selects are noticeably better on low-end Android devices. */
   native?: boolean;
+  /** Adds a type-to-filter box above the options — for lists too long to scan by eye. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
   /** Runs after the form value is set, for a field that steers another field. */
   onValueChange?: (value: string) => void;
 }) {
@@ -62,6 +67,22 @@ export function SelectField<T extends FieldValues>({
                   </option>
                 ))}
               </NativeSelect>
+            ) : searchable ? (
+              <Combobox
+                id={id}
+                data-cy={fieldCy(name, dataCy)}
+                options={options}
+                placeholder={placeholder}
+                searchPlaceholder={searchPlaceholder}
+                disabled={disabled}
+                invalid={invalid}
+                value={(field.value as string | undefined) ?? undefined}
+                onValueChange={(next) => {
+                  field.onChange(next);
+                  onValueChange?.(next);
+                }}
+                aria-label={label}
+              />
             ) : (
               <Select
                 id={id}

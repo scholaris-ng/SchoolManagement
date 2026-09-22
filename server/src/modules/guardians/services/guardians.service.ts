@@ -20,6 +20,7 @@ import type {
   FetchGuardiansQuery,
   LinkGuardianInput,
   UpdateGuardianInput,
+  UpdateGuardianLinkInput,
 } from '../validators/guardians.schema';
 
 function nullIfBlank(value: string | null | undefined): string | null {
@@ -233,6 +234,42 @@ export class GuardiansService {
     });
 
     const dto = await this.guardians.findLinkDTO(context.schoolId, link.id);
+    if (!dto) throw AppError.internal();
+    return dto;
+  }
+
+  async updateGuardianLink(
+    context: RequestContext,
+    studentId: string,
+    linkId: string,
+    patch: UpdateGuardianLinkInput,
+  ): Promise<StudentGuardianLinkDTO> {
+    const link = await this.guardians.findLink(context.schoolId, linkId);
+    if (!link || link.studentId !== studentId) throw AppError.notFound('Guardian link');
+
+    await this.guardians.updateLink(linkId, {
+      relationship: patch.relationship,
+      isPrimaryContact: patch.isPrimaryContact,
+      isEmergencyContact: patch.isEmergencyContact,
+      isFinanciallyResponsible: patch.isFinanciallyResponsible,
+      canPickUp: patch.canPickUp,
+    });
+
+    if (patch.isPrimaryContact) {
+      await this.guardians.clearOtherPrimaries(context.schoolId, studentId, linkId);
+    }
+
+    await this.audit.record(context, {
+      action: 'guardian.link.updated',
+      entityType: 'Student',
+      entityId: studentId,
+      before: { relationship: link.relationship, canPickUp: link.canPickUp },
+      after: { guardianId: link.guardianId, relationship: patch.relationship, canPickUp: patch.canPickUp },
+      // Who may collect a child, and who the school calls first, are safeguarding decisions.
+      severity: 'WARNING',
+    });
+
+    const dto = await this.guardians.findLinkDTO(context.schoolId, linkId);
     if (!dto) throw AppError.internal();
     return dto;
   }

@@ -2,11 +2,22 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Heart, Mail, Phone, Plus, Unlink } from 'lucide-react';
+import { Heart, Mail, Pencil, Phone, Plus, Unlink } from 'lucide-react';
 import { humanizeEnum } from '@/lib/utils';
 import { useGuardianOptions } from '@/features/guardians/api';
-import { useLinkGuardian, useStudentGuardians, useUnlinkGuardian } from '../api';
-import { guardianLinkSchema, type GuardianLinkValues } from '../schema';
+import {
+  useLinkGuardian,
+  useStudentGuardians,
+  useUnlinkGuardian,
+  useUpdateGuardianLink,
+} from '../api';
+import {
+  guardianLinkEditSchema,
+  guardianLinkSchema,
+  type GuardianLinkEditValues,
+  type GuardianLinkValues,
+} from '../schema';
+import type { StudentGuardianLink } from '@/types/people';
 import { Card, CardContent, Badge, Avatar } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
@@ -33,6 +44,7 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
   const unlink = useUnlinkGuardian(studentId);
   const [linkOpen, setLinkOpen] = useState(false);
   const [pendingUnlink, setPendingUnlink] = useState<string | null>(null);
+  const [editingLink, setEditingLink] = useState<StudentGuardianLink | null>(null);
 
   if (links.isPending) return <LoadingState label="Loading guardians…" />;
   if (links.isError) return <ErrorState error={links.error} onRetry={() => void links.refetch()} />;
@@ -111,15 +123,26 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
                     </div>
                   </div>
                   <PermissionGate require="guardian.manage">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      data-cy={`student-guardian-unlink-${link.id}`}
-                      onClick={() => setPendingUnlink(link.id)}
-                      aria-label={`Unlink ${link.guardianName}`}
-                    >
-                      <Unlink />
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        data-cy={`student-guardian-edit-${link.id}`}
+                        onClick={() => setEditingLink(link)}
+                        aria-label={`Edit ${link.guardianName}'s role`}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        data-cy={`student-guardian-unlink-${link.id}`}
+                        onClick={() => setPendingUnlink(link.id)}
+                        aria-label={`Unlink ${link.guardianName}`}
+                      >
+                        <Unlink />
+                      </Button>
+                    </div>
                   </PermissionGate>
                 </div>
               </CardContent>
@@ -133,6 +156,12 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
         open={linkOpen}
         onOpenChange={setLinkOpen}
         excludeIds={rows.map((row) => row.guardianId)}
+      />
+
+      <EditGuardianLinkSheet
+        studentId={studentId}
+        link={editingLink}
+        onOpenChange={(open) => !open && setEditingLink(null)}
       />
 
       <ConfirmDialog
@@ -213,7 +242,115 @@ function LinkGuardianSheet({
           required
           options={guardianOptions}
           placeholder="Search guardians…"
+          searchable
         />
+
+        <SelectField
+          control={form.control}
+          name="relationship"
+          label="Relationship to the student"
+          required
+          options={RELATIONSHIP_OPTIONS}
+          native
+        />
+
+        <fieldset className="space-y-3 rounded-lg border border-border p-4">
+          <legend className="px-1 text-sm font-medium">Responsibilities</legend>
+          <CheckboxField
+            control={form.control}
+            name="isPrimaryContact"
+            label="Primary contact"
+            description="The first person the school calls about this child."
+          />
+          <CheckboxField
+            control={form.control}
+            name="isEmergencyContact"
+            label="Emergency contact"
+          />
+          <CheckboxField
+            control={form.control}
+            name="isFinanciallyResponsible"
+            label="Financially responsible"
+            description="Receives invoices and fee reminders for this child."
+          />
+          <CheckboxField
+            control={form.control}
+            name="canPickUp"
+            label="Authorised to collect the child"
+          />
+        </fieldset>
+      </form>
+    </Sheet>
+  );
+}
+
+/**
+ * Changes the terms of an existing link — relationship and responsibilities,
+ * such as moving "primary contact" from one guardian to another. The
+ * guardian identity itself is fixed here; swapping who a link points at is
+ * an unlink-and-relink, not an edit.
+ */
+function EditGuardianLinkSheet({
+  studentId,
+  link,
+  onOpenChange,
+}: {
+  studentId: string;
+  link: StudentGuardianLink | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const update = useUpdateGuardianLink(studentId);
+
+  const form = useForm<GuardianLinkEditValues>({
+    resolver: zodResolver(guardianLinkEditSchema),
+    values: link
+      ? {
+          relationship: link.relationship,
+          isPrimaryContact: link.isPrimaryContact,
+          isEmergencyContact: link.isEmergencyContact,
+          isFinanciallyResponsible: link.isFinanciallyResponsible,
+          canPickUp: link.canPickUp,
+        }
+      : undefined,
+  });
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    if (!link) return;
+    await update.mutateAsync({ linkId: link.id, values });
+    onOpenChange(false);
+  });
+
+  return (
+    <Sheet
+      open={Boolean(link)}
+      onOpenChange={onOpenChange}
+      title="Edit guardian details"
+      description={
+        link
+          ? `Update ${link.guardianName}'s relationship and responsibilities for this student.`
+          : undefined
+      }
+      footer={
+        <>
+          <Button
+            data-cy="tabs-guardians-tab-edit-cancel"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            data-cy="tabs-guardians-tab-save-guardian"
+            onClick={onSubmit}
+            loading={update.isPending}
+          >
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        <FormError error={update.error} />
 
         <SelectField
           control={form.control}
