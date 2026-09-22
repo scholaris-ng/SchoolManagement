@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { contrastingTextColor } from '@/lib/utils';
+import { cn, contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useDeleteInvoices, useInvoice } from './api';
 import { summarizeByAccount } from './account-summary';
@@ -222,6 +222,8 @@ export function InvoiceDetailPage() {
                 <tr className="text-xs uppercase tracking-wide">
                   <th scope="col" className="px-3 py-2.5 text-left">Description</th>
                   <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
+                  <th scope="col" className="px-3 py-2.5 text-right">Paid</th>
+                  <th scope="col" className="px-3 py-2.5 text-right">Balance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -246,6 +248,19 @@ export function InvoiceDetailPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">
                       {formatCurrency(line.lineTotal, currency, { showDecimals: false })}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      {line.amountPaid > 0
+                        ? formatCurrency(line.amountPaid, currency, { showDecimals: false })
+                        : '—'}
+                    </td>
+                    <td
+                      className={cn(
+                        'px-3 py-2 text-right font-medium tabular-nums',
+                        line.balance > 0 ? 'text-danger' : 'text-success',
+                      )}
+                    >
+                      {formatCurrency(line.balance, currency, { showDecimals: false })}
                     </td>
                   </tr>
                 ))}

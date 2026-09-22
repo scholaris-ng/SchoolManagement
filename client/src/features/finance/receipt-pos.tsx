@@ -108,18 +108,22 @@ export function PosReceipt({
                   </p>
                   {showItems &&
                     allocation.lines.map((line, lineIndex) => (
-                      <div
-                        key={lineIndex}
-                        className="flex items-start justify-between gap-2 pl-[3mm] text-[10px]"
-                      >
-                        <span>
-                          {line.paid ? '✓ ' : ''}
-                          {line.description}
-                          {line.isOptional ? ' (opt.)' : ''}
-                        </span>
-                        <span className="tabular-nums">
-                          {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
-                        </span>
+                      <div key={lineIndex} className="pl-[3mm] text-[10px]">
+                        <div className="flex items-start justify-between gap-2">
+                          <span>
+                            {line.paid ? '✓ ' : ''}
+                            {line.description}
+                            {line.isOptional ? ' (opt.)' : ''}
+                          </span>
+                          <span className="tabular-nums">
+                            {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                          </span>
+                        </div>
+                        {line.amountPaidByThisPayment != null && (
+                          <p className="text-[9px] italic">
+                            {formatCurrency(line.amountPaidByThisPayment, 'NGN', { showDecimals: false })} applied
+                          </p>
+                        )}
                       </div>
                     ))}
                 </div>

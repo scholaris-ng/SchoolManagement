@@ -178,6 +178,9 @@ export interface InvoiceLine {
   isOptional: boolean;
   /** Where to pay this charge, as it stood when the invoice was raised. */
   accounts: InvoiceLineAccount[];
+  /** What has actually been paid toward this one charge, not the invoice as a whole. */
+  amountPaid: number;
+  balance: number;
 }
 
 /** A payment account as it stood when an invoice line was raised — a snapshot, no id. */
@@ -436,6 +439,8 @@ export interface Receipt {
       amount: number;
       /** Whether the office has marked this charge as covered by this payment. */
       paid: boolean;
+      /** What this payment actually applied to this charge, when itemized at record time. */
+      amountPaidByThisPayment: number | null;
     }[];
   }[];
   balanceAfter: number;

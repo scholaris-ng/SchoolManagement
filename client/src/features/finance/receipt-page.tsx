@@ -326,8 +326,26 @@ function AllocationLines({
   const dirty =
     checked.size !== savedPaidIds.length || savedPaidIds.some((id) => !checked.has(id));
 
+  const allChecked = checked.size === allocation.lines.length;
+
   return (
     <>
+      {interactive && allocation.lines.length > 1 && (
+        <tr className="no-print">
+          <td colSpan={3} className="py-1 text-right">
+            <button
+              type="button"
+              data-cy="finance-receipt-lines-toggle-all"
+              className="text-xs text-primary hover:underline"
+              onClick={() =>
+                setChecked(allChecked ? new Set() : new Set(allocation.lines.map((line) => line.id)))
+              }
+            >
+              {allChecked ? 'Clear all' : 'Mark all as paid'}
+            </button>
+          </td>
+        </tr>
+      )}
       {allocation.lines.map((line) => {
         const paid = interactive ? checked.has(line.id) : line.paid;
         return (
@@ -360,6 +378,12 @@ function AllocationLines({
               {paid && <Check className="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />}
               {line.description}
               {line.isOptional ? ' (optional)' : ''}
+              {line.amountPaidByThisPayment != null && (
+                <span className="block text-[11px] text-muted-foreground">
+                  {formatCurrency(line.amountPaidByThisPayment, 'NGN', { showDecimals: false })} applied
+                  {line.amountPaidByThisPayment < line.amount ? ' · part payment' : ''}
+                </span>
+              )}
             </td>
             <td className={cn('py-1 text-right tabular-nums', paid && 'text-success')}>
               {formatCurrency(line.amount, 'NGN', { showDecimals: false })}

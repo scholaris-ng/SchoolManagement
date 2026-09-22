@@ -317,6 +317,11 @@ export class PaymentsService {
       else linesByInvoice.set(row.invoiceId, [row]);
     }
 
+    // This payment's own itemized breakdown, if the office named one when
+    // recording it — real money, unlike the cosmetic `paidLineIds` mark below.
+    const lineAllocations = await this.payments.lineAllocationsForPayment(context.schoolId, entity.id);
+    const paidByThisPayment = new Map(lineAllocations.map((row) => [row.invoiceLineId, row.amount]));
+
     // Money that arrived without being assigned to a bill still gets a
     // receipt: the family paid it, and "on account" is what it is for.
     const balanceAfter = payment.studentId
@@ -363,6 +368,7 @@ export class PaymentsService {
             isOptional: line.isOptional,
             amount: line.amount,
             paid: paidLineIds.has(line.id),
+            amountPaidByThisPayment: paidByThisPayment.get(line.id) ?? null,
           })),
         };
       }),
@@ -468,6 +474,9 @@ export class PaymentsService {
         input.allocations.map((row) => row.invoiceId),
       );
       this.assertAllocatable(input, invoices, student.id);
+      for (const allocation of input.allocations) {
+        await this.assertLineAllocatable(manager, context.schoolId, allocation);
+      }
 
       const created = await this.payments.create(
         {
@@ -648,18 +657,23 @@ export class PaymentsService {
    * Writes the allocation rows and re-derives each invoice's status from them.
    *
    * Shared by the desk and by Raven's auto-allocation so a bill reaches
-   * `PART_PAID` the same way however the money arrived.
+   * `PART_PAID` the same way however the money arrived. An allocation that
+   * named which of the invoice's own charges it paid for (`lines`) gets a
+   * `PaymentLineAllocation` row per charge, attached to the allocation the
+   * database just gave back an id for — `createAllocations` and
+   * `allocations` stay in the same order, which is what makes that pairing
+   * safe without a second round trip.
    */
   private async applyAllocations(
     manager: EntityManager,
     schoolId: string,
     paymentId: string,
-    allocations: { invoiceId: string; amount: number }[],
+    allocations: { invoiceId: string; amount: number; lines?: { lineId: string; amount: number }[] }[],
     userId: string | null,
   ): Promise<void> {
     if (allocations.length === 0) return;
 
-    await this.payments.createAllocations(
+    const allocationIds = await this.payments.createAllocations(
       allocations.map((row) => ({
         schoolId,
         paymentId,
@@ -669,6 +683,19 @@ export class PaymentsService {
       })),
       manager,
     );
+
+    const lineRows: { schoolId: string; paymentAllocationId: string; invoiceLineId: string; amount: string }[] = [];
+    allocations.forEach((row, index) => {
+      for (const line of row.lines ?? []) {
+        lineRows.push({
+          schoolId,
+          paymentAllocationId: allocationIds[index],
+          invoiceLineId: line.lineId,
+          amount: line.amount.toFixed(2),
+        });
+      }
+    });
+    await this.payments.createLineAllocations(lineRows, manager);
 
     for (const row of allocations) {
       await this.invoices.recalculateStatus(manager, row.invoiceId);
@@ -703,6 +730,47 @@ export class PaymentsService {
         throw AppError.validation(
           `That is more than is outstanding on invoice ${invoice.invoiceNo}.`,
         );
+      }
+    }
+  }
+
+  /**
+   * Whether an allocation's own itemized breakdown holds up, checked against
+   * that invoice's lines locked for this same transaction. Skipped entirely
+   * when the office named none — an allocation with no `lines` is money
+   * against the invoice as a whole, exactly as before this existed.
+   *
+   * The breakdown must sum to the allocation's own amount exactly: a partial,
+   * unexplained remainder would leave one of the invoice's charges with an
+   * ambiguous balance, so it is refused rather than guessed at.
+   */
+  private async assertLineAllocatable(
+    manager: EntityManager,
+    schoolId: string,
+    allocation: { invoiceId: string; amount: number; lines?: { lineId: string; amount: number }[] },
+  ): Promise<void> {
+    if (!allocation.lines || allocation.lines.length === 0) return;
+
+    const allocationKobo = Math.round(allocation.amount * MONEY_SCALE);
+    const lineTotalKobo = allocation.lines.reduce(
+      (sum, row) => sum + Math.round(row.amount * MONEY_SCALE),
+      0,
+    );
+    if (lineTotalKobo !== allocationKobo) {
+      throw AppError.validation(
+        'Those charges do not add up to the amount applied to that invoice.',
+      );
+    }
+
+    const lines = await this.invoices.lineBalances(manager, schoolId, allocation.invoiceId);
+    const byId = new Map(lines.map((line) => [line.id, line]));
+
+    for (const row of allocation.lines) {
+      const line = byId.get(row.lineId);
+      if (!line) throw AppError.validation('One of those charges is not on that invoice.');
+      const outstandingKobo = Math.round((line.lineTotal - line.paid) * MONEY_SCALE);
+      if (Math.round(row.amount * MONEY_SCALE) > outstandingKobo) {
+        throw AppError.validation('That is more than is outstanding on one of those charges.');
       }
     }
   }

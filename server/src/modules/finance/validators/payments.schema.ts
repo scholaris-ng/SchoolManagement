@@ -43,6 +43,14 @@ export const fetchPaymentsSchema = z.object({
  * empty is a real answer: money paid on account, which the office assigns to
  * an invoice later. The service is what checks the invoices belong to the same
  * student, are still open, and are not being over-paid.
+ *
+ * An allocation's own `lines`, when sent, says which of *that invoice's*
+ * charges the money was for — naming a specific fee item rather than the
+ * invoice as a whole. Optional: most allocations still send none, meaning the
+ * office paid the bill as a lump sum, same as before this existed. The
+ * service is what checks a `lines` breakdown sums to its allocation's amount
+ * and does not overpay any one charge — cross-field math a schema alone
+ * cannot enforce.
  */
 export const recordPaymentSchema = z.object({
   body: z
@@ -63,6 +71,21 @@ export const recordPaymentSchema = z.object({
             .object({
               invoiceId: z.string().uuid(),
               amount: z.coerce.number().positive('An allocation must be more than nothing'),
+              lines: z
+                .array(
+                  z
+                    .object({
+                      lineId: z.string().uuid(),
+                      amount: z.coerce.number().positive('A charge cannot be paid a negative amount'),
+                    })
+                    .strict(),
+                )
+                .max(50)
+                .optional()
+                .refine(
+                  (rows) => !rows || new Set(rows.map((row) => row.lineId)).size === rows.length,
+                  'The same charge appears twice — add the amounts together instead',
+                ),
             })
             .strict(),
         )

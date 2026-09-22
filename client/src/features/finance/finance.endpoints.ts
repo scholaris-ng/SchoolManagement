@@ -126,7 +126,12 @@ export interface RecordPaymentInput {
   method: PaymentMethod;
   paidAt: string;
   reference?: string;
-  allocations?: { invoiceId: string; amount: number }[];
+  allocations?: {
+    invoiceId: string;
+    amount: number;
+    /** Which of that invoice's own charges this money is for, when the office named one. */
+    lines?: { lineId: string; amount: number }[];
+  }[];
   note?: string;
 }
 

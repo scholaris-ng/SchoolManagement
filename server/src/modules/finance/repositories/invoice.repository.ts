@@ -222,16 +222,53 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
               'discountAmount', il.discount_amount::float,
               'lineTotal', il.line_total::float,
               'isOptional', il.is_optional,
-              'accounts', il.accounts
+              'accounts', il.accounts,
+              'amountPaid', COALESCE(lpd.paid, 0)::float,
+              'balance', (il.line_total - COALESCE(lpd.paid, 0))::float
             ) ORDER BY il.sort_order, il.description
           )
-          FROM invoice_lines il WHERE il.invoice_id = i.id
+          FROM invoice_lines il
+          LEFT JOIN LATERAL (
+            SELECT SUM(pla.amount) AS paid
+              FROM payment_line_allocations pla
+              JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+              JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+             WHERE pla.invoice_line_id = il.id
+          ) lpd ON TRUE
+          WHERE il.invoice_id = i.id
         ), '[]'::json) AS lines
        ${JOINS}
        WHERE i.school_id = $1 AND i.id = $2`,
       [schoolId, id],
     );
     return rows[0] ?? null;
+  }
+
+  /**
+   * Each of a locked invoice's lines with what has already been paid toward
+   * it — what `PaymentsService` checks an itemized allocation against before
+   * writing one. Read inside the same transaction that locked the invoice
+   * row (`lockForAllocation`), so it is race-free for the reason that lock
+   * already makes whole-invoice validation race-free.
+   */
+  async lineBalances(
+    manager: EntityManager,
+    schoolId: string,
+    invoiceId: string,
+  ): Promise<{ id: string; lineTotal: number; paid: number }[]> {
+    return manager.query(
+      `SELECT il.id, il.line_total::float AS "lineTotal", COALESCE(lpd.paid, 0)::float AS paid
+         FROM invoice_lines il
+         LEFT JOIN LATERAL (
+           SELECT SUM(pla.amount) AS paid
+             FROM payment_line_allocations pla
+             JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+             JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+            WHERE pla.invoice_line_id = il.id
+         ) lpd ON TRUE
+        WHERE il.school_id = $1 AND il.invoice_id = $2`,
+      [schoolId, invoiceId],
+    );
   }
 
   async findEntity(schoolId: string, id: string, manager?: EntityManager): Promise<Invoice | null> {

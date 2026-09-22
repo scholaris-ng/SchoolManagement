@@ -1461,7 +1461,13 @@ export async function buildReceiptPdfAttachment(params: {
     amount: number;
     /** The invoice's full total — larger than `amount` for a part-payment. */
     invoiceTotal: number;
-    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+    lines: Array<{
+      description: string;
+      isOptional: boolean;
+      amount: number;
+      /** What this payment actually applied to this charge, when itemized at record time. */
+      amountPaidByThisPayment?: number | null;
+    }>;
   }>;
   balanceAfter: number;
   verificationCode: string;
@@ -1546,6 +1552,14 @@ export async function buildReceiptPdfAttachment(params: {
             doc.fillColor(muted).fontSize(8).font('Helvetica').text(`${line.description}${line.isOptional ? ' (optional)' : ''}`, left + 18, y, { width: 260 });
             doc.fillColor(muted).fontSize(8).font('Helvetica').text(formatPdfCurrency(line.amount), left + 360, y, { width: 110, align: 'right' });
             y += 14;
+            if (line.amountPaidByThisPayment != null) {
+              if (y + 12 > pageBottom) {
+                doc.addPage();
+                y = 50;
+              }
+              doc.fillColor(muted).fontSize(7).font('Helvetica-Oblique').text(`${formatPdfCurrency(line.amountPaidByThisPayment)} applied`, left + 18, y, { width: 260 });
+              y += 12;
+            }
           }
         }
         y += 8;
@@ -1593,7 +1607,12 @@ export async function sendReceiptEmail(params: {
     amount: number;
     /** The invoice's full total — larger than `amount` for a part-payment. */
     invoiceTotal: number;
-    lines: Array<{ description: string; isOptional: boolean; amount: number }>;
+    lines: Array<{
+      description: string;
+      isOptional: boolean;
+      amount: number;
+      amountPaidByThisPayment?: number | null;
+    }>;
   }>;
   balanceAfter: number;
   verificationCode: string;

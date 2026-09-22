@@ -200,6 +200,14 @@ export interface InvoiceLineDTO {
   isOptional: boolean;
   /** Where to pay this charge, snapshotted from the selected accounts when it was billed. */
   accounts: InvoiceLineAccountDTO[];
+  /**
+   * What has actually been paid toward this one charge, not the invoice as a
+   * whole — the sum of whatever `payment_line_allocations` name it, for
+   * `SUCCESSFUL` payments only. Zero for most lines: itemizing a payment down
+   * to a specific charge is something the office opts into, not the default.
+   */
+  amountPaid: number;
+  balance: number;
 }
 
 /**
@@ -349,6 +357,12 @@ export interface ReceiptDTO {
       amount: number;
       /** Whether the office has marked this line as covered by this payment. */
       paid: boolean;
+      /**
+       * What *this* payment actually put towards this charge, if the office
+       * named one when recording it — real money, unlike `paid` above. `null`
+       * for a payment that settled the invoice as a lump sum.
+       */
+      amountPaidByThisPayment: number | null;
     }[];
   }[];
   balanceAfter: number;

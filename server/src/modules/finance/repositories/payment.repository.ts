@@ -6,6 +6,7 @@ import { DEFAULT_TIMEZONE } from '../../../shared/utils/timezone';
 import { Payment } from '../entities/payment.entity';
 import { PaymentAccount } from '../entities/paymentAccount.entity';
 import { PaymentAllocation } from '../entities/paymentAllocation.entity';
+import { PaymentLineAllocation } from '../entities/paymentLineAllocation.entity';
 import type { PaymentAccountDTO, PaymentDTO } from '../dto/finance.dto';
 
 /**
@@ -110,6 +111,7 @@ export class PaymentRepository extends TenantRepository<Payment> {
 
   private readonly accounts = this.repo.manager.getRepository(PaymentAccount);
   private readonly allocations = this.repo.manager.getRepository(PaymentAllocation);
+  private readonly lineAllocations = this.repo.manager.getRepository(PaymentLineAllocation);
 
   private constructor() {
     super(Payment, 'payment');
@@ -179,13 +181,49 @@ export class PaymentRepository extends TenantRepository<Payment> {
     return repo.save(repo.create(data));
   }
 
+  /**
+   * Returns the new rows' ids in the same order as `rows`, so a caller
+   * writing a per-line breakdown alongside one of these can attach it to the
+   * right parent — the same `insert().identifiers` pattern
+   * `InvoiceRepository.createMany` uses for the same reason.
+   */
   async createAllocations(
     rows: DeepPartial<PaymentAllocation>[],
     manager?: EntityManager,
+  ): Promise<string[]> {
+    if (rows.length === 0) return [];
+    const repo = manager ? manager.getRepository(PaymentAllocation) : this.allocations;
+    const result = await repo.insert(rows as never);
+    return result.identifiers.map((row) => String(row.id));
+  }
+
+  /** The itemized breakdown of an allocation, when the office named one — see `PaymentLineAllocation`. */
+  async createLineAllocations(
+    rows: DeepPartial<PaymentLineAllocation>[],
+    manager?: EntityManager,
   ): Promise<void> {
     if (rows.length === 0) return;
-    const repo = manager ? manager.getRepository(PaymentAllocation) : this.allocations;
+    const repo = manager ? manager.getRepository(PaymentLineAllocation) : this.lineAllocations;
     await repo.insert(rows as never);
+  }
+
+  /**
+   * This payment's own itemized breakdown, per invoice — what `fetchReceipt`
+   * shows as the real amount applied to each charge, alongside the cosmetic
+   * `paidLineIds` mark. Empty for a payment that settled its invoice(s) as a
+   * lump sum.
+   */
+  async lineAllocationsForPayment(
+    schoolId: string,
+    paymentId: string,
+  ): Promise<{ invoiceLineId: string; amount: number }[]> {
+    return this.repo.query(
+      `SELECT pla.invoice_line_id AS "invoiceLineId", pla.amount::float AS amount
+         FROM payment_line_allocations pla
+         JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+        WHERE pla.school_id = $1 AND pa.payment_id = $2`,
+      [schoolId, paymentId],
+    );
   }
 
   /**
