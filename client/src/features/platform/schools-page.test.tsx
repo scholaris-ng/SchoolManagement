@@ -29,6 +29,7 @@ const school = (over: Partial<PlatformSchool> = {}): PlatformSchool => ({
   daysLeft: 10,
   lastActivatedAt: null,
   lastActivatedBy: null,
+  smsCredits: 0,
   createdAt: '2026-09-01T09:00:00.000Z',
   ...over,
 });
