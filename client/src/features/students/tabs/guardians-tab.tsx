@@ -20,6 +20,7 @@ import {
 import type { StudentGuardianLink } from '@/types/people';
 import { Card, CardContent, Badge, Avatar } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { ConfirmDialog, Sheet } from '@/components/ui/dialog';
 import { CheckboxField, SelectField } from '@/components/forms/form-field';
@@ -124,24 +125,28 @@ export function StudentGuardiansTab({ studentId }: { studentId: string }) {
                   </div>
                   <PermissionGate require="guardian.manage">
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        data-cy={`student-guardian-edit-${link.id}`}
-                        onClick={() => setEditingLink(link)}
-                        aria-label={`Edit ${link.guardianName}'s role`}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        data-cy={`student-guardian-unlink-${link.id}`}
-                        onClick={() => setPendingUnlink(link.id)}
-                        aria-label={`Unlink ${link.guardianName}`}
-                      >
-                        <Unlink />
-                      </Button>
+                      <Tooltip content="Edit relationship & responsibilities">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          data-cy={`student-guardian-edit-${link.id}`}
+                          onClick={() => setEditingLink(link)}
+                          aria-label={`Edit ${link.guardianName}'s role`}
+                        >
+                          <Pencil />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Unlink guardian">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          data-cy={`student-guardian-unlink-${link.id}`}
+                          onClick={() => setPendingUnlink(link.id)}
+                          aria-label={`Unlink ${link.guardianName}`}
+                        >
+                          <Unlink />
+                        </Button>
+                      </Tooltip>
                     </div>
                   </PermissionGate>
                 </div>
