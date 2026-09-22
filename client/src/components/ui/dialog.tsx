@@ -32,7 +32,11 @@ export const DialogContent = forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-popover data-[state=open]:animate-slide-up',
+          // `dvh`, not `vh`: on a phone, `vh` counts space the browser's own
+          // address bar can be hiding, so a modal sized off it can be taller
+          // than what is actually visible — pushing the footer's buttons
+          // below the fold even though this box measures under 92% "tall".
+          'fixed left-1/2 top-1/2 z-50 flex max-h-[92dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-popover data-[state=open]:animate-slide-up',
           sizeClasses[size],
           className,
         )}

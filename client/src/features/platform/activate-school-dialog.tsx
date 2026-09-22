@@ -63,6 +63,7 @@ export function ActivateSchoolDialog({
     <Dialog open={school !== null} onOpenChange={onOpenChange}>
       <DialogContent size="sm" data-cy="platform-activate-dialog">
         <form
+          className="contents"
           onSubmit={(event) => {
             event.preventDefault();
             if (valid && !loading) void onConfirm(months);

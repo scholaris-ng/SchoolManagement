@@ -53,6 +53,10 @@ const TIMEZONES = [
 export function SchoolSettingsPage() {
   const school = useSchool();
   const update = useUpdateSchool();
+  // A second, independent mutation instance for toggles: sharing `update`
+  // would make its `isPending` flicker the "Save changes" button's spinner
+  // for a save the administrator never asked for.
+  const toggleSave = useUpdateSchool();
   const smsStatus = useSmsStatus();
 
   const [draft, setDraft] = useState<Partial<School> | null>(null);
@@ -60,11 +64,15 @@ export function SchoolSettingsPage() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (school.data) {
+    // Guarded by `dirty`: a toggle's own autosave (see `saveToggle` below)
+    // refreshes `school.data` in the background, and this effect must not
+    // clobber an edit still in progress elsewhere on the form when that
+    // happens — only an untouched draft is safe to replace wholesale.
+    if (school.data && !dirty) {
       setDraft(school.data);
       setDirty(false);
     }
-  }, [school.data]);
+  }, [school.data, dirty]);
 
   const headerBreadcrumbs = [{ label: 'Administration' }, { label: 'School settings' }];
 
@@ -113,6 +121,34 @@ export function SchoolSettingsPage() {
       settings: { ...(current?.settings as School['settings']), ...patch },
     }));
     setDirty(true);
+  };
+
+  /**
+   * A toggle saves itself the instant it is flipped, rather than waiting on
+   * "Save changes" — a school administrator switching birthday texts on has
+   * no reason to expect a second step, and the previous behaviour of quietly
+   * discarding the flip if they navigated away without saving is exactly the
+   * bug this replaces.
+   *
+   * Deliberately outside the `dirty` draft: it patches and requests only the
+   * one key changed, under whatever version the server currently holds, so a
+   * genuinely unsaved edit sitting elsewhere in the form (the school name,
+   * say) is left alone and still requires its own "Save changes".
+   */
+  const saveToggle = (patch: Partial<School['settings']>) => {
+    const previousSettings = draft.settings;
+    setDraft((current) => ({
+      ...current,
+      settings: { ...(current?.settings as School['settings']), ...patch },
+    }));
+    toggleSave.mutate(
+      { values: { settings: patch }, version: school.data?.version ?? 0 },
+      {
+        onError: () => {
+          setDraft((current) => ({ ...current, settings: previousSettings }));
+        },
+      },
+    );
   };
 
   const save = async () => {
@@ -452,13 +488,15 @@ export function SchoolSettingsPage() {
               label="Require photo consent"
               description="Student photographs are hidden from the public website, the news feed and printed documents unless a guardian has consented. Strongly recommended."
               checked={draft.settings?.requirePhotoConsent ?? true}
-              onChange={(value) => setSettings({ requirePhotoConsent: value })}
+              onChange={(value) => saveToggle({ requirePhotoConsent: value })}
+              saving={toggleSave.isPending}
             />
             <Toggle
               label="Same-day absence alerts"
               description="Notify a guardian the first time their child is marked absent without explanation."
               checked={draft.settings?.absenceAlertEnabled ?? true}
-              onChange={(value) => setSettings({ absenceAlertEnabled: value })}
+              onChange={(value) => saveToggle({ absenceAlertEnabled: value })}
+              saving={toggleSave.isPending}
             />
             {draft.settings?.absenceAlertEnabled && (
               <div className="pl-1 pt-2">
@@ -476,13 +514,15 @@ export function SchoolSettingsPage() {
             <Toggle
               label="Notify parents when results are published"
               checked={draft.settings?.resultPublishNotification ?? true}
-              onChange={(value) => setSettings({ resultPublishNotification: value })}
+              onChange={(value) => saveToggle({ resultPublishNotification: value })}
+              saving={toggleSave.isPending}
             />
             <Toggle
               label="Allow parent–teacher messaging"
               description="Parents can start a conversation with staff connected to their own children."
               checked={draft.settings?.allowParentTeacherMessaging ?? true}
-              onChange={(value) => setSettings({ allowParentTeacherMessaging: value })}
+              onChange={(value) => saveToggle({ allowParentTeacherMessaging: value })}
+              saving={toggleSave.isPending}
             />
 
             {draft.settings?.requirePhotoConsent === false && (
@@ -498,6 +538,8 @@ export function SchoolSettingsPage() {
           school={{ name: draft.name ?? '', shortName: draft.shortName ?? '' }}
           settings={draft.settings}
           onChange={setSettings}
+          onToggleEnabled={(value) => saveToggle({ birthdaySmsEnabled: value })}
+          togglingEnabled={toggleSave.isPending}
         />
       </div>
     </PageContainer>

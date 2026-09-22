@@ -108,7 +108,7 @@ export function ChangePasswordDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm" data-cy="change-password-dialog">
-        <form onSubmit={onSubmit} noValidate>
+        <form onSubmit={onSubmit} noValidate className="contents">
           <DialogHeader>
             <DialogTitle>Change your password</DialogTitle>
             <DialogDescription>

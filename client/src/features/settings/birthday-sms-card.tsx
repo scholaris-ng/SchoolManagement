@@ -67,11 +67,16 @@ export function BirthdaySmsCard({
   school,
   settings,
   onChange,
+  onToggleEnabled,
+  togglingEnabled,
 }: {
   /** For the preview, so it reads with the school's real name. */
   school: Pick<School, 'name' | 'shortName'>;
   settings: Partial<School['settings']> | undefined;
   onChange: (patch: Partial<School['settings']>) => void;
+  /** Flips and saves the on/off switch immediately — unlike the rest of the card, which waits for "Save changes". */
+  onToggleEnabled: (value: boolean) => void;
+  togglingEnabled?: boolean;
 }) {
   const { can } = useAuth();
   const enabled = settings?.birthdaySmsEnabled ?? false;
@@ -155,7 +160,8 @@ export function BirthdaySmsCard({
           label="Send birthday text messages"
           description="Every active pupil whose birthday it is, once a day, to their primary contact's number."
           checked={enabled}
-          onChange={(value) => onChange({ birthdaySmsEnabled: value })}
+          onChange={onToggleEnabled}
+          saving={togglingEnabled}
         />
 
         {enabled && (

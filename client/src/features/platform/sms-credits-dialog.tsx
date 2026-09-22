@@ -76,6 +76,7 @@ export function SmsCreditsDialog({
     <Dialog open={school !== null} onOpenChange={onOpenChange}>
       <DialogContent size="md" data-cy="platform-sms-credits-dialog">
         <form
+          className="contents"
           onSubmit={(event) => {
             event.preventDefault();
             if (valid && !loading) void onConfirm(amount, note.trim());

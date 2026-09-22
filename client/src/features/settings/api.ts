@@ -2,11 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
-import type { School } from '@/types/tenant';
 import type { WebsiteContent } from '@/types/engagement';
 import type { ListQuery } from '@/types/api';
 import { SettingsEndpoints } from './settings.endpoints';
-import type { SaveRoleInput } from './settings.endpoints';
+import type { SaveRoleInput, SchoolUpdatePatch } from './settings.endpoints';
 
 export type { SaveRoleInput };
 
@@ -26,7 +25,7 @@ export function useUpdateSchool() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ values, version }: { values: Partial<School>; version: number }) =>
+    mutationFn: ({ values, version }: { values: SchoolUpdatePatch; version: number }) =>
       SettingsEndpoints.updateSchool(values, version),
     onSuccess: (school) => {
       queryClient.setQueryData(queryKeys.school.detail(schoolId), school);

@@ -53,11 +53,14 @@ export function Toggle({
   description,
   checked,
   onChange,
+  saving,
 }: {
   label: string;
   description?: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  /** Shows a quiet "Saving…" note beside the switch while a save it triggered is in flight. */
+  saving?: boolean;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-border py-3 last:border-0">
@@ -65,12 +68,16 @@ export function Toggle({
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
-      <Switch
-        data-cy={`toggle-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-        checked={checked}
-        onCheckedChange={onChange}
-        aria-label={label}
-      />
+      <div className="flex shrink-0 items-center gap-2">
+        {saving && <span className="text-xs text-muted-foreground">Saving…</span>}
+        <Switch
+          data-cy={`toggle-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+          checked={checked}
+          onCheckedChange={onChange}
+          disabled={saving}
+          aria-label={label}
+        />
+      </div>
     </div>
   );
 }

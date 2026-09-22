@@ -83,7 +83,7 @@ export function ConvertApplicantDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={onSubmit} noValidate>
+        <form onSubmit={onSubmit} noValidate className="contents">
           <DialogBody className="space-y-4">
             <FormError error={convert.error} />
 

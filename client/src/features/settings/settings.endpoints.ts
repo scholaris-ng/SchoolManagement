@@ -17,6 +17,18 @@ export interface SaveRoleInput {
 }
 
 /**
+ * What `PATCH /schools/current` actually accepts: the server deep-merges
+ * `settings` and `branding` into the existing row rather than replacing them
+ * (see `SchoolService.updateCurrent`), so a caller may send just the one key
+ * it means to change — a toggle's autosave does exactly that, deliberately
+ * leaving out whatever else `Partial<School>` would otherwise require in full.
+ */
+export type SchoolUpdatePatch = Omit<Partial<School>, 'settings' | 'branding'> & {
+  settings?: Partial<School['settings']>;
+  branding?: Partial<School['branding']>;
+};
+
+/**
  * Endpoint layer for school settings, roles, the public website and the audit
  * log. The `version` argument travels as `If-Match`: two administrators editing
  * branding at the same time must not silently overwrite one another (spec §34).
@@ -24,7 +36,7 @@ export interface SaveRoleInput {
 export const SettingsEndpoints = {
   fetchSchool: () => http.get<School>('/schools/current'),
 
-  updateSchool: (values: Partial<School>, version: number) =>
+  updateSchool: (values: SchoolUpdatePatch, version: number) =>
     http.patch<School>('/schools/current', values, { version }),
 
   fetchRoles: () => http.get<Role[]>('/roles'),
