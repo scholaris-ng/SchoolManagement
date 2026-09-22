@@ -92,3 +92,66 @@ export function useAuditLog(query: ListQuery) {
     enabled: Boolean(schoolId),
   });
 }
+
+// ─── Outbound SMS ─────────────────────────────────────────────────────────────
+
+/**
+ * Whether the server can send texts at all, and the credit left. Asked only
+ * when the birthday card is open (`enabled`): it costs a round trip to the
+ * SMS provider, which nobody needs when they came to change the school colour.
+ */
+export function useSmsStatus(enabled = true) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.school.smsStatus(schoolId),
+    queryFn: () => SettingsEndpoints.fetchSmsStatus(),
+    enabled: Boolean(schoolId) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useRunBirthdayGreetings() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => SettingsEndpoints.runBirthdayGreetings(),
+    onSuccess: (summary) => {
+      // Credit was spent, so the balance shown on the card is stale.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.school.smsStatus(schoolId) });
+      if (summary.skippedReason === 'SMS_NOT_CONFIGURED') {
+        toast.error('Text messaging is not available right now, so nothing was sent.');
+      } else if (summary.skippedReason === 'NO_CREDIT') {
+        toast.error('The school has no SMS credit left, so nothing was sent.', {
+          description: `${summary.noCredit} pupil${summary.noCredit === 1 ? ' is' : 's are'} waiting to be greeted. Ask the platform administrator to top up.`,
+        });
+      } else if (summary.celebrants === 0) {
+        toast.info('No pupil has a birthday today.');
+      } else {
+        const notSent = summary.failed + summary.noRecipient + summary.noCredit;
+        toast.success(
+          `${summary.sent} birthday message${summary.sent === 1 ? '' : 's'} sent` +
+            (summary.alreadySent > 0 ? `, ${summary.alreadySent} already sent today` : '') +
+            (notSent > 0 ? `, ${notSent} not sent` : '') +
+            '.',
+          summary.noCredit > 0
+            ? { description: `Credit ran out part way: ${summary.noCredit} not sent. They go once the balance is topped up.` }
+            : undefined,
+        );
+      }
+    },
+  });
+}
+
+export function useSendTestSms() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: { to: string; message: string }) => SettingsEndpoints.sendTestSms(values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.school.smsStatus(schoolId) });
+      toast.success('Test message sent');
+    },
+  });
+}

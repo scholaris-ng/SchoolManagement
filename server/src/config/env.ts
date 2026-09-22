@@ -107,6 +107,30 @@ const schema = z.object({
   RAVEN_SECRET_KEY: z.string().optional(),
   RAVEN_WEBHOOK_SECRET: z.string().optional(),
   RAVEN_BASE_URL: z.string().url().default('https://integrations.getravenbank.com/v1'),
+
+  // KudiSMS (kudisms.net) — outbound SMS: birthday greetings today, whatever
+  // else wants a text message tomorrow. The API key is from the dashboard
+  // (Developer → API Key); the sender ID must be one KudiSMS has approved for
+  // the account, or every send is refused with error 106/188. Without both,
+  // nothing sends — see `shared/sms/router.ts`.
+  KUDISMS_API_KEY: z.string().optional(),
+  KUDISMS_SENDER_ID: z.string().max(11).optional(),
+  /** Optional route. Left unset, KudiSMS picks its default gateway. */
+  KUDISMS_GATEWAY: z.string().optional(),
+  KUDISMS_BASE_URL: z.string().url().default('https://my.kudisms.net/api'),
+  /**
+   * What the platform charges a school per SMS page, in naira. Credit is
+   * stored in pages, so changing this re-prices future top-ups only — a school
+   * that bought 625 pages keeps 625 pages.
+   */
+  SMS_UNIT_PRICE_NGN: z.coerce.number().positive().default(8),
+
+  /**
+   * The in-process job runner (`infrastructure/scheduler`). Off in tests, and
+   * to be turned off on every instance but one if this API is ever scaled out —
+   * two schedulers would race each other for the same jobs.
+   */
+  SCHEDULER_ENABLED: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -221,6 +245,27 @@ export const env = {
     baseUrl: raw.RAVEN_BASE_URL,
     /** Without a secret key there is nothing to call Raven with. */
     configured: Boolean(raw.RAVEN_SECRET_KEY),
+  },
+
+  sms: {
+    kudisms: {
+      apiKey: raw.KUDISMS_API_KEY,
+      senderId: raw.KUDISMS_SENDER_ID,
+      gateway: raw.KUDISMS_GATEWAY,
+      baseUrl: raw.KUDISMS_BASE_URL.replace(/\/+$/, ''),
+      /** Both are needed: the key to authenticate, the sender ID to send as. */
+      configured: Boolean(raw.KUDISMS_API_KEY && raw.KUDISMS_SENDER_ID),
+    },
+    /** Naira per SMS page, as charged to schools. */
+    unitPriceNgn: raw.SMS_UNIT_PRICE_NGN,
+  },
+
+  scheduler: {
+    /** Defaults on, except under test; `SCHEDULER_ENABLED=false` turns it off anywhere. */
+    enabled:
+      raw.SCHEDULER_ENABLED === undefined
+        ? raw.NODE_ENV !== 'test'
+        : raw.SCHEDULER_ENABLED === 'true' || raw.SCHEDULER_ENABLED === '1',
   },
 } as const;
 

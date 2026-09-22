@@ -65,6 +65,18 @@ services:
       - key: RAVEN_WEBHOOK_SECRET
         sync: false
 
+      # --- Outbound SMS via KudiSMS (optional) ------------------------------
+      # Birthday greetings and any other text message. Without both, messages
+      # are logged as failed and nothing is sent — see server/.env.example.
+      - key: KUDISMS_API_KEY
+        sync: false
+      - key: KUDISMS_SENDER_ID
+        sync: false
+      # One web instance runs the in-process scheduler. Set to "false" on any
+      # extra instance if this service is ever scaled out.
+      - key: SCHEDULER_ENABLED
+        value: "true"
+
       # --- Subscriptions ----------------------------------------------------
       # Comma-separated emails of the people who may activate a school after its
       # 14-day trial. Left empty, nobody can and schools stay locked.

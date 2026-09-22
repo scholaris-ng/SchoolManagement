@@ -8,6 +8,8 @@ export const peopleKeys = {
     branches: (schoolId: Scope) => scoped(schoolId, 'branches'),
     settings: (schoolId: Scope) => scoped(schoolId, 'settings'),
     website: (schoolId: Scope) => scoped(schoolId, 'website'),
+    /** Whether an SMS provider is configured, and the credit left on it. */
+    smsStatus: (schoolId: Scope) => scoped(schoolId, 'sms-status'),
   },
 
   academics: {

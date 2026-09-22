@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Building2, CalendarPlus, Search } from 'lucide-react';
-import { formatDate } from '@/lib/format';
-import type { PlatformSchool } from '@/types/platform';
+import { Building2, CalendarPlus, MessageSquare, MessageSquarePlus, Search } from 'lucide-react';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
+import type { PlatformSchool, PlatformSmsStatus } from '@/types/platform';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,77 @@ import { Input } from '@/components/ui/input';
 import { DataTable, type Column } from '@/components/data/data-table';
 import { WARN_WITHIN_DAYS } from '@/features/subscription/school-access';
 import { ActivateSchoolDialog } from './activate-school-dialog';
-import { useActivateSchool, usePlatformSchools } from './use-platform-schools';
+import { SmsCreditsDialog } from './sms-credits-dialog';
+import {
+  useActivateSchool,
+  usePlatformSchools,
+  usePlatformSmsStatus,
+  useTopUpSmsCredits,
+} from './use-platform-schools';
 
 const plural = (n: number) => `${n} day${n === 1 ? '' : 's'}`;
+
+/**
+ * The platform's own SMS position: what the KudiSMS account holds against what
+ * has been promised to schools. When the second exceeds the first, the next
+ * top-up of the gateway is overdue — messages will start failing at the
+ * gateway with "insufficient credit" while schools still show a balance.
+ */
+function SmsGatewayStrip({
+  status,
+  loading,
+}: {
+  status: PlatformSmsStatus | undefined;
+  loading: boolean;
+}) {
+  if (loading || !status) return null;
+
+  const short =
+    status.gatewayBalance !== null && status.gatewayBalance < status.promisedCredits;
+
+  return (
+    <div
+      data-cy="platform-sms-gateway"
+      className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-4 py-2.5 text-sm ${
+        short ? 'border-danger/30 bg-danger-subtle' : 'border-border bg-card'
+      }`}
+    >
+      <span className="flex items-center gap-2 font-medium">
+        <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
+        SMS gateway
+      </span>
+      {!status.configured ? (
+        <span className="text-muted-foreground">
+          Not configured — set {status.missing.join(' and ')} in the API's .env and restart it.
+        </span>
+      ) : (
+        <>
+          <span>
+            <span className="text-muted-foreground">{status.provider} balance: </span>
+            <span className={`font-semibold tabular-nums ${short ? 'text-danger' : ''}`}>
+              {status.gatewayBalance === null ? 'unavailable' : formatNumber(status.gatewayBalance)}
+            </span>
+            {status.gatewayError && (
+              <span className="text-xs text-muted-foreground"> ({status.gatewayError})</span>
+            )}
+          </span>
+          <span>
+            <span className="text-muted-foreground">Promised to schools: </span>
+            <span className="font-semibold tabular-nums">{formatNumber(status.promisedCredits)}</span>
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Sending as {status.senderId} · schools pay {formatCurrency(status.unitPriceNgn, 'NGN', { showDecimals: false })}/SMS
+          </span>
+          {short && (
+            <span className="text-xs font-medium text-danger">
+              Gateway holds less than schools have been given — top up KudiSMS.
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 /** What the school's row says about where it stands, in the order an administrator scans for it. */
 function statusOf(school: PlatformSchool): { label: string; tone: 'danger' | 'warning' | 'info' | 'success' } {
@@ -36,8 +104,11 @@ function sinceOrUntil(school: PlatformSchool): string {
 export function PlatformSchoolsPage() {
   const schools = usePlatformSchools();
   const activate = useActivateSchool();
+  const topUp = useTopUpSmsCredits();
+  const smsStatus = usePlatformSmsStatus();
   const [search, setSearch] = useState('');
   const [target, setTarget] = useState<PlatformSchool | null>(null);
+  const [creditTarget, setCreditTarget] = useState<PlatformSchool | null>(null);
 
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -118,19 +189,48 @@ export function PlatformSchoolsPage() {
         ),
     },
     {
+      id: 'sms',
+      header: 'SMS credit',
+      align: 'right',
+      cell: (school) => (
+        <div className="text-right">
+          <p className={`text-sm tabular-nums ${school.smsCredits === 0 ? 'text-danger' : ''}`}>
+            {formatNumber(school.smsCredits)} SMS
+          </p>
+          {smsStatus.data && (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {formatCurrency(school.smsCredits * smsStatus.data.unitPriceNgn, 'NGN', { showDecimals: false })}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
       id: 'actions',
       header: <span className="sr-only">Actions</span>,
       align: 'right',
       cell: (school) => (
-        <Button
-          size="sm"
-          variant={school.expired ? 'primary' : 'outline'}
-          data-cy="platform-activate"
-          onClick={() => setTarget(school)}
-        >
-          <CalendarPlus aria-hidden="true" />
-          Activate
-        </Button>
+        <div className="flex justify-end gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            data-cy="platform-sms-credits"
+            onClick={() => setCreditTarget(school)}
+            title="Add SMS credit"
+          >
+            <MessageSquarePlus aria-hidden="true" />
+            Top up
+          </Button>
+          <Button
+            size="sm"
+            variant={school.expired ? 'primary' : 'outline'}
+            data-cy="platform-activate"
+            onClick={() => setTarget(school)}
+          >
+            <CalendarPlus aria-hidden="true" />
+            Activate
+          </Button>
+        </div>
       ),
     },
   ];
@@ -139,7 +239,7 @@ export function PlatformSchoolsPage() {
     <PageContainer>
       <PageHeader
         title="Schools"
-        description="Every school on the platform. A school locks when its 14-day trial or its paid month ends; activating one gives it as many months as you choose."
+        description="Every school on the platform. A school locks when its 14-day trial or its paid month ends; activating one gives it as many months as you choose. SMS credit is prepaid per school and topped up here once it has been paid for."
         breadcrumbs={[{ label: 'Platform' }, { label: 'Schools' }]}
         meta={
           schools.data ? (
@@ -147,10 +247,18 @@ export function PlatformSchoolsPage() {
               <Badge tone="neutral">{counts.total} schools</Badge>
               {counts.locked > 0 && <Badge tone="danger">{counts.locked} locked</Badge>}
               {counts.trial > 0 && <Badge tone="info">{counts.trial} on trial</Badge>}
+              {smsStatus.data && (
+                <Badge tone="primary" title="Unused SMS credit across every school, and what it was sold for">
+                  {formatNumber(smsStatus.data.promisedCredits)} SMS out ·{' '}
+                  {formatCurrency(smsStatus.data.promisedCredits * smsStatus.data.unitPriceNgn, 'NGN', { showDecimals: false })}
+                </Badge>
+              )}
             </>
           ) : undefined
         }
       />
+
+      <SmsGatewayStrip status={smsStatus.data} loading={smsStatus.isPending} />
 
       <DataTable
         data-cy="platform-schools"
@@ -190,6 +298,19 @@ export function PlatformSchoolsPage() {
           if (!target) return;
           await activate.mutateAsync({ schoolId: target.id, months });
           setTarget(null);
+        }}
+      />
+
+      <SmsCreditsDialog
+        school={creditTarget}
+        loading={topUp.isPending}
+        onOpenChange={(open) => {
+          if (!open) setCreditTarget(null);
+        }}
+        onConfirm={async (amountNgn, note) => {
+          if (!creditTarget) return;
+          await topUp.mutateAsync({ schoolId: creditTarget.id, amountNgn, note: note || undefined });
+          setCreditTarget(null);
         }}
       />
     </PageContainer>

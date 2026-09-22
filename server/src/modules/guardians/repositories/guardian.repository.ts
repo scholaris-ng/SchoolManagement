@@ -6,6 +6,19 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { Guardian } from '../entities/guardian.entity';
 import { StudentGuardian } from '../entities/studentGuardian.entity';
 import type { GuardianDTO, StudentGuardianLinkDTO } from '../dto/guardians.dto';
+import type { GuardianRelationship } from '../entities/studentGuardian.entity';
+
+/** A guardian as a message recipient: name, numbers, and their standing with one child. */
+export interface GuardianContact {
+  id: string;
+  title: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  altPhone: string | null;
+  relationship: GuardianRelationship;
+  isPrimaryContact: boolean;
+}
 
 const PROJECTION = `
   g.id, g.school_id AS "schoolId", g.user_id AS "userId", g.title,
@@ -207,6 +220,38 @@ export class GuardianRepository extends TenantRepository<Guardian> {
       ordered.map((link) => this.findByIdScoped(schoolId, link.guardianId)),
     );
     return guardians.filter((guardian): guardian is Guardian => guardian !== null);
+  }
+
+  /**
+   * The guardians of many pupils in one query, grouped by pupil and in the
+   * order a message should be offered to them — primary contact first, then
+   * whoever pays, then the rest. For a job that texts every celebrant of the
+   * day, rather than one lookup per child.
+   */
+  async findContactsForStudents(
+    schoolId: string,
+    studentIds: string[],
+  ): Promise<Map<string, GuardianContact[]>> {
+    const grouped = new Map<string, GuardianContact[]>();
+    if (studentIds.length === 0) return grouped;
+
+    const rows: (GuardianContact & { studentId: string })[] = await this.repo.query(
+      `SELECT sg.student_id AS "studentId", g.id, g.title, g.first_name AS "firstName",
+              g.last_name AS "lastName", g.phone, g.alt_phone AS "altPhone", sg.relationship,
+              sg.is_primary_contact AS "isPrimaryContact"
+         FROM student_guardians sg
+         JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+        WHERE sg.school_id = $1 AND sg.student_id = ANY($2::uuid[])
+        ORDER BY sg.is_primary_contact DESC, sg.is_financially_responsible DESC,
+                 g.first_name ASC, g.last_name ASC`,
+      [schoolId, studentIds],
+    );
+    for (const { studentId, ...contact } of rows) {
+      const list = grouped.get(studentId) ?? [];
+      list.push(contact);
+      grouped.set(studentId, list);
+    }
+    return grouped;
   }
 
   async linksForGuardian(schoolId: string, guardianId: string): Promise<StudentGuardianLinkDTO[]> {

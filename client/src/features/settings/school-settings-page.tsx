@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { City, Country, State } from 'country-state-city';
-import { useSchool, useUpdateSchool } from './api';
+import { useSchool, useSmsStatus, useUpdateSchool } from './api';
 import { isApiError } from '@/lib/api-error';
 import type { School } from '@/types/tenant';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -16,9 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Select } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { Badge } from '@/components/ui/primitives';
+import { formatCurrency } from '@/lib/format';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SettingsTabs } from './settings-tabs';
 import { Field, PhoneField, Toggle } from './school-settings-page-parts';
+import { BirthdaySmsCard } from './birthday-sms-card';
 import { validateSchoolDraft } from './school-settings.schema';
 
 const COUNTRIES = Country.getAllCountries();
@@ -50,6 +53,7 @@ const TIMEZONES = [
 export function SchoolSettingsPage() {
   const school = useSchool();
   const update = useUpdateSchool();
+  const smsStatus = useSmsStatus();
 
   const [draft, setDraft] = useState<Partial<School> | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -158,6 +162,18 @@ export function SchoolSettingsPage() {
         title="School settings"
         description="Your school's identity, branding and the policies that shape how the product behaves."
         breadcrumbs={headerBreadcrumbs}
+        meta={
+          smsStatus.data ? (
+            <Badge
+              tone={smsStatus.data.credits === 0 ? 'danger' : 'primary'}
+              data-cy="settings-sms-credits"
+              title="Prepaid SMS credit for birthday messages and other texts"
+            >
+              {smsStatus.data.credits.toLocaleString()} SMS credit ·{' '}
+              {formatCurrency(smsStatus.data.credits * smsStatus.data.unitPriceNgn, 'NGN', { showDecimals: false })}
+            </Badge>
+          ) : undefined
+        }
         actions={
           <Button data-cy="settings-school-settings-save-changes" onClick={() => void save()} loading={update.isPending} disabled={!dirty}>
             <Save />
@@ -477,6 +493,12 @@ export function SchoolSettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <BirthdaySmsCard
+          school={{ name: draft.name ?? '', shortName: draft.shortName ?? '' }}
+          settings={draft.settings}
+          onChange={setSettings}
+        />
       </div>
     </PageContainer>
   );

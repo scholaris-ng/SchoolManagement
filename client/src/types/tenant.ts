@@ -20,6 +20,12 @@ export interface SchoolSettings {
   absenceAlertCutoff: string; // HH:mm local time
   resultPublishNotification: boolean;
   allowParentTeacherMessaging: boolean;
+  /** Birthday SMS to a guardian on the day. Absent on older schools, which reads as off. */
+  birthdaySmsEnabled?: boolean;
+  /** `HH:mm`, school-local. Absent means 08:00. */
+  birthdaySmsSendTime?: string;
+  /** `{firstName}`-style placeholders; null means the server default wording. */
+  birthdaySmsTemplate?: string | null;
 }
 
 export interface School {

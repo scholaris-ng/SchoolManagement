@@ -3,7 +3,11 @@ import { authMiddleware } from '../../../shared/middleware/auth.middleware';
 import { subscriptionAdminMiddleware } from '../../../shared/middleware/subscriptionAdmin.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { PlatformSchoolsController } from '../controllers/platformSchools.controller';
-import { activateSchoolSchema } from '../validators/platform.schema';
+import {
+  activateSchoolSchema,
+  schoolIdParamSchema,
+  topUpSmsCreditsSchema,
+} from '../validators/platform.schema';
 
 /**
  * Platform administration: acting on every school, not on the caller's own.
@@ -26,6 +30,26 @@ router.post(
   subscriptionAdminMiddleware,
   validate(activateSchoolSchema),
   PlatformSchoolsController.activate,
+);
+
+// The platform's own SMS gateway balance, against the credit promised to schools.
+router.get('/platform/sms/status', authMiddleware, subscriptionAdminMiddleware, PlatformSchoolsController.smsStatus);
+
+// Prepaid SMS credit: what a school has, how it got there, and adding more.
+router.get(
+  '/platform/schools/:id/sms-credits',
+  authMiddleware,
+  subscriptionAdminMiddleware,
+  validate(schoolIdParamSchema),
+  PlatformSchoolsController.smsCredits,
+);
+
+router.post(
+  '/platform/schools/:id/sms-credits',
+  authMiddleware,
+  subscriptionAdminMiddleware,
+  validate(topUpSmsCreditsSchema),
+  PlatformSchoolsController.topUpSmsCredits,
 );
 
 export default router;

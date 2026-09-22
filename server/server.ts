@@ -8,6 +8,8 @@ import {
   reapAbandonedImports,
 } from './src/modules/imports/services/imports.service';
 import { isFirebaseConfigured } from './src/infrastructure/firebase/firebaseAdmin';
+import { buildScheduler } from './src/infrastructure/scheduler/jobs';
+import type { Scheduler } from './src/infrastructure/scheduler/scheduler';
 
 /**
  * Entrypoint. Run through `tsx`, never plain `node` — the require graph is
@@ -32,25 +34,43 @@ async function main(): Promise<void> {
     console.warn(`[api] Firebase Admin is not configured — ${note}.`);
   }
 
+  if (!env.sms.kudisms.configured) {
+    console.warn('[api] KudiSMS is not configured — birthday texts and other SMS will be logged as failed, not sent.');
+  }
+
   const app = createApp();
   const server = app.listen(env.port, () => {
     console.info(`[api] Listening on http://localhost:${env.port}${env.apiPrefix}`);
   });
 
-  installShutdownHandlers(server);
+  // Background jobs (birthday greetings, and whatever joins them) run in this
+  // process. Off under test, and on exactly one instance in production.
+  let scheduler: Scheduler | null = null;
+  if (env.scheduler.enabled) {
+    scheduler = buildScheduler();
+    scheduler.start();
+  } else {
+    console.info('[api] Scheduler is disabled; scheduled jobs will not run in this process.');
+  }
+
+  installShutdownHandlers(server, scheduler);
 }
 
 /**
  * Stop taking new connections, let in-flight requests finish, then close the
  * pool. A hard exit mid-request would leave a half-applied write behind.
  */
-function installShutdownHandlers(server: Server): void {
+function installShutdownHandlers(server: Server, scheduler: Scheduler | null): void {
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.info(`[api] ${signal} received, shutting down.`);
+
+    // No new job ticks once we are on the way out; one already running either
+    // finishes or is cut off with the pool, and its dedupe keys make both safe.
+    scheduler?.stop();
 
     const timer = setTimeout(() => {
       console.error('[api] Shutdown timed out, exiting.');

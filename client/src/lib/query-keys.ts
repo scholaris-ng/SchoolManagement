@@ -21,6 +21,8 @@ export const queryKeys = {
    */
   platform: {
     schools: () => ['platform', 'schools'] as const,
+    smsCredits: (schoolId: string) => ['platform', 'schools', schoolId, 'sms-credits'] as const,
+    smsStatus: () => ['platform', 'sms-status'] as const,
   },
 
   /**

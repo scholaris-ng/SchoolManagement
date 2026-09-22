@@ -20,6 +20,16 @@ export interface SchoolSettings {
   absenceAlertCutoff: string;
   resultPublishNotification: boolean;
   allowParentTeacherMessaging: boolean;
+  /**
+   * Birthday SMS to each pupil's guardian on the day. Optional: schools created
+   * before the feature existed have no value, and absent reads as off — no
+   * school starts paying for messages it never switched on.
+   */
+  birthdaySmsEnabled?: boolean;
+  /** `HH:mm`, school-local. Absent means `DEFAULT_BIRTHDAY_SMS_SEND_TIME`. */
+  birthdaySmsSendTime?: string;
+  /** Placeholders per `smsTemplate.ts`; null or absent means the built-in wording. */
+  birthdaySmsTemplate?: string | null;
 }
 
 /** The tenant. Every other business table hangs off this row's id. */
@@ -91,6 +101,14 @@ export class School extends SoftDeletableEntity {
   /** The administrator's email address, as it was when they activated. */
   @Column({ type: 'varchar', name: 'last_activated_by', length: 160, nullable: true })
   lastActivatedBy: string | null;
+
+  /**
+   * Prepaid SMS credit, in message pages. Topped up by a platform
+   * administrator (`/platform/schools/:id/sms-credits`), spent by the send
+   * path one page at a time. Every movement is in `sms_credit_entries`.
+   */
+  @Column({ name: 'sms_credits', type: 'int', default: 0 })
+  smsCredits: number;
 
   /**
    * Optimistic lock (spec section 34). Two administrators editing branding at

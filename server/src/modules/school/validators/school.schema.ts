@@ -29,6 +29,19 @@ const settingsSchema = z
       .optional(),
     resultPublishNotification: z.boolean().optional(),
     allowParentTeacherMessaging: z.boolean().optional(),
+    birthdaySmsEnabled: z.boolean().optional(),
+    birthdaySmsSendTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time, such as 08:00')
+      .optional(),
+    // Two SMS pages at most, so a school cannot set a template that costs
+    // several messages per pupil without noticing. Null restores the default.
+    birthdaySmsTemplate: z
+      .string()
+      .trim()
+      .max(306, 'Keep the birthday message under 306 characters (two SMS pages).')
+      .nullable()
+      .optional(),
   })
   .strict();
 

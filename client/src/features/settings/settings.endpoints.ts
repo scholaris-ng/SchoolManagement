@@ -1,7 +1,13 @@
 import { http } from '@/lib/http';
 import type { School } from '@/types/tenant';
 import type { Role, Permission } from '@/types/rbac';
-import type { WebsiteContent, AuditLogEntry } from '@/types/engagement';
+import type {
+  WebsiteContent,
+  AuditLogEntry,
+  BirthdayRunSummary,
+  SmsMessage,
+  SmsStatus,
+} from '@/types/engagement';
 import type { ListQuery, Paginated } from '@/types/api';
 
 export interface SaveRoleInput {
@@ -33,4 +39,17 @@ export const SettingsEndpoints = {
     http.patch<WebsiteContent>('/website', values),
 
   fetchAuditLog: (query: ListQuery) => http.get<Paginated<AuditLogEntry>>('/audit', { query }),
+
+  // ─── Outbound SMS ──────────────────────────────────────────────────────────
+
+  fetchSmsStatus: () => http.get<SmsStatus>('/messaging/sms/status'),
+
+  fetchSmsLog: (query: ListQuery & { purpose?: string; status?: string }) =>
+    http.get<Paginated<SmsMessage>>('/messaging/sms', { query }),
+
+  sendTestSms: (values: { to: string; message: string }) =>
+    http.post<SmsMessage | null>('/messaging/sms/test', values),
+
+  /** Today's birthday greetings for this school, now. Anyone already greeted is skipped. */
+  runBirthdayGreetings: () => http.post<BirthdayRunSummary>('/messaging/birthday-greetings/run'),
 };

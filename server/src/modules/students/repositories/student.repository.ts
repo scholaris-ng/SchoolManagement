@@ -6,6 +6,21 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { Student } from '../entities/student.entity';
 import type { StudentDTO, StudentSummaryDTO } from '../dto/students.dto';
 
+/** Just enough of a pupil to address a birthday greeting. */
+export interface BirthdayCelebrant {
+  id: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  gender: string;
+  dateOfBirth: string;
+  className: string | null;
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
 /**
  * The projection the client's `Student` type expects.
  *
@@ -292,6 +307,37 @@ export class StudentRepository extends TenantRepository<Student> {
       [schoolId, guardianId],
     );
     return rows.map((row) => row.studentId);
+  }
+
+  /**
+   * Active pupils born on this calendar day, for a birthday greeting.
+   *
+   * `month`/`day` are the school-local date, worked out by the caller — the
+   * server's clock is in whatever zone the host happens to use. A child born
+   * on 29 February is greeted on 28 February in a year that has no 29th,
+   * rather than every four years.
+   */
+  async findCelebrantsOn(
+    schoolId: string,
+    { year, month, day }: { year: number; month: number; day: number },
+  ): Promise<BirthdayCelebrant[]> {
+    const leapDayFallback = month === 2 && day === 28 && !isLeapYear(year);
+    return this.repo.query(
+      `SELECT s.id, s.first_name AS "firstName", s.middle_name AS "middleName",
+              s.last_name AS "lastName", s.gender,
+              to_char(s.date_of_birth, 'YYYY-MM-DD') AS "dateOfBirth",
+              c.name AS "className"
+         FROM students s
+         LEFT JOIN school_classes c ON c.id = s.current_class_id
+        WHERE s.school_id = $1
+          AND s.status = 'ACTIVE'
+          AND s.deleted_at IS NULL
+          AND EXTRACT(MONTH FROM s.date_of_birth) = $2
+          AND (EXTRACT(DAY FROM s.date_of_birth) = $3
+               OR ($4 AND EXTRACT(DAY FROM s.date_of_birth) = 29))
+        ORDER BY s.first_name, s.last_name`,
+      [schoolId, month, day, leapDayFallback],
+    );
   }
 
   // ─── Aggregates for the admin dashboard ────────────────────────────────────

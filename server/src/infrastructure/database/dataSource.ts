@@ -70,6 +70,8 @@ import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
 import { NotificationPreference } from '../../modules/notifications/entities/notificationPreference.entity';
 import { PushToken } from '../../modules/notifications/entities/pushToken.entity';
+import { SmsMessage } from '../../modules/messaging/entities/smsMessage.entity';
+import { SmsCreditEntry } from '../../modules/messaging/entities/smsCreditEntry.entity';
 
 /**
  * Entities are listed explicitly rather than glob-loaded: a glob resolves
@@ -149,6 +151,8 @@ export const entities = [
   Notification,
   NotificationPreference,
   PushToken,
+  SmsMessage,
+  SmsCreditEntry,
 ];
 
 /**

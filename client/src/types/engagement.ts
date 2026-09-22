@@ -168,3 +168,53 @@ export interface AuditLogEntry {
    */
   references?: Record<string, AuditReference>;
 }
+
+// ─── Outbound SMS ─────────────────────────────────────────────────────────────
+
+/** Whether the server can send text messages, and how much credit is left. */
+export interface SmsStatus {
+  configured: boolean;
+  provider: string | null;
+  senderId: string | null;
+  /** This school's prepaid credit, in message pages. */
+  credits: number;
+  /** Naira per SMS page — what the credit is worth. */
+  unitPriceNgn: number;
+  /** Who to ask, for credit or when sending is unavailable. */
+  topUpContact: string | null;
+}
+
+/** What one birthday run did for this school. */
+export interface BirthdayRunSummary {
+  schoolId: string;
+  date: string;
+  celebrants: number;
+  sent: number;
+  failed: number;
+  alreadySent: number;
+  noRecipient: number;
+  noCredit: number;
+  creditsLeft: number;
+  skippedReason: 'SMS_NOT_CONFIGURED' | 'NO_CREDIT' | 'DISABLED' | null;
+}
+
+export type SmsPurpose = 'STUDENT_BIRTHDAY' | 'TEST';
+export type SmsStatusValue = 'QUEUED' | 'SENT' | 'FAILED';
+
+export interface SmsMessage {
+  id: string;
+  schoolId: string;
+  purpose: SmsPurpose;
+  recipientPhone: string;
+  recipientName: string | null;
+  studentId: string | null;
+  studentName: string | null;
+  guardianId: string | null;
+  body: string;
+  status: SmsStatusValue;
+  provider: string | null;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}

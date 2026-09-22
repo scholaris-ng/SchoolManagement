@@ -24,6 +24,7 @@ import attendanceRoutes from './modules/attendance/routes/attendance.routes';
 import studentsRoutes from './modules/students/routes/students.routes';
 import guardiansRoutes from './modules/guardians/routes/guardians.routes';
 import notificationsRoutes from './modules/notifications/routes/notifications.routes';
+import messagingRoutes from './modules/messaging/routes/messaging.routes';
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import analyticsRoutes from './modules/analytics/routes/analytics.routes';
 import staffRoutes from './modules/staff/routes/staff.routes';
@@ -104,6 +105,7 @@ export function createApp(): Express {
     studentsRoutes,
     guardiansRoutes,
     notificationsRoutes,
+    messagingRoutes,
     dashboardRoutes,
     analyticsRoutes,
     staffRoutes,

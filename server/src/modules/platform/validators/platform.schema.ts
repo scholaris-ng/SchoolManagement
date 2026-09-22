@@ -28,3 +28,35 @@ export const activateSchoolSchema = z.object({
 });
 
 export type ActivateSchoolInput = z.infer<typeof activateSchoolSchema>['body'];
+
+/**
+ * The most credit one top-up may add: a million message pages. Far beyond any
+ * real purchase, and small enough that a slipped digit is refused rather than
+ * handed over — the same reasoning as `MAX_ACTIVATION_MONTHS`.
+ */
+export const MAX_SMS_CREDIT_TOPUP = 1_000_000;
+
+/**
+ * A top-up is entered as money — what the school actually paid — and the
+ * server converts it to SMS pages at `SMS_UNIT_PRICE_NGN`, rounding down so
+ * the platform never gives away a fraction of a page. ₦5,000 at ₦8 is 625.
+ */
+export const topUpSmsCreditsSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z
+    .object({
+      amountNgn: z.coerce
+        .number({ invalid_type_error: 'Enter the amount paid, in naira' })
+        .positive('Enter the amount paid, in naira')
+        .max(MAX_SMS_CREDIT_TOPUP * 1000, 'That amount is too large for one top-up'),
+      /** How it was paid, and when — whatever should be remembered against this credit. */
+      note: z.string().trim().max(500).optional(),
+    })
+    .strict(),
+});
+
+export type TopUpSmsCreditsInput = z.infer<typeof topUpSmsCreditsSchema>['body'];
+
+export const schoolIdParamSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+});

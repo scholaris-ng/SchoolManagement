@@ -18,6 +18,21 @@ export class SchoolRepository extends BaseRepository<School> {
   }
 
   /**
+   * Every school that has switched birthday texts on and is still allowed to
+   * use the software. A school whose trial or subscription has lapsed is left
+   * out: a paid message on its behalf would be a cost nobody has agreed to.
+   */
+  async findWithBirthdaySmsEnabled(): Promise<School[]> {
+    return this.repo
+      .createQueryBuilder('school')
+      .where(`(school.settings ->> 'birthdaySmsEnabled')::boolean IS TRUE`)
+      .andWhere(`school.status <> 'SUSPENDED'`)
+      .andWhere('school.access_ends_at > now()')
+      .orderBy('school.name', 'ASC')
+      .getMany();
+  }
+
+  /**
    * Conditional update guarded by the version the caller loaded
    * (spec section 34).
    *

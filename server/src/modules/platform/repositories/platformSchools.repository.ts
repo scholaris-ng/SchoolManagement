@@ -12,6 +12,7 @@ export interface PlatformSchoolRow {
   accessEndsAt: Date;
   lastActivatedAt: Date | null;
   lastActivatedBy: string | null;
+  smsCredits: number;
   createdAt: Date;
 }
 
@@ -20,6 +21,7 @@ const COLUMNS = `
   s.access_ends_at      AS "accessEndsAt",
   s.last_activated_at   AS "lastActivatedAt",
   s.last_activated_by   AS "lastActivatedBy",
+  s.sms_credits         AS "smsCredits",
   s.created_at          AS "createdAt"
 `;
 
@@ -37,6 +39,14 @@ export class PlatformSchoolsRepository {
 
   private constructor() {}
 
+  /** Every school's unused SMS credit added up: what the platform still owes in messages. */
+  async totalSmsCredits(): Promise<number> {
+    const [row] = await this.repo.query(
+      `SELECT COALESCE(SUM(sms_credits), 0)::int AS total FROM schools WHERE deleted_at IS NULL`,
+    );
+    return Number(row?.total ?? 0);
+  }
+
   /** Soonest to lapse first: what has already run out, then what is about to. */
   async findAll(): Promise<PlatformSchoolRow[]> {
     return this.repo.query(
@@ -46,6 +56,14 @@ export class PlatformSchoolsRepository {
         ORDER BY s.access_ends_at ASC, s.name ASC
         LIMIT 500`,
     );
+  }
+
+  async findOne(schoolId: string): Promise<PlatformSchoolRow | null> {
+    const rows: PlatformSchoolRow[] = await this.repo.query(
+      `SELECT ${COLUMNS} FROM schools s WHERE s.id = $1 AND s.deleted_at IS NULL`,
+      [schoolId],
+    );
+    return rows[0] ?? null;
   }
 
   /**

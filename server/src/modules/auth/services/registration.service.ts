@@ -338,6 +338,10 @@ export class RegistrationService {
           absenceAlertCutoff: '09:30',
           resultPublishNotification: true,
           allowParentTeacherMessaging: true,
+          // Off until the school chooses it: SMS is paid per message.
+          birthdaySmsEnabled: false,
+          birthdaySmsSendTime: '08:00',
+          birthdaySmsTemplate: null,
         },
       }),
     );
