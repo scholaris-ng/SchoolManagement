@@ -46,6 +46,7 @@ import {
 import {
   createPaymentAccountSchema,
   fetchPaymentsSchema,
+  markReceiptItemsSchema,
   receiptParamSchema,
   reconcilePaymentSchema,
   recordPaymentSchema,
@@ -445,6 +446,18 @@ router.get(
   authorise('finance.read', 'payment.manage'),
   validate(receiptParamSchema),
   PaymentsController.receipt,
+);
+
+/**
+ * Marking which of an invoice's charges a payment covered — an annotation on
+ * the receipt, not a change to how much is owed, so it is gated the same as
+ * recording the payment itself rather than needing a permission of its own.
+ */
+router.patch(
+  '/receipts/:paymentId/items',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(markReceiptItemsSchema),
+  PaymentsController.markReceiptItems,
 );
 
 router.post(

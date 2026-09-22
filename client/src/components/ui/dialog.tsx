@@ -88,7 +88,10 @@ export const DialogDescription = forwardRef<
 });
 
 export function DialogBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('scrollbar-thin flex-1 overflow-y-auto p-5', className)} {...props} />;
+  // `min-h-0` overrides the flex default of `min-height: auto`, which would
+  // otherwise let this grow past the dialog's `max-h-[92vh]` instead of
+  // scrolling — pushing the footer (and its submit button) out of view.
+  return <div className={cn('scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5', className)} {...props} />;
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
@@ -264,7 +267,7 @@ export function Sheet({
               <X className="size-4" />
             </DialogPrimitive.Close>
           </div>
-          <div className="scrollbar-thin flex-1 overflow-y-auto p-5">{children}</div>
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
           {footer && (
             <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-muted/40 p-4">
               {footer}

@@ -350,15 +350,19 @@ export class PaymentsService {
       receivedByName: payment.recordedByName ?? 'Raven (bank transfer)',
       allocations: payment.allocations.map((allocation) => {
         const brief = termOf.get(allocation.invoiceId);
+        const paidLineIds = new Set(allocation.paidLineIds);
         return {
+          invoiceId: allocation.invoiceId,
           invoiceNo: allocation.invoiceNo,
           description: brief ? `${brief.termName} · ${brief.sessionName} fees` : 'School fees',
           amount: allocation.amount,
           invoiceTotal: brief?.total ?? allocation.amount,
           lines: (linesByInvoice.get(allocation.invoiceId) ?? []).map((line) => ({
+            id: line.id,
             description: line.description,
             isOptional: line.isOptional,
             amount: line.amount,
+            paid: paidLineIds.has(line.id),
           })),
         };
       }),
@@ -367,6 +371,57 @@ export class PaymentsService {
       status: entity.status,
       reversalReason: entity.reversalReason,
     };
+  }
+
+  /**
+   * Marks which of one invoice's charges this payment is recorded as having
+   * paid for — a bursar's annotation on the receipt, not a re-allocation. The
+   * amount this payment put towards the invoice, and the invoice's own
+   * balance, are untouched: `payment_allocations.amount` still says what
+   * settled the bill, and this only says which named items the office is
+   * telling the family (or itself, later) that money was for.
+   *
+   * `lineIds` replaces whatever was marked before, so unchecking every box on
+   * the screen and saving genuinely clears the mark rather than being a no-op.
+   */
+  async markReceiptItems(
+    context: RequestContext,
+    paymentId: string,
+    invoiceId: string,
+    lineIds: string[],
+  ): Promise<ReceiptDTO> {
+    const payment = await this.payments.findEntity(context.schoolId, paymentId);
+    if (!payment) throw AppError.notFound('Payment');
+
+    const lines = await this.invoices.findLinesForInvoices(context.schoolId, [invoiceId]);
+    if (lines.length === 0) throw AppError.notFound('Invoice');
+
+    const validIds = new Set(lines.map((line) => line.id));
+    const unique = Array.from(new Set(lineIds));
+    const unknown = unique.filter((id) => !validIds.has(id));
+    if (unknown.length > 0) {
+      throw AppError.validation('One of those fee items is not on this invoice.');
+    }
+
+    const applied = await this.payments.setAllocationPaidLines(
+      context.schoolId,
+      paymentId,
+      invoiceId,
+      unique,
+    );
+    if (!applied) {
+      throw AppError.validation('This payment was not applied to that invoice.');
+    }
+
+    await this.audit.record(context, {
+      action: 'receipt.itemsMarked',
+      entityType: 'Payment',
+      entityId: paymentId,
+      entityLabel: payment.reference,
+      after: { invoiceId, lineIds: unique },
+    });
+
+    return this.fetchReceipt(context, paymentId);
   }
 
   /* -- Money taken at the desk ------------------------------------------------ */

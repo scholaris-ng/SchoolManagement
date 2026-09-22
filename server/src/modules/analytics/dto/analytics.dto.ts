@@ -74,6 +74,8 @@ export interface FinanceOverviewDTO {
   unreconciledAmount: number;
   collectionTrend: { label: string; billed: number; collected: number }[];
   byCategory: { category: string; billed: number; collected: number }[];
+  /** The five fee items billed for the most money — see `LedgerRepository.topFeeItems`. */
+  topFeeItems: { feeItemId: string; name: string; billed: number; collected: number }[];
 }
 
 /* -- Admissions ----------------------------------------------------------- */

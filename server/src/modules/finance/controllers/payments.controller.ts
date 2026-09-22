@@ -5,6 +5,7 @@ import { PaymentsService } from '../services/payments.service';
 import type {
   CreatePaymentAccountInput,
   FetchPaymentsQuery,
+  MarkReceiptItemsInput,
   RavenWebhookBody,
   ReconcilePaymentInput,
   RecordPaymentInput,
@@ -67,6 +68,17 @@ export class PaymentsController {
     try {
       const { paymentId } = req.validated!.params as { paymentId: string };
       res.status(200).json(ApiResponse.ok(await service().fetchReceipt(contextOf(req), paymentId)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async markReceiptItems(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { paymentId } = req.validated!.params as { paymentId: string };
+      const { invoiceId, lineIds } = req.validated!.body as MarkReceiptItemsInput;
+      const receipt = await service().markReceiptItems(contextOf(req), paymentId, invoiceId, lineIds);
+      res.status(200).json(ApiResponse.ok(receipt, 'Fee items updated'));
     } catch (error) {
       next(error);
     }

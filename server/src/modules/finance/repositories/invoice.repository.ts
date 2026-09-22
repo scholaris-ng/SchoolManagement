@@ -117,6 +117,7 @@ export interface InvoiceBrief {
 
 /** One charge, for `findLinesForInvoices` — see its doc comment. */
 export interface ReceiptLineRow {
+  id: string;
   invoiceId: string;
   description: string;
   isOptional: boolean;
@@ -274,7 +275,7 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   async findLinesForInvoices(schoolId: string, ids: string[]): Promise<ReceiptLineRow[]> {
     if (ids.length === 0) return [];
     return this.repo.query(
-      `SELECT il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
+      `SELECT il.id, il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
               il.line_total::float AS amount
          FROM invoice_lines il
          JOIN invoices i ON i.id = il.invoice_id

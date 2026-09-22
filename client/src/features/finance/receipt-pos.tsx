@@ -113,6 +113,7 @@ export function PosReceipt({
                         className="flex items-start justify-between gap-2 pl-[3mm] text-[10px]"
                       >
                         <span>
+                          {line.paid ? '✓ ' : ''}
                           {line.description}
                           {line.isOptional ? ' (opt.)' : ''}
                         </span>

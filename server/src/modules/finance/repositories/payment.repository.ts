@@ -69,7 +69,8 @@ const JOINS = `
                'id', al.id,
                'invoiceId', al.invoice_id,
                'invoiceNo', i.invoice_no,
-               'amount', al.amount::float
+               'amount', al.amount::float,
+               'paidLineIds', COALESCE(al.paid_line_ids, '[]'::jsonb)
              ) ORDER BY i.invoice_no
            ) AS rows,
            SUM(al.amount) AS total
@@ -185,6 +186,25 @@ export class PaymentRepository extends TenantRepository<Payment> {
     if (rows.length === 0) return;
     const repo = manager ? manager.getRepository(PaymentAllocation) : this.allocations;
     await repo.insert(rows as never);
+  }
+
+  /**
+   * Which of that invoice's lines the office says this payment covered — see
+   * `PaymentAllocation.paidLineIds`. Scoped to the (payment, invoice) pair so
+   * a stale or guessed invoice id updates nothing rather than someone else's
+   * allocation; the caller reads `affected` to tell the two apart.
+   */
+  async setAllocationPaidLines(
+    schoolId: string,
+    paymentId: string,
+    invoiceId: string,
+    lineIds: string[],
+  ): Promise<boolean> {
+    const result = await this.allocations.update(
+      { schoolId, paymentId, invoiceId },
+      { paidLineIds: lineIds },
+    );
+    return (result.affected ?? 0) > 0;
   }
 
   /**

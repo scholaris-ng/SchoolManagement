@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bar,
@@ -11,7 +12,7 @@ import {
 } from 'recharts';
 import { AlertCircle, CreditCard, Landmark, Receipt, TrendingUp, Wallet } from 'lucide-react';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import { humanizeEnum } from '@/lib/utils';
+import { cn, humanizeEnum } from '@/lib/utils';
 import { useFinanceOverview } from './api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { StatCard } from '@/components/data/stat-card';
@@ -28,10 +29,44 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
 import { chartTheme } from '@/components/charts/chart-theme';
 
+/** One row of the fee breakdown card — a label against what came in versus what was billed. */
+function FeeBreakdownRow({
+  label,
+  billed,
+  collected,
+  currency,
+}: {
+  label: string;
+  billed: number;
+  collected: number;
+  currency: string;
+}) {
+  const rate = billed === 0 ? 0 : (collected / billed) * 100;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="truncate">{label}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {formatCurrency(collected, currency, { compact: true })} /{' '}
+          {formatCurrency(billed, currency, { compact: true })}
+        </span>
+      </div>
+      <Progress
+        className="mt-1"
+        value={rate}
+        tone={rate >= 80 ? 'success' : rate >= 50 ? 'warning' : 'danger'}
+      />
+    </div>
+  );
+}
+
+type FeeBreakdownTab = 'category' | 'items';
+
 export function FinanceOverviewPage() {
   const overview = useFinanceOverview();
   const data = overview.data;
   const currency = data?.currency ?? 'NGN';
+  const [feeTab, setFeeTab] = useState<FeeBreakdownTab>('category');
 
   return (
     <PageContainer>
@@ -155,33 +190,72 @@ export function FinanceOverviewPage() {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>By fee category</CardTitle>
-                <CardDescription>Where collection is strongest and weakest.</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle>By fee category</CardTitle>
+                  <CardDescription>
+                    {feeTab === 'category'
+                      ? 'Where collection is strongest and weakest.'
+                      : 'The five items billed for the most, school-wide.'}
+                  </CardDescription>
+                </div>
+                <div
+                  role="tablist"
+                  aria-label="Fee breakdown view"
+                  className="flex shrink-0 gap-0.5 rounded-md bg-muted p-0.5"
+                >
+                  {(
+                    [
+                      { id: 'category', label: 'Category' },
+                      { id: 'items', label: 'Top items' },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      data-cy={`finance-overview-fee-tab-${tab.id}`}
+                      aria-selected={feeTab === tab.id}
+                      onClick={() => setFeeTab(tab.id)}
+                      className={cn(
+                        'rounded-sm px-2 py-1 text-xs font-medium transition-colors',
+                        feeTab === tab.id
+                          ? 'bg-card text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(data?.byCategory.length ?? 0) === 0 ? (
+                {feeTab === 'category' ? (
+                  (data?.byCategory.length ?? 0) === 0 ? (
+                    <EmptyState compact title="Nothing billed yet" />
+                  ) : (
+                    data?.byCategory.map((row) => (
+                      <FeeBreakdownRow
+                        key={row.category}
+                        label={humanizeEnum(row.category)}
+                        billed={row.billed}
+                        collected={row.collected}
+                        currency={currency}
+                      />
+                    ))
+                  )
+                ) : (data?.topFeeItems.length ?? 0) === 0 ? (
                   <EmptyState compact title="Nothing billed yet" />
                 ) : (
-                  data?.byCategory.map((row) => {
-                    const rate = row.billed === 0 ? 0 : (row.collected / row.billed) * 100;
-                    return (
-                      <div key={row.category}>
-                        <div className="flex items-baseline justify-between gap-2 text-sm">
-                          <span className="truncate">{humanizeEnum(row.category)}</span>
-                          <span className="shrink-0 tabular-nums text-muted-foreground">
-                            {formatCurrency(row.collected, currency, { compact: true })} /{' '}
-                            {formatCurrency(row.billed, currency, { compact: true })}
-                          </span>
-                        </div>
-                        <Progress
-                          className="mt-1"
-                          value={rate}
-                          tone={rate >= 80 ? 'success' : rate >= 50 ? 'warning' : 'danger'}
-                        />
-                      </div>
-                    );
-                  })
+                  data?.topFeeItems.map((row) => (
+                    <FeeBreakdownRow
+                      key={row.feeItemId}
+                      label={row.name}
+                      billed={row.billed}
+                      collected={row.collected}
+                      currency={currency}
+                    />
+                  ))
                 )}
               </CardContent>
             </Card>

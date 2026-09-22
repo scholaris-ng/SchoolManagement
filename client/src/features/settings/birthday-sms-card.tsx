@@ -160,6 +160,13 @@ export function BirthdaySmsCard({
 
         {enabled && (
           <div className="space-y-4 pl-1">
+            <Alert tone="info" title="Some numbers may need to opt in first">
+              Nigerian lines registered for Do-Not-Disturb (DND) block texts like this one by
+              default, so a guardian's message may not arrive even though it was sent and paid
+              for. They can check and switch this off by texting{' '}
+              <span className="font-mono font-medium text-foreground">STATUS</span> to{' '}
+              <span className="font-mono font-medium text-foreground">2442</span> from that phone.
+            </Alert>
             {status.data && !status.data.configured && (
               <Alert tone="warning" title="Text messaging is not available yet">
                 The platform has not finished setting up SMS, so no messages will go out for now. Your

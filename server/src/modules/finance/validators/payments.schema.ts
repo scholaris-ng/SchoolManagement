@@ -105,6 +105,22 @@ export const receiptParamSchema = z.object({
   params: z.object({ paymentId: z.string().uuid() }),
 });
 
+/**
+ * Which of one invoice's lines the office says this payment covered.
+ * `lineIds` replaces the whole set for that invoice rather than adding to it
+ * — the screen always sends the full, current selection, same as a checklist
+ * being saved.
+ */
+export const markReceiptItemsSchema = z.object({
+  params: z.object({ paymentId: z.string().uuid() }),
+  body: z
+    .object({
+      invoiceId: z.string().uuid(),
+      lineIds: z.array(z.string().uuid()).max(200).default([]),
+    })
+    .strict(),
+});
+
 export const sendReceiptEmailSchema = z.object({
   params: z.object({ paymentId: z.string().uuid() }),
   body: z
@@ -184,6 +200,7 @@ export type FetchPaymentsQuery = z.infer<typeof fetchPaymentsSchema>['query'];
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>['body'];
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>['body'];
 export type ReversePaymentInput = z.infer<typeof reversePaymentSchema>['body'];
+export type MarkReceiptItemsInput = z.infer<typeof markReceiptItemsSchema>['body'];
 export type SendReceiptEmailInput = z.infer<typeof sendReceiptEmailSchema>['body'];
 export type ShareReceiptWhatsAppInput = z.infer<typeof shareReceiptWhatsAppSchema>['body'];
 export type CreatePaymentAccountInput = z.infer<typeof createPaymentAccountSchema>['body'];

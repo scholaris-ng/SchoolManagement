@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Mail, Printer } from 'lucide-react';
+import { Check, Mail, Printer } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
-import { humanizeEnum } from '@/lib/utils';
+import { cn, humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
-import { useReceipt } from './api';
+import { useAuth } from '@/app/providers/auth-provider';
+import { useMarkReceiptItems, useReceipt } from './api';
 import { EmailReceiptDialog } from './email-receipt-dialog';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { POS_RECEIPT_SELECTOR, POS_WIDTH_MM, PosReceipt, isPartPayment } from './receipt-pos';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { QrCode } from '@/components/data/qr-code';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import type { Receipt } from '@/types/finance';
 
 const POS_PAGE_STYLE_ID = 'pos-page-style';
 
@@ -77,6 +79,17 @@ export function ReceiptPage() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printReceipt = usePrintReceipt();
+  const markItems = useMarkReceiptItems(paymentId);
+  const { can } = useAuth();
+  const canMarkItems = can({ anyOf: ['payment.manage', 'invoice.manage'] });
+
+  /** Flips one line's paid mark and saves the invoice's whole set at once. */
+  function toggleLinePaid(allocation: Receipt['allocations'][number], lineId: string) {
+    const lineIds = allocation.lines
+      .filter((line) => (line.id === lineId ? !line.paid : line.paid))
+      .map((line) => line.id);
+    markItems.mutate({ invoiceId: allocation.invoiceId, lineIds });
+  }
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -144,16 +157,23 @@ export function ReceiptPage() {
         </div>
 
         {!reversed && record.allocations.some((allocation) => allocation.lines.length > 0) && (
-          <label className="no-print flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              data-cy="finance-receipt-show-items"
-              type="checkbox"
-              checked={showItems}
-              onChange={(event) => setShowItems(event.target.checked)}
-              className="size-4 rounded border-input"
-            />
-            Show each invoice's charges on the receipt
-          </label>
+          <div className="no-print space-y-1">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                data-cy="finance-receipt-show-items"
+                type="checkbox"
+                checked={showItems}
+                onChange={(event) => setShowItems(event.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              Show each invoice's charges on the receipt
+            </label>
+            {showItems && canMarkItems && (
+              <p className="pl-6 text-xs text-muted-foreground">
+                Tick the fee items this payment was for — it saves as you go.
+              </p>
+            )}
+          </div>
         )}
 
         <Card className="print-page">
@@ -234,18 +254,50 @@ export function ReceiptPage() {
                           </td>
                         </tr>
                         {showItems &&
-                          allocation.lines.map((line, lineIndex) => (
-                            <tr key={lineIndex} className="text-xs text-muted-foreground">
-                              <td className="py-1"></td>
-                              <td className="py-1 pl-4">
-                                {line.description}
-                                {line.isOptional ? ' (optional)' : ''}
-                              </td>
-                              <td className="py-1 text-right tabular-nums">
-                                {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
-                              </td>
-                            </tr>
-                          ))}
+                          allocation.lines.map((line) => {
+                            const pending =
+                              markItems.isPending &&
+                              markItems.variables?.invoiceId === allocation.invoiceId;
+                            return (
+                              <tr key={line.id} className="text-xs text-muted-foreground">
+                                {/* The cell itself always renders, print included, so the row
+                                    keeps the same three columns as the allocation row above it;
+                                    only the checkbox inside is screen-only — the checkmark ahead
+                                    of the description is what a printed copy shows instead. */}
+                                <td className="w-6 py-1">
+                                  {canMarkItems && (
+                                    <input
+                                      data-cy="finance-receipt-line-paid"
+                                      type="checkbox"
+                                      checked={line.paid}
+                                      disabled={pending}
+                                      onChange={() => toggleLinePaid(allocation, line.id)}
+                                      aria-label={`Mark "${line.description}" as paid for on this receipt`}
+                                      className="no-print size-3.5 rounded border-input disabled:opacity-50"
+                                    />
+                                  )}
+                                </td>
+                                <td className={cn('py-1 pl-1', line.paid && 'text-success')}>
+                                  {line.paid && (
+                                    <Check
+                                      className="mr-1 inline size-3 align-[-1px]"
+                                      aria-hidden="true"
+                                    />
+                                  )}
+                                  {line.description}
+                                  {line.isOptional ? ' (optional)' : ''}
+                                </td>
+                                <td
+                                  className={cn(
+                                    'py-1 text-right tabular-nums',
+                                    line.paid && 'text-success',
+                                  )}
+                                >
+                                  {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </Fragment>
                     ))}
                   </tbody>

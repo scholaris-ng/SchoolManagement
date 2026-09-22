@@ -365,6 +365,8 @@ export interface FinanceOverview {
   unreconciledAmount: number;
   collectionTrend: { label: string; billed: number; collected: number }[];
   byCategory: { category: string; billed: number; collected: number }[];
+  /** The five fee items billed for the most money. */
+  topFeeItems: { feeItemId: string; name: string; billed: number; collected: number }[];
 }
 
 export type PaymentReceiptStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -418,6 +420,8 @@ export interface Receipt {
   paidAt: string;
   receivedByName: string;
   allocations: {
+    /** Which invoice this allocation is against — needed to mark its fee items paid. */
+    invoiceId: string;
     invoiceNo: string;
     description: string;
     /** What this payment put towards the invoice — not the invoice's own total. */
@@ -425,7 +429,14 @@ export interface Receipt {
     /** The invoice's full total, so a part-payment can be shown as one. */
     invoiceTotal: number;
     /** The invoice's own charges, for the receipt's optional itemised view. */
-    lines: { description: string; isOptional: boolean; amount: number }[];
+    lines: {
+      id: string;
+      description: string;
+      isOptional: boolean;
+      amount: number;
+      /** Whether the office has marked this charge as covered by this payment. */
+      paid: boolean;
+    }[];
   }[];
   balanceAfter: number;
   verificationCode: string;

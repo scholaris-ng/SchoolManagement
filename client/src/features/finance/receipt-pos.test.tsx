@@ -21,13 +21,14 @@ const receipt: Receipt = {
   receivedByName: 'Oyeyemi Adeshina',
   allocations: [
     {
+      invoiceId: 'inv1',
       invoiceNo: 'INV/2026-2027/00003',
       description: 'First Term · 2026/2027 fees',
       amount: 327_500,
       invoiceTotal: 327_500,
       lines: [
-        { description: 'Tuition', isOptional: false, amount: 250_000 },
-        { description: 'Transport', isOptional: true, amount: 77_500 },
+        { id: 'line1', description: 'Tuition', isOptional: false, amount: 250_000, paid: false },
+        { id: 'line2', description: 'Transport', isOptional: true, amount: 77_500, paid: false },
       ],
     },
   ],

@@ -263,6 +263,8 @@ export interface PaymentAllocationDTO {
   invoiceId: string;
   invoiceNo: string;
   amount: number;
+  /** Which of the invoice's lines this payment is marked as having covered. */
+  paidLineIds: string[];
 }
 
 /** Mirrors `StudentLedgerEntry` in `client/src/types/finance.ts`. */
@@ -323,6 +325,8 @@ export interface ReceiptDTO {
   paidAt: string;
   receivedByName: string;
   allocations: {
+    /** Needed to call `markReceiptItems` against the right invoice. */
+    invoiceId: string;
     invoiceNo: string;
     description: string;
     /** What *this payment* put towards the invoice — not the invoice's own total. */
@@ -338,7 +342,14 @@ export interface ReceiptDTO {
      * receipt's optional itemised view. Whether to show them is the
      * screen's call, not this endpoint's; they are always sent.
      */
-    lines: { description: string; isOptional: boolean; amount: number }[];
+    lines: {
+      id: string;
+      description: string;
+      isOptional: boolean;
+      amount: number;
+      /** Whether the office has marked this line as covered by this payment. */
+      paid: boolean;
+    }[];
   }[];
   balanceAfter: number;
   verificationCode: string;

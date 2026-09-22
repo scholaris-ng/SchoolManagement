@@ -501,4 +501,54 @@ export class LedgerRepository {
       params,
     );
   }
+
+  /**
+   * The five fee items billed for the most money — "top fee items" beside
+   * `byCategory` on the same card, at the individual-item level instead of
+   * the category one. Same billed/collected shape and the same pro-rata
+   * apportionment of collected money across an invoice's lines, so the two
+   * views read as one system rather than two different measures.
+   *
+   * Joined to `fee_items` for the name rather than reading `invoice_lines`'
+   * own snapshot description: a fee item's `RESTRICT` delete means the row
+   * always exists for any line that references it, and its current name is
+   * what a bursar recognises even where an old invoice line's snapshot text
+   * has since drifted (a renamed item, a class suffix appended per line).
+   */
+  async topFeeItems(
+    schoolId: string,
+    termId?: string,
+    limit = 5,
+  ): Promise<{ feeItemId: string; name: string; billed: number; collected: number }[]> {
+    const params: unknown[] = [schoolId];
+    let termClause = '';
+    if (termId) {
+      params.push(termId);
+      termClause = ` AND i.term_id = $${params.length}`;
+    }
+    params.push(limit);
+
+    return this.db.query(
+      `SELECT il.fee_item_id AS "feeItemId",
+              fi.name AS name,
+              COALESCE(SUM(il.line_total), 0)::float AS billed,
+              COALESCE(SUM(
+                COALESCE(alloc.paid, 0) * (il.line_total / NULLIF(i.total, 0))
+              ), 0)::float AS collected
+         FROM invoice_lines il
+         JOIN invoices i ON i.id = il.invoice_id
+         JOIN fee_items fi ON fi.id = il.fee_item_id
+         LEFT JOIN LATERAL (
+           SELECT SUM(pa.amount) AS paid
+             FROM payment_allocations pa
+             JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+            WHERE pa.invoice_id = i.id
+         ) alloc ON TRUE
+        WHERE i.school_id = $1 AND ${REAL_INVOICE}${termClause}
+        GROUP BY il.fee_item_id, fi.name
+        ORDER BY billed DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+  }
 }

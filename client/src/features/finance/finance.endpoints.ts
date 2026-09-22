@@ -346,6 +346,10 @@ export const FinanceEndpoints = {
 
   fetchReceipt: (paymentId: string) => http.get<Receipt>(`/receipts/${paymentId}`),
 
+  /** Replaces, for one invoice on this receipt, the whole set of fee items marked paid. */
+  markReceiptItems: (paymentId: string, invoiceId: string, lineIds: string[]) =>
+    http.patch<Receipt>(`/receipts/${paymentId}/items`, { invoiceId, lineIds }),
+
   sendReceiptEmail: (paymentId: string, guardianId: string, includeCharges: boolean) =>
     http.post<{ sent: boolean; email: string }>(`/receipts/${paymentId}/email`, {
       guardianId,

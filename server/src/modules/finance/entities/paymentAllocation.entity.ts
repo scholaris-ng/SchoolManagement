@@ -53,4 +53,14 @@ export class PaymentAllocation extends BaseEntity {
   /** Null when Raven's own credit allocated itself against a tied invoice. */
   @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
   createdByUserId: string | null;
+
+  /**
+   * Which of the invoice's `invoice_lines` the office says this payment
+   * covered — an annotation for the receipt, not a second allocation ledger.
+   * Empty means nobody has marked anything, which the receipt reads as "the
+   * whole invoice", same as before this column existed. See
+   * `PaymentsService.markReceiptItems`.
+   */
+  @Column({ name: 'paid_line_ids', type: 'jsonb', default: [] })
+  paidLineIds: string[];
 }

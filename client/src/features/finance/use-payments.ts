@@ -130,6 +130,28 @@ export function useReceipt(paymentId: string | undefined) {
   });
 }
 
+/**
+ * Saves which of one invoice's fee items this receipt is marked as having
+ * paid for. The server hands back the whole receipt, so the cache is written
+ * straight from the response rather than refetched — a toggle should feel
+ * instant, not wait a round trip and a second one.
+ */
+export function useMarkReceiptItems(paymentId: string | undefined) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ invoiceId, lineIds }: { invoiceId: string; lineIds: string[] }) =>
+      FinanceEndpoints.markReceiptItems(paymentId ?? '', invoiceId, lineIds),
+    onSuccess: (receipt) => {
+      queryClient.setQueryData(queryKeys.finance.receipt(schoolId, paymentId ?? ''), receipt);
+    },
+    onError: () => {
+      toast.error('Could not save which fee items were paid for');
+    },
+  });
+}
+
 export function useSendReceiptEmail(paymentId: string) {
   return useMutation({
     mutationFn: ({ guardianId, includeCharges }: { guardianId: string; includeCharges: boolean }) =>

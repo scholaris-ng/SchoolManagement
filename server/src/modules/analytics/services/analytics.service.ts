@@ -138,12 +138,13 @@ export class AnalyticsService {
     const school = await this.schools.findById(context.schoolId);
     if (!school) throw AppError.notFound('School');
 
-    const [totals, collected, unreconciled, collectionTrend, byCategory] = await Promise.all([
+    const [totals, collected, unreconciled, collectionTrend, byCategory, topFeeItems] = await Promise.all([
       this.ledger.overviewTotals(context.schoolId, termId),
       this.ledger.collectedTotal(context.schoolId, termId),
       this.payments.unreconciledSummary(context.schoolId),
       this.ledger.monthlyTrend(context.schoolId),
       this.ledger.byCategory(context.schoolId, termId),
+      this.ledger.topFeeItems(context.schoolId, termId),
     ]);
 
     // Net of discounts on both sides: a waived charge was never going to be
@@ -163,6 +164,7 @@ export class AnalyticsService {
       unreconciledAmount: unreconciled.amount,
       collectionTrend,
       byCategory,
+      topFeeItems,
     };
   }
 

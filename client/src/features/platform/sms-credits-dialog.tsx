@@ -91,6 +91,11 @@ export function SmsCreditsDialog({
               {price !== null && <> ({naira(balance * price)} worth)</>} left.
               {price !== null && <> Each SMS is {naira(price)}; a birthday greeting is one SMS.</>}
             </DialogDescription>
+            <p className="text-xs text-muted-foreground">
+              Recipients with Do-Not-Disturb (DND) active on their line won't receive these texts
+              until they send <span className="font-mono font-medium text-foreground">STATUS</span>{' '}
+              to <span className="font-mono font-medium text-foreground">2442</span> to switch it off.
+            </p>
           </DialogHeader>
 
           <DialogBody className="space-y-5">
