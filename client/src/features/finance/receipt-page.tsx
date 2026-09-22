@@ -79,17 +79,8 @@ export function ReceiptPage() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printReceipt = usePrintReceipt();
-  const markItems = useMarkReceiptItems(paymentId);
   const { can } = useAuth();
   const canMarkItems = can({ anyOf: ['payment.manage', 'invoice.manage'] });
-
-  /** Flips one line's paid mark and saves the invoice's whole set at once. */
-  function toggleLinePaid(allocation: Receipt['allocations'][number], lineId: string) {
-    const lineIds = allocation.lines
-      .filter((line) => (line.id === lineId ? !line.paid : line.paid))
-      .map((line) => line.id);
-    markItems.mutate({ invoiceId: allocation.invoiceId, lineIds });
-  }
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -170,7 +161,7 @@ export function ReceiptPage() {
             </label>
             {showItems && canMarkItems && (
               <p className="pl-6 text-xs text-muted-foreground">
-                Tick the fee items this payment was for — it saves as you go.
+                Tick the fee items this payment was for, then save — one invoice at a time.
               </p>
             )}
           </div>
@@ -253,51 +244,13 @@ export function ReceiptPage() {
                             {formatCurrency(allocation.invoiceTotal, 'NGN', { showDecimals: false })}
                           </td>
                         </tr>
-                        {showItems &&
-                          allocation.lines.map((line) => {
-                            const pending =
-                              markItems.isPending &&
-                              markItems.variables?.invoiceId === allocation.invoiceId;
-                            return (
-                              <tr key={line.id} className="text-xs text-muted-foreground">
-                                {/* The cell itself always renders, print included, so the row
-                                    keeps the same three columns as the allocation row above it;
-                                    only the checkbox inside is screen-only — the checkmark ahead
-                                    of the description is what a printed copy shows instead. */}
-                                <td className="w-6 py-1">
-                                  {canMarkItems && (
-                                    <input
-                                      data-cy="finance-receipt-line-paid"
-                                      type="checkbox"
-                                      checked={line.paid}
-                                      disabled={pending}
-                                      onChange={() => toggleLinePaid(allocation, line.id)}
-                                      aria-label={`Mark "${line.description}" as paid for on this receipt`}
-                                      className="no-print size-3.5 rounded border-input disabled:opacity-50"
-                                    />
-                                  )}
-                                </td>
-                                <td className={cn('py-1 pl-1', line.paid && 'text-success')}>
-                                  {line.paid && (
-                                    <Check
-                                      className="mr-1 inline size-3 align-[-1px]"
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                  {line.description}
-                                  {line.isOptional ? ' (optional)' : ''}
-                                </td>
-                                <td
-                                  className={cn(
-                                    'py-1 text-right tabular-nums',
-                                    line.paid && 'text-success',
-                                  )}
-                                >
-                                  {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                        {showItems && (
+                          <AllocationLines
+                            allocation={allocation}
+                            paymentId={record.paymentId}
+                            interactive={canMarkItems}
+                          />
+                        )}
                       </Fragment>
                     ))}
                   </tbody>
@@ -335,6 +288,103 @@ export function ReceiptPage() {
         paymentId={record.paymentId}
         studentId={record.studentId}
       />
+    </>
+  );
+}
+
+/**
+ * One invoice's fee-item checkboxes, with their own "Save" beneath them.
+ *
+ * Ticking a box only updates this component's own draft — nothing reaches
+ * the server until Save is pressed — so marking several items on the same
+ * invoice is a handful of instant clicks followed by one save, not a round
+ * trip waited out between each tick.
+ */
+function AllocationLines({
+  allocation,
+  paymentId,
+  interactive,
+}: {
+  allocation: Receipt['allocations'][number];
+  paymentId: string;
+  /** Read-only for anyone without `payment.manage`/`invoice.manage` — just the saved marks, no boxes to tick. */
+  interactive: boolean;
+}) {
+  const markItems = useMarkReceiptItems(paymentId);
+  const savedPaidIds = allocation.lines.filter((line) => line.paid).map((line) => line.id);
+  const savedKey = savedPaidIds.join(',');
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(savedPaidIds));
+
+  // Resyncs only from what the server actually holds for this invoice — once
+  // this allocation's own save lands, or the receipt is reloaded — so a tick
+  // still waiting to be saved is never quietly overwritten mid-edit.
+  useEffect(() => {
+    setChecked(new Set(savedPaidIds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey]);
+
+  const dirty =
+    checked.size !== savedPaidIds.length || savedPaidIds.some((id) => !checked.has(id));
+
+  return (
+    <>
+      {allocation.lines.map((line) => {
+        const paid = interactive ? checked.has(line.id) : line.paid;
+        return (
+          <tr key={line.id} className="text-xs text-muted-foreground">
+            {/* The cell itself always renders, print included, so the row
+                keeps the same three columns as the allocation row above it;
+                only the checkbox inside is screen-only — the checkmark ahead
+                of the description is what a printed copy shows instead. */}
+            <td className="w-6 py-1">
+              {interactive && (
+                <input
+                  data-cy="finance-receipt-line-paid"
+                  type="checkbox"
+                  checked={checked.has(line.id)}
+                  disabled={markItems.isPending}
+                  onChange={() =>
+                    setChecked((current) => {
+                      const next = new Set(current);
+                      if (next.has(line.id)) next.delete(line.id);
+                      else next.add(line.id);
+                      return next;
+                    })
+                  }
+                  aria-label={`Mark "${line.description}" as paid for on this receipt`}
+                  className="no-print size-3.5 rounded border-input disabled:opacity-50"
+                />
+              )}
+            </td>
+            <td className={cn('py-1 pl-1', paid && 'text-success')}>
+              {paid && <Check className="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />}
+              {line.description}
+              {line.isOptional ? ' (optional)' : ''}
+            </td>
+            <td className={cn('py-1 text-right tabular-nums', paid && 'text-success')}>
+              {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+            </td>
+          </tr>
+        );
+      })}
+      {interactive && dirty && (
+        <tr className="no-print">
+          <td colSpan={3} className="py-1.5 text-right">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              loading={markItems.isPending}
+              data-cy="finance-receipt-line-save"
+              onClick={() =>
+                markItems.mutate({ invoiceId: allocation.invoiceId, lineIds: Array.from(checked) })
+              }
+            >
+              Save
+            </Button>
+          </td>
+        </tr>
+      )}
     </>
   );
 }
