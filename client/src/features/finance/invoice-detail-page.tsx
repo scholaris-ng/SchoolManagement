@@ -9,6 +9,9 @@ import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
 import { ShareInvoiceButton } from './whatsapp-share-buttons';
+import { PrintReceiptDialog } from './print-receipt-dialog';
+import { usePrintMode } from './pos-print';
+import { InvoicePos } from './invoice-pos';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
@@ -33,6 +36,8 @@ export function InvoiceDetailPage() {
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const printInvoice = usePrintMode();
 
   // An invoice always belongs to exactly one student, so the way back is to
   // their record — specifically the Fees tab this was most likely opened
@@ -110,7 +115,7 @@ export function InvoiceDetailPage() {
                   </Button>
                 </PermissionGate>
               )}
-              <Button data-cy="finance-invoice-detail-print" variant="outline" onClick={() => window.print()}>
+              <Button data-cy="finance-invoice-detail-print" variant="outline" onClick={() => setPrintOpen(true)}>
                 <Printer />
                 Print
               </Button>
@@ -396,6 +401,16 @@ export function InvoiceDetailPage() {
         invoiceId={record.id}
         studentId={record.studentId}
       />
+
+      <PrintReceiptDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        onPrint={printInvoice}
+        title="Print invoice"
+        storageKey="invoice-print-mode"
+        dataCyPrefix="finance-invoice-print"
+      />
+      <InvoicePos record={record} accountSummary={accountSummary} />
     </PageContainer>
   );
 }

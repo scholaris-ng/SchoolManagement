@@ -12,7 +12,7 @@ import {
 
 export type PrintMode = 'standard' | 'pos';
 
-const LAST_MODE_KEY = 'receipt-print-mode';
+const DEFAULT_STORAGE_KEY = 'receipt-print-mode';
 
 /**
  * How long the dialog's own fade-out takes to finish. Printing waits for it:
@@ -21,18 +21,18 @@ const LAST_MODE_KEY = 'receipt-print-mode';
  */
 const DIALOG_CLOSE_MS = 300;
 
-function readLastMode(): PrintMode | null {
+function readLastMode(storageKey: string): PrintMode | null {
   try {
-    const value = window.localStorage.getItem(LAST_MODE_KEY);
+    const value = window.localStorage.getItem(storageKey);
     return value === 'pos' || value === 'standard' ? value : null;
   } catch {
     return null;
   }
 }
 
-function rememberMode(mode: PrintMode) {
+function rememberMode(storageKey: string, mode: PrintMode) {
   try {
-    window.localStorage.setItem(LAST_MODE_KEY, mode);
+    window.localStorage.setItem(storageKey, mode);
   } catch {
     // A browser that will not store it just asks without the hint.
   }
@@ -47,7 +47,7 @@ const OPTIONS: {
   {
     mode: 'standard',
     title: 'Standard printout',
-    description: 'The full receipt on A4 or half-sheet paper, with the school header and colours.',
+    description: 'The full document on A4 or half-sheet paper, with the school header and colours.',
     icon: <Printer className="size-5" aria-hidden="true" />,
   },
   {
@@ -59,25 +59,36 @@ const OPTIONS: {
 ];
 
 /**
- * Asks which shape of receipt to print, then prints it.
+ * Asks which shape of document to print, then prints it — shared by receipts
+ * and invoices, the two documents a school prints at a desk often enough to
+ * want a thermal-roll copy as well as a full page.
  *
  * Choosing an option is the whole interaction — no separate confirm button —
  * because at a desk this happens for every payment, and the answer is nearly
- * always the same one as last time, which is marked and remembered.
+ * always the same one as last time, which is marked and remembered per
+ * `storageKey` — a receipt's preference and an invoice's stay separate,
+ * since a desk that always POS-prints receipts may still want full-page
+ * invoices to hand out.
  */
 export function PrintReceiptDialog({
   open,
   onOpenChange,
   onPrint,
+  title = 'Print receipt',
+  storageKey = DEFAULT_STORAGE_KEY,
+  dataCyPrefix = 'finance-receipt-print',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPrint: (mode: PrintMode) => void;
+  title?: string;
+  storageKey?: string;
+  dataCyPrefix?: string;
 }) {
-  const lastMode = useMemo(() => (open ? readLastMode() : null), [open]);
+  const lastMode = useMemo(() => (open ? readLastMode(storageKey) : null), [open, storageKey]);
 
   const choose = (mode: PrintMode) => {
-    rememberMode(mode);
+    rememberMode(storageKey, mode);
     onOpenChange(false);
     window.setTimeout(() => onPrint(mode), DIALOG_CLOSE_MS);
   };
@@ -86,7 +97,7 @@ export function PrintReceiptDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Print receipt</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>Choose the kind of printer this is going to.</DialogDescription>
         </DialogHeader>
 
@@ -95,7 +106,7 @@ export function PrintReceiptDialog({
             <button
               key={option.mode}
               type="button"
-              data-cy={`finance-receipt-print-${option.mode}`}
+              data-cy={`${dataCyPrefix}-${option.mode}`}
               onClick={() => choose(option.mode)}
               className="flex w-full items-start gap-3 rounded-lg border border-border p-4 text-left transition-colors hover:border-primary hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >

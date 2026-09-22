@@ -3,12 +3,7 @@ import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { QrCode } from '@/components/data/qr-code';
 import type { Receipt } from '@/types/finance';
-
-/** The width of the roll's printable area, for the `@page` rule and the layout. */
-export const POS_WIDTH_MM = 78;
-
-/** Selector the print handler uses to measure the copy it is about to print. */
-export const POS_RECEIPT_SELECTOR = '.pos-receipt-root';
+import { POS_WIDTH_MM } from './pos-print';
 
 /** Paid less than the invoice's total — compared in kobo, so float dust is not a "part". */
 export function isPartPayment(allocation: { amount: number; invoiceTotal: number }): boolean {
