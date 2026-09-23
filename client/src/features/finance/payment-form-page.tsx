@@ -81,6 +81,10 @@ export function PaymentFormPage() {
   // time, so naming an amount stays a quick aside rather than turning the
   // whole list into boxes to fill in.
   const [editingLine, setEditingLine] = useState<{ invoiceId: string; lineId: string } | null>(null);
+  // "Edit amount" only shows once someone has asked to name fee items for
+  // this particular invoice — otherwise the panel just reads as a plain list
+  // of what the invoice is made of.
+  const [editingItemsInvoiceId, setEditingItemsInvoiceId] = useState<string | null>(null);
   const expandedInvoice = useInvoice(expandedInvoiceId ?? undefined);
 
   const invoices = useMemo(
@@ -413,6 +417,7 @@ export function PaymentFormPage() {
                   const expanded = expandedInvoiceId === invoice.id;
                   const applyTotal = Number(allocations[invoice.id]) || 0;
                   const overNamed = overNamedInvoiceIds.has(invoice.id);
+                  const itemsEditable = editingItemsInvoiceId === invoice.id;
                   return (
                     <li key={invoice.id} className="space-y-2 rounded-md border border-border p-3">
                       <div className="flex flex-wrap items-center gap-3">
@@ -465,6 +470,18 @@ export function PaymentFormPage() {
                             <p className="text-xs text-muted-foreground">Loading charges…</p>
                           ) : (
                             <>
+                              {!itemsEditable && (
+                                <div className="flex justify-end">
+                                  <button
+                                    type="button"
+                                    data-cy={`finance-payment-form-lines-edit-${invoice.id}`}
+                                    className="text-xs text-primary hover:underline"
+                                    onClick={() => setEditingItemsInvoiceId(invoice.id)}
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              )}
                               <ul className="space-y-2">
                                 {(expandedInvoice.data?.lines ?? [])
                                   .filter((line) => line.balance > 0)
@@ -549,13 +566,17 @@ export function PaymentFormPage() {
                                                 { showDecimals: false },
                                               )}
                                             </span>
-                                            <button
-                                              type="button"
-                                              className="text-[11px] text-primary hover:underline"
-                                              onClick={() => setEditingLine({ invoiceId: invoice.id, lineId: line.id })}
-                                            >
-                                              Edit amount
-                                            </button>
+                                            {itemsEditable && (
+                                              <button
+                                                type="button"
+                                                className="text-[11px] text-primary hover:underline"
+                                                onClick={() =>
+                                                  setEditingLine({ invoiceId: invoice.id, lineId: line.id })
+                                                }
+                                              >
+                                                Edit amount
+                                              </button>
+                                            )}
                                           </div>
                                         )}
                                       </li>

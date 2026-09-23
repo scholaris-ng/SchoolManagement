@@ -151,8 +151,8 @@ export function ReceiptPage() {
             </label>
             {showItems && canManageReceipt && (
               <p className="pl-6 text-xs text-muted-foreground">
-                Tick the fee items this payment was for, or use "Part payment" to name an exact
-                amount for one.
+                Click "Edit" on an invoice below to tick which fee items this payment was for, or
+                name an exact amount for one with "Part payment".
               </p>
             )}
           </div>
@@ -342,6 +342,12 @@ function AllocationLines({
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [draftAmount, setDraftAmount] = useState('');
 
+  // The checkboxes and "Part payment" links are edit controls, not part of
+  // what a receipt normally shows — they only appear once someone has
+  // deliberately asked to adjust this invoice's breakdown, so the default
+  // view reads like a plain receipt rather than a form.
+  const [sectionEditing, setSectionEditing] = useState(false);
+
   const ticksDirty =
     checked.size !== savedPaidIds.length || savedPaidIds.some((id) => !checked.has(id));
   const allChecked = checked.size === allocation.lines.length;
@@ -388,25 +394,40 @@ function AllocationLines({
 
   return (
     <>
-      {interactive && allocation.lines.length > 1 && (
+      {interactive && (
         <tr className="no-print">
           <td colSpan={3} className="py-1 text-right">
-            <button
-              type="button"
-              data-cy="finance-receipt-lines-toggle-all"
-              className="text-xs text-primary hover:underline"
-              onClick={() =>
-                setChecked(allChecked ? new Set() : new Set(allocation.lines.map((line) => line.id)))
-              }
-            >
-              {allChecked ? 'Clear all' : 'Mark all as paid'}
-            </button>
+            {sectionEditing ? (
+              allocation.lines.length > 1 && (
+                <button
+                  type="button"
+                  data-cy="finance-receipt-lines-toggle-all"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() =>
+                    setChecked(
+                      allChecked ? new Set() : new Set(allocation.lines.map((line) => line.id)),
+                    )
+                  }
+                >
+                  {allChecked ? 'Clear all' : 'Mark all as paid'}
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                data-cy="finance-receipt-lines-edit"
+                className="text-xs text-primary hover:underline"
+                onClick={() => setSectionEditing(true)}
+              >
+                Edit
+              </button>
+            )}
           </td>
         </tr>
       )}
       {allocation.lines.map((line) => {
         const editing = editingLineId === line.id;
-        const paid = interactive && !editing ? checked.has(line.id) : line.paid;
+        const paid = interactive && sectionEditing && !editing ? checked.has(line.id) : line.paid;
         const maxForLine = Math.max(0, Math.min(roomOn(line), allocation.amount - otherLinesTotal));
         const overLimit = editing && Number(draftAmount) > maxForLine + 0.004;
         return (
@@ -417,7 +438,7 @@ function AllocationLines({
                   only the checkbox inside is screen-only — the checkmark ahead
                   of the description is what a printed copy shows instead. */}
               <td className="w-6 py-1">
-                {interactive && !editing && (
+                {interactive && sectionEditing && !editing && (
                   <input
                     data-cy="finance-receipt-line-paid"
                     type="checkbox"
@@ -488,7 +509,7 @@ function AllocationLines({
                 ) : (
                   <>
                     {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
-                    {interactive && (
+                    {interactive && sectionEditing && (
                       <button
                         type="button"
                         data-cy={`finance-receipt-line-edit-${line.id}`}
