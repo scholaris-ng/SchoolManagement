@@ -1,14 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, Mail, Printer } from 'lucide-react';
+import { Check, Mail, Printer, X } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useMarkReceiptItems, useReceipt, useSetReceiptItemAmounts } from './api';
 import { EmailReceiptDialog } from './email-receipt-dialog';
-import { ItemiseModeSwitch } from './itemise-mode-switch';
-import { splitAcrossLines, sumAmounts } from './split-across-lines';
 import { PrintReceiptDialog } from './print-receipt-dialog';
 import { usePrintMode } from './pos-print';
 import { PosReceipt, isPartPayment } from './receipt-pos';
@@ -118,7 +116,8 @@ export function ReceiptPage() {
             </label>
             {showItems && canMarkItems && (
               <p className="pl-6 text-xs text-muted-foreground">
-                Tick the fee items this payment was for, then save — one invoice at a time.
+                Tick the fee items this payment was for, or use "Part payment" to name an exact
+                amount for one.
               </p>
             )}
           </div>
@@ -250,12 +249,11 @@ export function ReceiptPage() {
 }
 
 /**
- * One invoice's fee-item checkboxes, with their own "Save" beneath them.
- *
- * Ticking a box only updates this component's own draft — nothing reaches
- * the server until Save is pressed — so marking several items on the same
- * invoice is a handful of instant clicks followed by one save, not a round
- * trip waited out between each tick.
+ * One invoice's fee-item rows: a tick for "this covered the whole charge",
+ * saved a handful at a time, and a "Part payment" button on each row for the
+ * exception — a charge this payment only partly covered — that opens just
+ * that one row for a typed amount instead of turning the whole list into
+ * boxes to fill in.
  */
 function AllocationLines({
   allocation,
@@ -282,159 +280,207 @@ function AllocationLines({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey]);
 
-  const savedAmounts = savedAmountsOf(allocation);
-  const savedAmountsKey = amountsKeyOf(savedAmounts);
-  const [amounts, setAmounts] = useState<Record<string, string>>(() => seedAmounts(allocation));
-
-  // Same resync rule as the ticks above, against the amounts the payment
-  // actually holds.
-  useEffect(() => {
-    setAmounts(seedAmounts(allocation));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedAmountsKey]);
-
-  // A payment already broken down by charge opens on those figures; one taken
-  // as a lump sum opens on the ticks it has always had.
-  const [mode, setMode] = useState<'ticks' | 'amounts'>(
-    savedAmountsKey ? 'amounts' : 'ticks',
-  );
-  const amountsMode = interactive && mode === 'amounts';
+  // Which single line, if any, currently has its part-payment box open — one
+  // at a time, since naming an exact amount is meant to be a quick aside, not
+  // a form of its own.
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [draftAmount, setDraftAmount] = useState('');
 
   const ticksDirty =
     checked.size !== savedPaidIds.length || savedPaidIds.some((id) => !checked.has(id));
-  const amountsDirty = amountsKeyOf(amounts) !== savedAmountsKey;
-  const namedTotal = sumAmounts(amounts);
-  // The charges may come to less than the payment put towards this invoice —
-  // a discount or a balance brought forward belongs to no charge here — but
-  // never to more, which is what the server refuses too.
-  const overNamed = namedTotal - allocation.amount > 0.004;
-  const dirty = amountsMode ? amountsDirty && !overNamed : ticksDirty;
-
   const allChecked = checked.size === allocation.lines.length;
+
+  const savedAmounts = savedAmountsOf(allocation);
+
+  const startEdit = (lineId: string) => {
+    setEditingLineId(lineId);
+    setDraftAmount(savedAmounts[lineId] ?? '');
+  };
+  const cancelEdit = () => {
+    setEditingLineId(null);
+    setDraftAmount('');
+  };
+
+  // What every other line already accounts for, so the one being edited is
+  // capped at what's left of this payment's own share of the invoice — the
+  // same rule the server enforces.
+  const otherLinesTotal = Object.entries(savedAmounts)
+    .filter(([lineId]) => lineId !== editingLineId)
+    .reduce((sum, [, value]) => sum + Number(value), 0);
+
+  // The breakdown is saved wholesale, so naming one line's amount carries
+  // every other line's already-saved amount along unchanged.
+  const saveLineAmount = (
+    line: Receipt['allocations'][number]['lines'][number],
+    value: number,
+  ) => {
+    const nextLines = allocation.lines
+      .map((candidate) => {
+        if (candidate.id === line.id) {
+          return value > 0 ? { lineId: candidate.id, amount: value } : null;
+        }
+        const saved = savedAmounts[candidate.id];
+        return saved != null ? { lineId: candidate.id, amount: Number(saved) } : null;
+      })
+      .filter((entry): entry is { lineId: string; amount: number } => entry != null);
+
+    saveAmounts.mutate(
+      { invoiceId: allocation.invoiceId, lines: nextLines },
+      { onSuccess: () => setEditingLineId(null) },
+    );
+  };
 
   return (
     <>
-      {interactive && (
+      {interactive && allocation.lines.length > 1 && (
         <tr className="no-print">
-          <td colSpan={3} className="py-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <ItemiseModeSwitch
-                dataCy="finance-receipt-lines-mode"
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: 'ticks', label: 'Tick what it paid' },
-                  { value: 'amounts', label: 'Type the amounts' },
-                ]}
-              />
-              {allocation.lines.length > 1 && (
-                <button
-                  type="button"
-                  data-cy="finance-receipt-lines-toggle-all"
-                  className="text-xs text-primary hover:underline"
-                  onClick={() =>
-                    amountsMode
-                      ? setAmounts(autoSplit(allocation))
-                      : setChecked(
-                          allChecked ? new Set() : new Set(allocation.lines.map((line) => line.id)),
-                        )
-                  }
-                >
-                  {amountsMode ? 'Split it for me' : allChecked ? 'Clear all' : 'Mark all as paid'}
-                </button>
-              )}
-            </div>
+          <td colSpan={3} className="py-1 text-right">
+            <button
+              type="button"
+              data-cy="finance-receipt-lines-toggle-all"
+              className="text-xs text-primary hover:underline"
+              onClick={() =>
+                setChecked(allChecked ? new Set() : new Set(allocation.lines.map((line) => line.id)))
+              }
+            >
+              {allChecked ? 'Clear all' : 'Mark all as paid'}
+            </button>
           </td>
         </tr>
       )}
       {allocation.lines.map((line) => {
-        const paid = interactive && !amountsMode ? checked.has(line.id) : line.paid;
+        const editing = editingLineId === line.id;
+        const paid = interactive && !editing ? checked.has(line.id) : line.paid;
+        const maxForLine = Math.max(0, Math.min(roomOn(line), allocation.amount - otherLinesTotal));
+        const overLimit = editing && Number(draftAmount) > maxForLine + 0.004;
         return (
-          <tr key={line.id} className="text-xs text-muted-foreground">
-            {/* The cell itself always renders, print included, so the row
-                keeps the same three columns as the allocation row above it;
-                only the checkbox inside is screen-only — the checkmark ahead
-                of the description is what a printed copy shows instead. */}
-            <td className="w-6 py-1">
-              {interactive && !amountsMode && (
-                <input
-                  data-cy="finance-receipt-line-paid"
-                  type="checkbox"
-                  checked={checked.has(line.id)}
-                  disabled={markItems.isPending}
-                  onChange={() =>
-                    setChecked((current) => {
-                      const next = new Set(current);
-                      if (next.has(line.id)) next.delete(line.id);
-                      else next.add(line.id);
-                      return next;
-                    })
-                  }
-                  aria-label={`Mark "${line.description}" as paid for on this receipt`}
-                  className="no-print size-3.5 rounded border-input disabled:opacity-50"
-                />
-              )}
-            </td>
-            <td className={cn('py-1 pl-1', paid && 'text-success')}>
-              {paid && <Check className="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />}
-              {line.description}
-              {line.isOptional ? ' (optional)' : ''}
-              {line.amountPaidByThisPayment != null && (
-                <span className="block text-[11px] text-muted-foreground">
-                  {formatCurrency(line.amountPaidByThisPayment, 'NGN', { showDecimals: false })} applied
-                  {line.amountPaidByThisPayment < line.amount ? ' · part payment' : ''}
-                </span>
-              )}
-            </td>
-            <td className={cn('py-1 text-right tabular-nums', paid && 'text-success')}>
-              {amountsMode ? (
-                <Input
-                  data-cy={`finance-receipt-line-amount-${line.id}`}
-                  type="number"
-                  min={0}
-                  max={roomOn(line)}
-                  value={amounts[line.id] ?? ''}
-                  disabled={saveAmounts.isPending}
-                  onChange={(event) =>
-                    setAmounts((current) => ({ ...current, [line.id]: event.target.value }))
-                  }
-                  aria-label={`Amount of this payment for "${line.description}"`}
-                  className="no-print ml-auto h-7 w-24"
-                />
-              ) : (
-                formatCurrency(line.amount, 'NGN', { showDecimals: false })
-              )}
-            </td>
-          </tr>
+          <Fragment key={line.id}>
+            <tr className="text-xs text-muted-foreground">
+              {/* The cell itself always renders, print included, so the row
+                  keeps the same three columns as the allocation row above it;
+                  only the checkbox inside is screen-only — the checkmark ahead
+                  of the description is what a printed copy shows instead. */}
+              <td className="w-6 py-1">
+                {interactive && !editing && (
+                  <input
+                    data-cy="finance-receipt-line-paid"
+                    type="checkbox"
+                    checked={checked.has(line.id)}
+                    disabled={markItems.isPending}
+                    onChange={() =>
+                      setChecked((current) => {
+                        const next = new Set(current);
+                        if (next.has(line.id)) next.delete(line.id);
+                        else next.add(line.id);
+                        return next;
+                      })
+                    }
+                    aria-label={`Mark "${line.description}" as paid for on this receipt`}
+                    className="no-print size-3.5 rounded border-input disabled:opacity-50"
+                  />
+                )}
+              </td>
+              <td className={cn('py-1 pl-1', paid && 'text-success')}>
+                {paid && <Check className="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />}
+                {line.description}
+                {line.isOptional ? ' (optional)' : ''}
+                {line.amountPaidByThisPayment != null && (
+                  <span className="block text-[11px] text-muted-foreground">
+                    {formatCurrency(line.amountPaidByThisPayment, 'NGN', { showDecimals: false })} applied
+                    {line.amountPaidByThisPayment < line.amount ? ' · part payment' : ''}
+                  </span>
+                )}
+              </td>
+              <td className={cn('py-1 text-right tabular-nums', paid && 'text-success')}>
+                {editing ? (
+                  <div className="no-print flex items-center justify-end gap-1">
+                    <Input
+                      data-cy={`finance-receipt-line-amount-${line.id}`}
+                      type="number"
+                      min={0}
+                      max={maxForLine}
+                      autoFocus
+                      value={draftAmount}
+                      disabled={saveAmounts.isPending}
+                      onChange={(event) => setDraftAmount(event.target.value)}
+                      aria-label={`Amount of this payment for "${line.description}"`}
+                      className="h-7 w-24"
+                    />
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Save this amount"
+                      data-cy={`finance-receipt-line-save-${line.id}`}
+                      loading={saveAmounts.isPending}
+                      disabled={!(Number(draftAmount) > 0) || overLimit}
+                      onClick={() => saveLineAmount(line, Number(draftAmount))}
+                    >
+                      <Check />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Cancel"
+                      disabled={saveAmounts.isPending}
+                      onClick={cancelEdit}
+                    >
+                      <X />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                    {interactive && (
+                      <button
+                        type="button"
+                        data-cy={`finance-receipt-line-edit-${line.id}`}
+                        className="no-print mt-0.5 block w-full text-right text-[11px] text-primary hover:underline"
+                        onClick={() => startEdit(line.id)}
+                      >
+                        {line.amountPaidByThisPayment != null ? 'Edit part payment' : 'Part payment'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </td>
+            </tr>
+            {editing && (
+              <tr className="no-print">
+                <td colSpan={3} className="pb-1 text-right text-[11px]">
+                  {overLimit ? (
+                    <span className="text-danger">
+                      That's more than this payment put towards this invoice
+                    </span>
+                  ) : (
+                    savedAmounts[line.id] != null && (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-danger hover:underline"
+                        onClick={() => saveLineAmount(line, 0)}
+                      >
+                        Remove part payment
+                      </button>
+                    )
+                  )}
+                </td>
+              </tr>
+            )}
+          </Fragment>
         );
       })}
-      {amountsMode && (
-        <tr className="no-print">
-          <td colSpan={3} className={cn('py-1 text-right text-xs', overNamed ? 'font-medium text-danger' : 'text-muted-foreground')}>
-            {formatCurrency(namedTotal, 'NGN', { showDecimals: false })} of{' '}
-            {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })} named by fee item
-            {overNamed ? ' — that is more than this payment put towards this invoice' : ''}
-          </td>
-        </tr>
-      )}
-      {interactive && dirty && (
+      {interactive && ticksDirty && (
         <tr className="no-print">
           <td colSpan={3} className="py-1.5 text-right">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              loading={markItems.isPending || saveAmounts.isPending}
+              loading={markItems.isPending}
               data-cy="finance-receipt-line-save"
               onClick={() =>
-                amountsMode
-                  ? saveAmounts.mutate({
-                      invoiceId: allocation.invoiceId,
-                      lines: Object.entries(amounts)
-                        .filter(([, value]) => Number(value) > 0)
-                        .map(([lineId, value]) => ({ lineId, amount: Number(value) })),
-                    })
-                  : markItems.mutate({ invoiceId: allocation.invoiceId, lineIds: Array.from(checked) })
+                markItems.mutate({ invoiceId: allocation.invoiceId, lineIds: Array.from(checked) })
               }
             >
               Save
@@ -458,29 +504,6 @@ function savedAmountsOf(allocation: Receipt['allocations'][number]): Record<stri
       .filter((line) => line.amountPaidByThisPayment != null)
       .map((line) => [line.id, String(line.amountPaidByThisPayment)]),
   );
-}
-
-function autoSplit(allocation: Receipt['allocations'][number]): Record<string, string> {
-  return splitAcrossLines(allocation.lines, roomOn, allocation.amount);
-}
-
-/**
- * The figures to open on: what the payment already holds, or — for one taken
- * as a lump sum — the split it would have had, so switching to amounts shows
- * a filled-in column rather than a set of empty boxes.
- */
-function seedAmounts(allocation: Receipt['allocations'][number]): Record<string, string> {
-  const saved = savedAmountsOf(allocation);
-  return Object.keys(saved).length > 0 ? saved : autoSplit(allocation);
-}
-
-/** A stable spelling of a set of amounts, for telling a draft from what is saved. */
-function amountsKeyOf(amounts: Record<string, string>): string {
-  return Object.entries(amounts)
-    .filter(([, value]) => Number(value) > 0)
-    .map(([id, value]) => `${id}:${Number(value)}`)
-    .sort()
-    .join(',');
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
