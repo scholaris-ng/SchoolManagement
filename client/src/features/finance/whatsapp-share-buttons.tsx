@@ -23,7 +23,7 @@ export function WhatsAppShareButton({
   share: () => Promise<WhatsAppShare>;
   /**
    * Called once the server has prepared the message — for a caller that keeps
-   * its own record of copies going out (see `ReceiptDeliveryLog`). Not a promise
+   * its own record of copies going out (see `DocumentDeliveryLog`). Not a promise
    * that anything was sent: that still depends on the person in the other tab.
    */
   onShared?: () => void;
@@ -91,12 +91,20 @@ export function WhatsAppShareButton({
 }
 
 /** Held to the same permission as emailing the same document — the link it makes is public. */
-export function ShareInvoiceButton({ invoiceId }: { invoiceId: string }) {
+export function ShareInvoiceButton({
+  invoiceId,
+  onShared,
+}: {
+  invoiceId: string;
+  /** Lets the invoice page pick up the entry the server just added to its delivery register. */
+  onShared?: () => void;
+}) {
   return (
     <PermissionGate require="invoice.manage">
       <WhatsAppShareButton
         data-cy="finance-invoice-detail-whatsapp"
         share={() => FinanceEndpoints.shareInvoiceWhatsApp(invoiceId)}
+        onShared={onShared}
       />
     </PermissionGate>
   );

@@ -47,6 +47,8 @@ const PROJECTION = `
     ELSE i.status
   END AS status,
   i.note, i.created_at AS "createdAt", i.version,
+  COALESCE(del.sent_count, 0)::int AS "sentCount",
+  del.last_sent_at AS "lastSentAt",
   -- Hard-delete is refused once any of these hold — see deleteMany() below
   -- and the note on the Invoice entity. Surfaced here so the list and
   -- detail screens can grey the option out instead of hitting the refusal.
@@ -69,6 +71,15 @@ const JOINS = `
       JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
      WHERE pa.invoice_id = i.id
   ) pd ON TRUE
+  -- Whether this invoice ever reached the family, so a list can mark the ones
+  -- that never went out (see DocumentDeliveriesService). A refused send is not
+  -- a copy anybody holds, so it does not count as one.
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) FILTER (WHERE dd.status <> 'FAILED') AS sent_count,
+           MAX(dd.sent_at) FILTER (WHERE dd.status <> 'FAILED') AS last_sent_at
+      FROM document_deliveries dd
+     WHERE dd.document_type = 'INVOICE' AND dd.document_id = i.id
+  ) del ON TRUE
 `;
 
 /** Only indexed columns, plus the two derived money figures the list sorts on. */

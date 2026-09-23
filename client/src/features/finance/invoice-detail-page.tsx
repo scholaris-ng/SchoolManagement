@@ -9,11 +9,13 @@ import { summarizeByAccount } from './account-summary';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
 import { ShareInvoiceButton } from './whatsapp-share-buttons';
-import { PrintReceiptDialog } from './print-receipt-dialog';
+import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
+import { useDocumentDeliveries, useLogDocumentPrint } from './use-document-deliveries';
+import { DocumentDeliveryLog, deliverySummary } from './document-delivery-log';
 import { usePrintMode } from './pos-print';
 import { InvoicePos } from './invoice-pos';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
-import { Card, CardContent } from '@/components/ui/primitives';
+import { Badge, Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/data/status-badge';
@@ -32,12 +34,29 @@ export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const invoice = useInvoice(id);
-  const { membership } = useAuth();
+  const { membership, can } = useAuth();
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printInvoice = usePrintMode();
+
+  const canManageInvoice = can('invoice.manage');
+  const logPrint = useLogDocumentPrint('INVOICE', id ?? '');
+  // Read here as well as inside the log card — one shared query — so the header
+  // can say whether the family has this invoice before anybody scrolls.
+  const deliveries = useDocumentDeliveries('INVOICE', canManageInvoice ? id : undefined);
+
+  /**
+   * Printing also notes the print in the delivery register. Logged before the
+   * print dialog opens, because `window.print()` blocks this thread until the
+   * person dismisses it, and a request fired afterwards would sit waiting on a
+   * dialog somebody may have wandered away from.
+   */
+  const printAndLog = (mode: PrintMode) => {
+    logPrint.mutate({ printFormat: mode === 'pos' ? 'POS' : 'FULL_PAGE', includeCharges: false });
+    printInvoice(mode);
+  };
 
   // An invoice always belongs to exactly one student, so the way back is to
   // their record — specifically the Fees tab this was most likely opened
@@ -92,6 +111,14 @@ export function InvoiceDetailPage() {
           meta={
             <>
               <StatusBadge status={record.status} />
+              {/* Has the family actually been told what they owe? Only shown
+                  once the register has loaded, so a slow read never reads as
+                  "not sent yet". */}
+              {canManageInvoice && deliveries.data && (
+                <Badge tone={deliverySummary(deliveries.data).tone}>
+                  {deliverySummary(deliveries.data).label}
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground">
                 Issued {formatDate(record.issueDate)} · due {formatDate(record.dueDate)}
               </span>
@@ -129,7 +156,12 @@ export function InvoiceDetailPage() {
                   Email invoice
                 </Button>
               </PermissionGate>
-              <ShareInvoiceButton invoiceId={record.id} />
+              <ShareInvoiceButton
+                invoiceId={record.id}
+                // The server logs the share; this is what brings the new entry
+                // onto the page the sender is still looking at.
+                onShared={() => void deliveries.refetch()}
+              />
               {record.status !== 'CANCELLED' && (
                 <PermissionGate require="invoice.manage">
                   <Button data-cy="finance-invoice-detail-edit" variant="outline" asChild>
@@ -395,6 +427,17 @@ export function InvoiceDetailPage() {
         }}
       />
 
+      {/* Below the invoice, and never on the paper: the office's own record of
+          where copies went, not part of the document itself. */}
+      {canManageInvoice && (
+        <DocumentDeliveryLog
+          documentType="INVOICE"
+          documentId={record.id}
+          studentId={record.studentId}
+          sendable={record.status !== 'CANCELLED'}
+        />
+      )}
+
       <EmailInvoiceDialog
         open={emailOpen}
         onOpenChange={setEmailOpen}
@@ -405,7 +448,7 @@ export function InvoiceDetailPage() {
       <PrintReceiptDialog
         open={printOpen}
         onOpenChange={setPrintOpen}
-        onPrint={printInvoice}
+        onPrint={printAndLog}
         title="Print invoice"
         storageKey="invoice-print-mode"
         dataCyPrefix="finance-invoice-print"

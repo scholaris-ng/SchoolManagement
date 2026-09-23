@@ -17,10 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { ReceiptDeliveryChannel } from '@/types/finance';
-import { useRecordReceiptDelivery } from './use-receipt-deliveries';
+import type { DeliveryChannel, DeliveryDocumentType, PrintFormat } from '@/types/finance';
+import { useRecordDelivery } from './use-document-deliveries';
 
-const CHANNELS: { channel: ReceiptDeliveryChannel; label: string; icon: React.ReactNode }[] = [
+const CHANNELS: { channel: DeliveryChannel; label: string; icon: React.ReactNode }[] = [
   { channel: 'PRINT', label: 'Handed over', icon: <Printer className="size-4" aria-hidden="true" /> },
   { channel: 'EMAIL', label: 'Email', icon: <Mail className="size-4" aria-hidden="true" /> },
   {
@@ -35,41 +35,51 @@ const CHANNELS: { channel: ReceiptDeliveryChannel; label: string; icon: React.Re
   },
 ];
 
+/** The two shapes of paper a desk produces — the full document, or a thermal-roll slip. */
+const PRINT_FORMATS: { format: PrintFormat; label: string }[] = [
+  { format: 'FULL_PAGE', label: 'Full page' },
+  { format: 'POS', label: 'POS slip (78mm)' },
+];
+
 /** Who a copy went to, when it was not a guardian on file. */
 const SOMEONE_ELSE = 'someone-else';
 
 /**
- * Records a copy of a receipt the office sent by its own means.
+ * Records a copy of a document the office sent by its own means.
  *
- * The register fills itself in for the three channels this system drives, but
- * plenty of receipts reach a family another way — the paper handed to an aunt
- * at the gate, a photograph from a bursar's own phone, a copy posted to a
- * parent abroad. Without somewhere to put those, the register would quietly
- * become a list of what the *software* did rather than what the family has, and
- * the first time it said "not sent" about a receipt somebody remembers handing
- * over, nobody would trust it again.
+ * The register fills itself in for the channels this system drives, but plenty
+ * of documents reach a family another way — the paper handed to an aunt at the
+ * gate, a photograph from a bursar's own phone, a copy posted to a parent
+ * abroad. Without somewhere to put those, the register would quietly become a
+ * list of what the *software* did rather than what the family has, and the first
+ * time it said "not sent" about a receipt somebody remembers handing over,
+ * nobody would trust it again.
  *
- * Everything here is optional except the channel: a receipt handed across the
+ * Everything here is optional except the channel: a document handed across the
  * counter has no recipient to name, and refusing to log it without one would
  * mean it never got logged.
  */
 export function RecordDeliveryDialog({
   open,
   onOpenChange,
-  paymentId,
+  documentType,
+  documentId,
   studentId,
   includeCharges,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  paymentId: string;
-  studentId: string;
+  documentType: DeliveryDocumentType;
+  documentId: string;
+  /** Absent for a bill or a fee schedule, which belong to no one child. */
+  studentId?: string | null;
   includeCharges: boolean;
 }) {
-  const record = useRecordReceiptDelivery(paymentId);
-  const links = useStudentGuardians(open ? studentId : undefined);
+  const record = useRecordDelivery(documentType, documentId);
+  const links = useStudentGuardians(open && studentId ? studentId : undefined);
 
-  const [channel, setChannel] = useState<ReceiptDeliveryChannel>('PRINT');
+  const [channel, setChannel] = useState<DeliveryChannel>('PRINT');
+  const [printFormat, setPrintFormat] = useState<PrintFormat>('FULL_PAGE');
   const [recipientId, setRecipientId] = useState<string>('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientContact, setRecipientContact] = useState('');
@@ -80,10 +90,11 @@ export function RecordDeliveryDialog({
   const guardians = useMemo(() => links.data ?? [], [links.data]);
 
   // Opening the dialog is the start of a fresh entry: a channel or a recipient
-  // left over from the last receipt would quietly log the wrong thing.
+  // left over from the last document would quietly log the wrong thing.
   useEffect(() => {
     if (!open) return;
     setChannel('PRINT');
+    setPrintFormat('FULL_PAGE');
     setRecipientId('');
     setRecipientName('');
     setRecipientContact('');
@@ -107,6 +118,8 @@ export function RecordDeliveryDialog({
     try {
       await record.mutateAsync({
         channel,
+        // Only paper has a shape — the server drops it on any other channel anyway.
+        printFormat: channel === 'PRINT' ? printFormat : undefined,
         guardianId: selected ? selected.guardianId : undefined,
         recipientName: namedSomeoneElse ? recipientName.trim() || undefined : undefined,
         recipientContact: namedSomeoneElse ? recipientContact.trim() || undefined : undefined,
@@ -161,6 +174,32 @@ export function RecordDeliveryDialog({
             </div>
           </fieldset>
 
+          {/* Only paper has a shape, so this appears only for a handed-over copy. */}
+          {channel === 'PRINT' && (
+            <fieldset className="space-y-1.5">
+              <legend className="text-sm font-medium">Which paper?</legend>
+              <div className="flex flex-wrap gap-2">
+                {PRINT_FORMATS.map((option) => (
+                  <button
+                    key={option.format}
+                    type="button"
+                    data-cy={`record-delivery-format-${option.format}`}
+                    aria-pressed={printFormat === option.format}
+                    onClick={() => setPrintFormat(option.format)}
+                    className={cn(
+                      'rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      printFormat === option.format
+                        ? 'border-primary bg-primary-subtle text-primary'
+                        : 'border-border hover:bg-accent',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <div className="space-y-1.5">
             <Label>Who has it?</Label>
             <div className="space-y-1.5">
@@ -203,7 +242,7 @@ export function RecordDeliveryDialog({
                 Somebody else
               </label>
 
-              {/* The usual case for a printed receipt: nobody to name, because
+              {/* The usual case for a printed document: nobody to name, because
                   the person was standing at the counter. */}
               <label className="flex items-center gap-2 text-sm">
                 <input

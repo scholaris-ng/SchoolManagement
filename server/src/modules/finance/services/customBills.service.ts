@@ -9,6 +9,7 @@ import {
   type WhatsAppShare,
 } from '../../../shared/services/whatsappShare.service';
 import { buildCustomBillPdf } from '../../../shared/utils/financePdf';
+import { DocumentDeliveriesService } from './documentDeliveries.service';
 import { CustomBillRepository } from '../repositories/customBill.repository';
 import { PaymentDestinationRepository } from '../repositories/paymentDestination.repository';
 import type { CustomBillDTO } from '../dto/finance.dto';
@@ -38,6 +39,7 @@ export class CustomBillsService {
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
+    private readonly deliveries = DocumentDeliveriesService.Instance,
   ) {}
 
   async fetchAll(
@@ -107,6 +109,20 @@ export class CustomBillsService {
       schoolName,
       contactEmail: bill.schoolEmail,
     });
+
+    // `PREPARED`, like every WhatsApp share: the message is written here, but
+    // sending it is a person pressing Send. A custom bill belongs to no student,
+    // so the register names only the payer it is made out to.
+    await this.deliveries.log(
+      context,
+      { type: 'BILL', id: bill.id, label: bill.payerName },
+      {
+        channel: 'WHATSAPP',
+        status: 'PREPARED',
+        recipientName: bill.payerName,
+        note: 'WhatsApp asked the sender to choose the chat.',
+      },
+    );
 
     await this.audit.record(context, {
       action: 'customBill.whatsappShared',

@@ -9,7 +9,7 @@ import { StudentDiscountsController } from '../controllers/studentDiscounts.cont
 import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
 import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
-import { ReceiptDeliveriesController } from '../controllers/receiptDeliveries.controller';
+import { DocumentDeliveriesController } from '../controllers/documentDeliveries.controller';
 import { CustomBillsController } from '../controllers/customBills.controller';
 import { PaymentDestinationsController } from '../controllers/paymentDestinations.controller';
 import {
@@ -67,10 +67,11 @@ import {
 } from '../validators/paymentReceipts.schema';
 import {
   deliveryIdParamSchema,
-  logReceiptDeliverySchema,
-  receiptDeliveryParamSchema,
-  recordReceiptDeliverySchema,
-} from '../validators/receiptDeliveries.schema';
+  documentDeliveryParamSchema,
+  fetchDeliveriesSchema,
+  logPrintDeliverySchema,
+  recordDeliverySchema,
+} from '../validators/documentDeliveries.schema';
 import {
   createCustomBillSchema,
   customBillParamSchema,
@@ -495,40 +496,49 @@ router.post(
 );
 
 /**
- * The register of copies of a receipt that have gone out — see
- * `ReceiptDeliveriesService`.
+ * The register of finance documents that have gone out — receipts, invoices,
+ * bills and fee schedules. See `DocumentDeliveriesService`.
  *
- * Gated the same as sending one rather than as reading a receipt: a parent may
- * read their own child's receipt with `finance.read`, but who the office has
- * sent copies to, and by whose hand, is the office's own record.
+ * Gated as sending is, not as reading the document is: a parent may read their
+ * own child's receipt with `finance.read`, but who the office has sent copies
+ * to, and by whose hand, is the office's own record. `invoice.manage` is here as
+ * well as `payment.manage` because the same register covers both, and a bursar
+ * who may send an invoice may see whether it went.
  */
 router.get(
-  '/receipts/:paymentId/deliveries',
+  '/document-deliveries',
   authorise('payment.manage', 'invoice.manage'),
-  validate(receiptDeliveryParamSchema),
-  ReceiptDeliveriesController.fetchForPayment,
+  validate(fetchDeliveriesSchema),
+  DocumentDeliveriesController.fetchAll,
+);
+
+router.get(
+  '/document-deliveries/:documentType/:documentId',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(documentDeliveryParamSchema),
+  DocumentDeliveriesController.fetchForDocument,
 );
 
 router.post(
-  '/receipts/:paymentId/deliveries',
+  '/document-deliveries/:documentType/:documentId',
   authorise('payment.manage', 'invoice.manage'),
-  validate(recordReceiptDeliverySchema),
-  ReceiptDeliveriesController.record,
+  validate(recordDeliverySchema),
+  DocumentDeliveriesController.record,
 );
 
-/** What the browser logs for itself once it has sent a receipt to a printer. */
+/** What the browser logs for itself once it has sent a document to a printer. */
 router.post(
-  '/receipts/:paymentId/deliveries/print',
+  '/document-deliveries/:documentType/:documentId/print',
   authorise('payment.manage', 'invoice.manage'),
-  validate(logReceiptDeliverySchema),
-  ReceiptDeliveriesController.logPrint,
+  validate(logPrintDeliverySchema),
+  DocumentDeliveriesController.logPrint,
 );
 
 router.patch(
-  '/receipt-deliveries/:deliveryId/confirm',
+  '/document-deliveries/:deliveryId/confirm',
   authorise('payment.manage', 'invoice.manage'),
   validate(deliveryIdParamSchema),
-  ReceiptDeliveriesController.confirm,
+  DocumentDeliveriesController.confirm,
 );
 
 router.get(

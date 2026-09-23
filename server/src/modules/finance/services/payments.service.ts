@@ -24,7 +24,7 @@ import { InvoiceRepository, type InvoiceBrief } from '../repositories/invoice.re
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { PaymentRepository } from '../repositories/payment.repository';
 import { RavenClient, type RavenCollection } from './raven.client';
-import { ReceiptDeliveriesService } from './receiptDeliveries.service';
+import { DocumentDeliveriesService, type DeliveryDocument } from './documentDeliveries.service';
 import { Payment, type PaymentMethod } from '../entities/payment.entity';
 import { PaymentAccount } from '../entities/paymentAccount.entity';
 import type { PaymentAccountDTO, PaymentDTO, ReceiptDTO } from '../dto/finance.dto';
@@ -106,7 +106,7 @@ export class PaymentsService {
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
-    private readonly deliveries = ReceiptDeliveriesService.Instance,
+    private readonly deliveries = DocumentDeliveriesService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -161,8 +161,10 @@ export class PaymentsService {
     ]);
     if (!school) throw AppError.internal();
 
-    // Who the delivery register will say it went to, whether or not the send
-    // works: a bounced attempt is worth recording, and is recorded as `FAILED`.
+    // What the delivery register will call this copy, and who it went to —
+    // captured either way, since a bounced attempt is worth recording too, and
+    // is recorded as `FAILED`.
+    const document = receiptDocument(receipt);
     const addressee = {
       recipientName: guardianGreeting(guardian),
       recipientContact: guardian.email,
@@ -206,7 +208,7 @@ export class PaymentsService {
       // bounced" is precisely what the office needs to see later. The log's own
       // failure must never replace the real reason the email did not go.
       await this.deliveries
-        .log(context, receipt.paymentId, {
+        .log(context, document, {
           channel: 'EMAIL',
           status: 'FAILED',
           ...addressee,
@@ -225,7 +227,7 @@ export class PaymentsService {
     // send a second copy — the one outcome worse than a missing register entry,
     // which the audit trail's own `receipt.emailed` still records either way.
     await this.deliveries
-      .log(context, receipt.paymentId, {
+      .log(context, document, {
         channel: 'EMAIL',
         status: 'CONFIRMED',
         ...addressee,
@@ -317,7 +319,7 @@ export class PaymentsService {
     // PDF. Whether it reaches the family depends on a person pressing Send in
     // WhatsApp, which happens outside this system entirely — so the register
     // says only that a copy was made ready, until somebody confirms it.
-    await this.deliveries.log(context, receipt.paymentId, {
+    await this.deliveries.log(context, receiptDocument(receipt), {
       channel: 'WHATSAPP',
       status: 'PREPARED',
       recipientName: recipient.greeting,
@@ -1281,6 +1283,23 @@ export class PaymentsService {
  * but handing out a fresh one, by email or WhatsApp, would be vouching for
  * money the school no longer counts.
  */
+/**
+ * How a receipt names itself in the delivery register.
+ *
+ * Captured from the receipt as it stands at the moment of sending, never looked
+ * up again: the register has to keep saying what went out, under the number it
+ * went out as — see `DocumentDeliveriesService`.
+ */
+function receiptDocument(receipt: ReceiptDTO): DeliveryDocument {
+  return {
+    type: 'RECEIPT',
+    id: receipt.paymentId,
+    label: receipt.receiptNo,
+    studentId: receipt.studentId,
+    studentName: receipt.studentName,
+  };
+}
+
 function assertReceiptIssuable(receipt: Pick<ReceiptDTO, 'status'>): void {
   if (receipt.status !== 'SUCCESSFUL') {
     throw AppError.conflict('This payment was reversed, so its receipt can no longer be sent.');

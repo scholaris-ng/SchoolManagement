@@ -65,9 +65,19 @@ export function useUpdateInvoice() {
 
 /** Emails one invoice to a guardian already linked to its student. */
 export function useSendInvoiceEmail(invoiceId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (guardianId: string) => FinanceEndpoints.sendInvoiceEmail(invoiceId, guardianId),
     onSuccess: (result) => {
+      // The server logs the send in the delivery register, and the invoices
+      // list carries a "sent" mark per row — both go stale here.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.documentDeliveries(schoolId, 'INVOICE', invoiceId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.deliveries(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
       toast.success('Invoice emailed', { description: result.email });
     },
   });

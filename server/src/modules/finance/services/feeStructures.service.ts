@@ -23,6 +23,7 @@ import {
 } from '../../../shared/services/whatsappShare.service';
 import { buildFeeSchedulePdf } from '../../../shared/utils/financePdf';
 import { InvoicesService, type IssueLine } from './invoices.service';
+import { DocumentDeliveriesService } from './documentDeliveries.service';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
   FeeStructureDTO,
@@ -68,6 +69,7 @@ export class FeeStructuresService {
     private readonly websites = WebsiteService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
+    private readonly deliveries = DocumentDeliveriesService.Instance,
     private readonly grants = StudentDiscountRepository.Instance,
   ) {}
 
@@ -160,6 +162,18 @@ export class FeeStructuresService {
       schoolName,
       contactEmail: structure.schoolEmail,
     });
+
+    // A fee schedule goes to a whole cohort, not one family: there is no student
+    // and no recipient to name, and whoever it reaches is decided in WhatsApp.
+    await this.deliveries.log(
+      context,
+      { type: 'FEE_SCHEDULE', id: structure.id, label: structure.name },
+      {
+        channel: 'WHATSAPP',
+        status: 'PREPARED',
+        note: 'WhatsApp asked the sender to choose the chat.',
+      },
+    );
 
     await this.audit.record(context, {
       action: 'feeStructure.whatsappShared',

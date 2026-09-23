@@ -189,8 +189,9 @@ export function useSendReceiptEmail(paymentId: string) {
       // The server logs the send in the receipt's delivery register, and the
       // payments list carries a "sent" mark per row — both go stale here.
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.finance.receiptDeliveries(schoolId, paymentId),
+        queryKey: queryKeys.finance.documentDeliveries(schoolId, 'RECEIPT', paymentId),
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.deliveries(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
       toast.success('Receipt emailed', { description: result.email });
     },

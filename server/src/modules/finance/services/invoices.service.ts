@@ -11,7 +11,7 @@ import { SchoolRepository } from '../../school/repositories/school.repository';
 import { WebsiteService } from '../../school/services/website.service';
 import { GuardianRepository } from '../../guardians/repositories/guardian.repository';
 import { buildInvoicePdfAttachment, sendInvoiceEmail } from '../../../shared/utils/mailer';
-import { chooseRecipient } from '../../../shared/utils/whatsapp';
+import { chooseRecipient, guardianGreeting } from '../../../shared/utils/whatsapp';
 import {
   WhatsAppShareService,
   type WhatsAppShare,
@@ -23,6 +23,7 @@ import { LedgerRepository } from '../repositories/ledger.repository';
 import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { DiscountRepository } from '../repositories/discount.repository';
 import { applyDiscounts, type ApplicableDiscount } from './discountCalculator';
+import { DocumentDeliveriesService, type DeliveryDocument } from './documentDeliveries.service';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLine, InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
@@ -122,6 +123,7 @@ export class InvoicesService {
     private readonly sharing = WhatsAppShareService.Instance,
     private readonly grants = StudentDiscountRepository.Instance,
     private readonly discountDefinitions = DiscountRepository.Instance,
+    private readonly deliveries = DocumentDeliveriesService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -244,6 +246,20 @@ export class InvoicesService {
       contactEmail: invoice.schoolEmail ?? '',
     });
 
+    // The only channel that starts out `CONFIRMED`: this server handed the
+    // message to the mail server itself and it was accepted. Not allowed to fail
+    // the call — the email has gone and cannot be recalled, so an error here
+    // would say the send failed and invite a second copy.
+    await this.deliveries
+      .log(context, invoiceDocument(invoice), {
+        channel: 'EMAIL',
+        status: 'CONFIRMED',
+        recipientName: guardianGreeting(guardian),
+        recipientContact: guardian.email,
+        guardianId: input.guardianId,
+      })
+      .catch(() => undefined);
+
     await this.audit.record(context, {
       action: 'invoice.emailed',
       entityType: 'Invoice',
@@ -307,6 +323,17 @@ export class InvoicesService {
       confidential: true,
       schoolName,
       contactEmail: invoice.schoolEmail,
+    });
+
+    // `PREPARED`: the message was written and the PDF stored, but sending it is
+    // a person pressing Send in WhatsApp, outside this system entirely.
+    await this.deliveries.log(context, invoiceDocument(invoice), {
+      channel: 'WHATSAPP',
+      status: 'PREPARED',
+      recipientName: recipient.greeting,
+      recipientContact: share.phone,
+      guardianId: recipient.guardian?.id ?? null,
+      note: share.phone ? null : 'WhatsApp asked the sender to choose the chat.',
     });
 
     await this.audit.record(context, {
@@ -1036,4 +1063,21 @@ function accountsFor(item: FeeItemDTO, accountIds?: string[]): InvoiceLineAccoun
     accountNumber: account.accountNumber,
     accountName: account.accountName,
   }));
+}
+
+/**
+ * How an invoice names itself in the delivery register.
+ *
+ * Captured as it stands at the moment of sending, never looked up again: the
+ * register has to keep saying what went out, under the number it went out as —
+ * see `DocumentDeliveriesService`.
+ */
+function invoiceDocument(invoice: InvoiceDTO): DeliveryDocument {
+  return {
+    type: 'INVOICE',
+    id: invoice.id,
+    label: invoice.invoiceNo,
+    studentId: invoice.studentId,
+    studentName: invoice.studentName,
+  };
 }

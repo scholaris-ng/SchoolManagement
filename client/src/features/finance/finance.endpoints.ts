@@ -15,8 +15,10 @@ import type {
   PaymentMethod,
   PaymentReceiptSubmission,
   Receipt,
-  ReceiptDelivery,
-  ReceiptDeliveryChannel,
+  DeliveryChannel,
+  DeliveryDocumentType,
+  DocumentDelivery,
+  PrintFormat,
   ResolveFeeStructureResult,
   StudentDiscount,
   StudentFinanceSummary,
@@ -378,42 +380,55 @@ export const FinanceEndpoints = {
   shareReceiptWhatsApp: (paymentId: string, includeCharges: boolean) =>
     http.post<WhatsAppShare>(`/receipts/${paymentId}/whatsapp`, { includeCharges }),
 
-  /* -- The delivery register: copies of a receipt that went out -------------- */
+  /* -- The delivery register: documents that went out ------------------------ */
 
-  fetchReceiptDeliveries: (paymentId: string) =>
-    http.get<ReceiptDelivery[]>(`/receipts/${paymentId}/deliveries`),
+  /** The whole register, across every kind of document this school sends. */
+  fetchDeliveries: (query: ListQuery) =>
+    http.get<Paginated<DocumentDelivery>>('/document-deliveries', { query }),
+
+  /** One document's own history, for the card on its page. */
+  fetchDocumentDeliveries: (documentType: DeliveryDocumentType, documentId: string) =>
+    http.get<DocumentDelivery[]>(`/document-deliveries/${documentType}/${documentId}`),
 
   /**
    * Records a copy the office sent by its own means — paper over the counter, a
    * message from a staff member's own phone, a posted copy. Always confirmed:
    * somebody is vouching for it.
    */
-  recordReceiptDelivery: (
-    paymentId: string,
+  recordDelivery: (
+    documentType: DeliveryDocumentType,
+    documentId: string,
     input: {
-      channel: ReceiptDeliveryChannel;
+      channel: DeliveryChannel;
       guardianId?: string;
       recipientName?: string;
       recipientContact?: string;
+      /** Which shape of paper was handed over. Only read on the `PRINT` channel. */
+      printFormat?: PrintFormat;
       includeCharges?: boolean;
       note?: string;
       sentAt?: string;
     },
-  ) => http.post<ReceiptDelivery>(`/receipts/${paymentId}/deliveries`, input),
+  ) => http.post<DocumentDelivery>(`/document-deliveries/${documentType}/${documentId}`, input),
 
   /**
-   * Notes that this receipt has just gone to a printer. Separate from
-   * `recordReceiptDelivery` because a print proves nothing about what the
-   * family holds — the server logs it as prepared, never as delivered.
+   * Notes that this document has just gone to a printer. Separate from
+   * `recordDelivery` because a print proves nothing about what the family
+   * holds — the server logs it as prepared, never as delivered.
    */
-  logReceiptPrint: (paymentId: string, input: { includeCharges: boolean; note?: string }) =>
-    http.post<ReceiptDelivery>(`/receipts/${paymentId}/deliveries/print`, {
-      channel: 'PRINT',
-      ...input,
-    }),
+  logDocumentPrint: (
+    documentType: DeliveryDocumentType,
+    documentId: string,
+    /** `printFormat` is required: the browser is the only thing that knows which the person chose. */
+    input: { printFormat: PrintFormat; includeCharges: boolean; note?: string },
+  ) =>
+    http.post<DocumentDelivery>(
+      `/document-deliveries/${documentType}/${documentId}/print`,
+      input,
+    ),
 
-  confirmReceiptDelivery: (deliveryId: string) =>
-    http.patch<ReceiptDelivery>(`/receipt-deliveries/${deliveryId}/confirm`, {}),
+  confirmDelivery: (deliveryId: string) =>
+    http.patch<DocumentDelivery>(`/document-deliveries/${deliveryId}/confirm`, {}),
 
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),

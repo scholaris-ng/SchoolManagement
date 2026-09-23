@@ -47,6 +47,9 @@ const PaymentReceiptsPage = lazy(() =>
     default: m.PaymentReceiptsPage,
   })),
 );
+const DeliveriesPage = lazy(() =>
+  import('@/features/finance/deliveries-page').then((m) => ({ default: m.DeliveriesPage })),
+);
 const ReceiptPage = lazy(() =>
   import('@/features/finance/receipt-page').then((m) => ({ default: m.ReceiptPage })),
 );
@@ -87,6 +90,12 @@ export const financeRoutes: RouteObject[] = [
       { path: 'finance/payments', element: <PaymentsPage /> },
       { path: 'finance/payment-receipts', element: <PaymentReceiptsPage /> },
     ],
+  },
+  {
+    // The delivery register spans receipts and invoices, so either permission
+    // opens it — the same pair that gates it server-side.
+    element: guarded({ anyOf: ['payment.manage', 'invoice.manage'] }),
+    children: [{ path: 'finance/deliveries', element: <DeliveriesPage /> }],
   },
   {
     // Bursar-level oversight, not a per-family view — see the matching note on

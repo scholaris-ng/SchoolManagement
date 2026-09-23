@@ -226,6 +226,13 @@ export interface Invoice {
    * the delete call itself; this is only what lets the screen grey it out.
    */
   deletable: boolean;
+  /**
+   * How many copies of this invoice have reached the family — see
+   * `DocumentDelivery`. `0` is the interesting value: they have been billed and
+   * never told.
+   */
+  sentCount: number;
+  lastSentAt?: string | null;
   /** The school's own letterhead details, for the printed copy. */
   schoolName: string;
   schoolLogoUrl: string | null;
@@ -326,7 +333,7 @@ export interface Payment {
   note?: string | null;
   /**
    * How many copies of this payment's receipt have reached the family — see
-   * `ReceiptDelivery`. `0` is the interesting value: the money is in, and the
+   * `DocumentDelivery`. `0` is the interesting value: the money is in, and the
    * family has nothing in hand to show for it.
    */
   receiptSentCount: number;
@@ -464,8 +471,24 @@ export interface Receipt {
   reversalReason?: string | null;
 }
 
-/** How a copy of a receipt reached a family. `OTHER` is post, a courier, or a staff member's own phone. */
-export type ReceiptDeliveryChannel = 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'OTHER';
+/**
+ * Which finance document a copy was of. A receipt is keyed by its payment,
+ * since it has no identity of its own.
+ */
+export type DeliveryDocumentType = 'RECEIPT' | 'INVOICE' | 'BILL' | 'FEE_SCHEDULE';
+
+/** How a copy reached a family. `OTHER` is post, a courier, or a staff member's own phone. */
+export type DeliveryChannel = 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'OTHER';
+
+/**
+ * Which shape of paper came out of the printer.
+ *
+ * `POS` is the narrow slip a thermal roll takes; `FULL_PAGE` is the whole
+ * document on A4 or a half sheet. Two different acts at a desk: one produces a
+ * document a parent files, the other a till slip handed over on the spot — so a
+ * family holding only the slip may well come back asking for "the proper one".
+ */
+export type PrintFormat = 'POS' | 'FULL_PAGE';
 
 /**
  * How much is actually known about a copy going out.
@@ -476,17 +499,25 @@ export type ReceiptDeliveryChannel = 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'OTHER';
  * enough to record, not enough to claim the family has it. `FAILED` is a send
  * that was refused, kept because "we tried and it bounced" is worth knowing.
  */
-export type ReceiptDeliveryStatus = 'PREPARED' | 'CONFIRMED' | 'FAILED';
+export type DeliveryStatus = 'PREPARED' | 'CONFIRMED' | 'FAILED';
 
 /**
- * One copy of a receipt that left the office. Mirrors `ReceiptDeliveryDTO` in
- * `server/src/modules/finance/dto/finance.dto.ts`.
+ * One copy of a finance document that left the office. Mirrors
+ * `DocumentDeliveryDTO` in `server/src/modules/finance/dto/finance.dto.ts`.
  */
-export interface ReceiptDelivery {
+export interface DocumentDelivery {
   id: string;
-  paymentId: string;
-  channel: ReceiptDeliveryChannel;
-  status: ReceiptDeliveryStatus;
+  documentType: DeliveryDocumentType;
+  /** The payment, invoice, bill or fee structure this was a copy of. */
+  documentId: string;
+  /** What the document was called when it went out — captured, never re-read. */
+  documentLabel: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  channel: DeliveryChannel;
+  /** Which shape of paper came out, for a print. `null` on every other channel. */
+  printFormat?: PrintFormat | null;
+  status: DeliveryStatus;
   /** Who it went to. `null` for a print handed across the counter. */
   recipientName?: string | null;
   /** The address or number it went to, as used at the time. */

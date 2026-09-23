@@ -66,7 +66,7 @@ import { Payment } from '../../modules/finance/entities/payment.entity';
 import { PaymentAllocation } from '../../modules/finance/entities/paymentAllocation.entity';
 import { PaymentLineAllocation } from '../../modules/finance/entities/paymentLineAllocation.entity';
 import { PaymentReceipt } from '../../modules/finance/entities/paymentReceipt.entity';
-import { ReceiptDelivery } from '../../modules/finance/entities/receiptDelivery.entity';
+import { DocumentDelivery } from '../../modules/finance/entities/documentDelivery.entity';
 import { CustomBill } from '../../modules/finance/entities/customBill.entity';
 import { ImportJob } from '../../modules/imports/entities/importJob.entity';
 import { Notification } from '../../modules/notifications/entities/notification.entity';
@@ -149,7 +149,7 @@ export const entities = [
   PaymentAllocation,
   PaymentLineAllocation,
   PaymentReceipt,
-  ReceiptDelivery,
+  DocumentDelivery,
   CustomBill,
   ImportJob,
   Notification,

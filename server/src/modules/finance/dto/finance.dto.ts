@@ -5,9 +5,11 @@ import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentA
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
 import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
 import type {
-  ReceiptDeliveryChannel,
-  ReceiptDeliveryStatus,
-} from '../entities/receiptDelivery.entity';
+  DeliveryChannel,
+  DeliveryDocumentType,
+  DeliveryStatus,
+  PrintFormat,
+} from '../entities/documentDelivery.entity';
 
 /**
  * The status the *client* knows about. `OVERDUE` is not a stored state — see
@@ -257,6 +259,14 @@ export interface InvoiceDTO {
    */
   deletable: boolean;
   /**
+   * How many copies of this invoice have reached the family — printed, emailed
+   * or sent on WhatsApp (see `DocumentDeliveryDTO`). A refused send is not
+   * counted, since nobody holds it. `0` is the one worth showing: the family has
+   * been billed and never told.
+   */
+  sentCount: number;
+  lastSentAt: string | null;
+  /**
    * The school's own letterhead details, for a printed invoice — assembled
    * the same way `fetchReceipt` builds `ReceiptDTO`'s equivalent fields, from
    * the school record rather than a join, since only the single detail read
@@ -387,14 +397,22 @@ export interface ReceiptDTO {
 }
 
 /**
- * One copy of a receipt that went out. Mirrors `ReceiptDelivery` in
+ * One copy of a finance document that went out. Mirrors `DocumentDelivery` in
  * `client/src/types/finance.ts`.
  */
-export interface ReceiptDeliveryDTO {
+export interface DocumentDeliveryDTO {
   id: string;
-  paymentId: string;
-  channel: ReceiptDeliveryChannel;
-  status: ReceiptDeliveryStatus;
+  documentType: DeliveryDocumentType;
+  /** The payment, invoice, bill or fee structure this was a copy of. */
+  documentId: string;
+  /** What the document was called when it went out — captured, never re-read. */
+  documentLabel: string;
+  studentId: string | null;
+  studentName: string | null;
+  channel: DeliveryChannel;
+  /** Which shape of paper came out, for a print. Null on every other channel. */
+  printFormat: PrintFormat | null;
+  status: DeliveryStatus;
   recipientName: string | null;
   recipientContact: string | null;
   guardianId: string | null;
@@ -454,7 +472,7 @@ export interface PaymentDTO {
   note: string | null;
   /**
    * How many copies of this receipt have gone out — printed, emailed or sent on
-   * WhatsApp (see `ReceiptDeliveryDTO`). A refused send is not counted, since
+   * WhatsApp (see `DocumentDeliveryDTO`). A refused send is not counted, since
    * nobody holds it. `0` is the one worth showing: the family has no receipt.
    */
   receiptSentCount: number;

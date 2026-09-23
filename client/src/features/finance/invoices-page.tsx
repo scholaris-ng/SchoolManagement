@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Plus, Receipt, Trash2 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClasses, useTerms } from '@/features/academics/api';
@@ -68,6 +68,23 @@ export function InvoicesPage() {
             <p className="truncate text-xs text-muted-foreground">
               {invoice.termName} · {invoice.sessionName}
             </p>
+            {/* Whether the family has actually been told what they owe. Under
+                the invoice number rather than in a column of its own: it only
+                matters next to the bill it belongs to, and a cancelled invoice
+                is not one anybody should be chasing. */}
+            {invoice.status !== 'CANCELLED' &&
+              (invoice.sentCount > 0 ? (
+                <p
+                  className="truncate text-xs text-success"
+                  title={
+                    invoice.lastSentAt ? `Last sent ${formatDateTime(invoice.lastSentAt)}` : undefined
+                  }
+                >
+                  Sent{invoice.sentCount > 1 ? ` ${invoice.sentCount}×` : ''}
+                </p>
+              ) : (
+                <p className="truncate text-xs text-warning">Not sent</p>
+              ))}
           </div>
         ),
       },

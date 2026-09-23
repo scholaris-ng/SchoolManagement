@@ -6,8 +6,8 @@ import { cn, humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useMarkReceiptItems, useReceipt, useSetReceiptItemAmounts } from './api';
-import { useLogReceiptPrint, useReceiptDeliveries } from './use-receipt-deliveries';
-import { ReceiptDeliveryLog, deliverySummary } from './receipt-delivery-log';
+import { useDocumentDeliveries, useLogDocumentPrint } from './use-document-deliveries';
+import { DocumentDeliveryLog, deliverySummary } from './document-delivery-log';
 import { EmailReceiptDialog } from './email-receipt-dialog';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { usePrintMode } from './pos-print';
@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { QrCode } from '@/components/data/qr-code';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
-import type { Receipt, ReceiptDelivery } from '@/types/finance';
+import type { DocumentDelivery, Receipt } from '@/types/finance';
 
 /**
  * A printable receipt.
@@ -41,10 +41,10 @@ export function ReceiptPage() {
   // seeing who it has already been sent to — all of it is the office's work.
   const canManageReceipt = can({ anyOf: ['payment.manage', 'invoice.manage'] });
 
-  const logPrint = useLogReceiptPrint(paymentId ?? '');
+  const logPrint = useLogDocumentPrint('RECEIPT', paymentId ?? '');
   // Read here as well as inside the log card — one shared query — so the header
   // can say whether the family has this receipt before anybody scrolls.
-  const deliveries = useReceiptDeliveries(canManageReceipt ? paymentId : undefined);
+  const deliveries = useDocumentDeliveries('RECEIPT', canManageReceipt ? paymentId : undefined);
 
   /**
    * Printing also notes the print in the delivery register. Logged before the
@@ -54,8 +54,8 @@ export function ReceiptPage() {
    */
   const printAndLog = (mode: PrintMode) => {
     logPrint.mutate({
+      printFormat: mode === 'pos' ? 'POS' : 'FULL_PAGE',
       includeCharges: showItems,
-      note: mode === 'pos' ? 'POS slip, 78mm roll' : 'Full page',
     });
     printReceipt(mode);
   };
@@ -274,8 +274,9 @@ export function ReceiptPage() {
         {/* Below the receipt, and never on the paper: this is the office's own
             record of where copies went, not part of the document itself. */}
         {canManageReceipt && (
-          <ReceiptDeliveryLog
-            paymentId={record.paymentId}
+          <DocumentDeliveryLog
+            documentType="RECEIPT"
+            documentId={record.paymentId}
             studentId={record.studentId}
             includeCharges={showItems}
             sendable={!reversed}
@@ -295,7 +296,7 @@ export function ReceiptPage() {
 }
 
 /** Whether the family holds this receipt, in one word, next to its number. */
-function DeliveryBadge({ deliveries }: { deliveries: ReceiptDelivery[] }) {
+function DeliveryBadge({ deliveries }: { deliveries: DocumentDelivery[] }) {
   const summary = deliverySummary(deliveries);
   return (
     <Badge data-cy="finance-receipt-sent-badge" tone={summary.tone}>

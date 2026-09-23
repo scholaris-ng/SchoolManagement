@@ -28,6 +28,7 @@ import {
   Paperclip,
   Receipt,
   ScrollText,
+  Send,
   Settings,
   Shield,
   Sparkles,
@@ -159,6 +160,12 @@ export const NAV_SECTIONS: NavSection[] = [
         to: '/finance/payment-receipts',
         icon: Paperclip,
         require: 'payment.manage',
+      },
+      {
+        label: 'Documents sent',
+        to: '/finance/deliveries',
+        icon: Send,
+        require: { anyOf: ['payment.manage', 'invoice.manage'] },
       },
       { label: 'Debtors', to: '/finance/debtors', icon: Landmark, require: 'analytics.read' },
       {
