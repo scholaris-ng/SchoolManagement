@@ -30,13 +30,11 @@ const SORTABLE: Record<string, string> = {
   studentName: 'dd.student_name',
 };
 
-export interface DeliveryFilter {
-  page: number;
-  pageSize: number;
+/** The filters shared by a read of the register and a bulk write against it. */
+export interface DeliveryScope {
   documentType?: string;
   channel?: string;
   printFormat?: string;
-  status?: string;
   studentId?: string;
   /** `YYYY-MM-DD`, inclusive, read as whole days in `timezone`. */
   dateFrom?: string;
@@ -45,8 +43,22 @@ export interface DeliveryFilter {
   timezone?: string;
   /** Matches a document number, a student's name or who it was sent to. */
   search?: string;
+}
+
+export interface DeliveryFilter extends DeliveryScope {
+  page: number;
+  pageSize: number;
+  status?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+}
+
+/** One row `confirmAll` actually changed — enough to write its own audit entry without a second read. */
+export interface ConfirmedDelivery {
+  id: string;
+  documentType: string;
+  documentLabel: string;
+  channel: string;
 }
 
 export class DocumentDeliveryRepository extends TenantRepository<DocumentDelivery> {
@@ -91,6 +103,48 @@ export class DocumentDeliveryRepository extends TenantRepository<DocumentDeliver
     );
   }
 
+  /**
+   * The `WHERE` clauses every read or bulk write against the register shares —
+   * everything except `status`, which `fetchPaginated` and `confirmAll` each
+   * pin to something different: whatever the office chose to look at, versus
+   * exactly `PREPARED`, the only status a confirmation can ever apply to.
+   */
+  private applyScope(params: unknown[], where: string[], scope: DeliveryScope): void {
+    const add = (clause: (index: number) => string, value: unknown) => {
+      params.push(value);
+      where.push(clause(params.length));
+    };
+
+    if (scope.documentType) add((i) => `dd.document_type = $${i}`, scope.documentType);
+    if (scope.channel) add((i) => `dd.channel = $${i}`, scope.channel);
+    if (scope.printFormat) add((i) => `dd.print_format = $${i}`, scope.printFormat);
+    if (scope.studentId) add((i) => `dd.student_id = $${i}`, scope.studentId);
+
+    // `sent_at` is an instant, so "the 1st" has to mean midnight in the school's
+    // own zone — the same reasoning, and the same shape, as
+    // `PaymentRepository.fetchPaginated`: a bare range on the column, so the
+    // `(school_id, sent_at)` index can still serve it.
+    if (scope.dateFrom || scope.dateTo) {
+      params.push(scope.timezone ?? DEFAULT_TIMEZONE);
+      const zone = `$${params.length}::text`;
+      if (scope.dateFrom) {
+        add((i) => `dd.sent_at >= ($${i}::date)::timestamp AT TIME ZONE ${zone}`, scope.dateFrom);
+      }
+      if (scope.dateTo) {
+        // Exclusive of the day after, which is how "through the 30th" includes 23:59.
+        add((i) => `dd.sent_at < (($${i}::date) + 1)::timestamp AT TIME ZONE ${zone}`, scope.dateTo);
+      }
+    }
+
+    if (scope.search) {
+      add(
+        (i) =>
+          `(dd.document_label ILIKE $${i} OR dd.student_name ILIKE $${i} OR dd.recipient_name ILIKE $${i} OR dd.recipient_contact ILIKE $${i})`,
+        `%${scope.search}%`,
+      );
+    }
+  }
+
   /** The register: everything this school has sent, filtered and paged. */
   async fetchPaginated(
     schoolId: string,
@@ -98,40 +152,10 @@ export class DocumentDeliveryRepository extends TenantRepository<DocumentDeliver
   ): Promise<Paginated<DocumentDeliveryDTO>> {
     const params: unknown[] = [schoolId];
     const where = ['dd.school_id = $1'];
-
-    const add = (clause: (index: number) => string, value: unknown) => {
-      params.push(value);
-      where.push(clause(params.length));
-    };
-
-    if (filter.documentType) add((i) => `dd.document_type = $${i}`, filter.documentType);
-    if (filter.channel) add((i) => `dd.channel = $${i}`, filter.channel);
-    if (filter.printFormat) add((i) => `dd.print_format = $${i}`, filter.printFormat);
-    if (filter.status) add((i) => `dd.status = $${i}`, filter.status);
-    if (filter.studentId) add((i) => `dd.student_id = $${i}`, filter.studentId);
-
-    // `sent_at` is an instant, so "the 1st" has to mean midnight in the school's
-    // own zone — the same reasoning, and the same shape, as
-    // `PaymentRepository.fetchPaginated`: a bare range on the column, so the
-    // `(school_id, sent_at)` index can still serve it.
-    if (filter.dateFrom || filter.dateTo) {
-      params.push(filter.timezone ?? DEFAULT_TIMEZONE);
-      const zone = `$${params.length}::text`;
-      if (filter.dateFrom) {
-        add((i) => `dd.sent_at >= ($${i}::date)::timestamp AT TIME ZONE ${zone}`, filter.dateFrom);
-      }
-      if (filter.dateTo) {
-        // Exclusive of the day after, which is how "through the 30th" includes 23:59.
-        add((i) => `dd.sent_at < (($${i}::date) + 1)::timestamp AT TIME ZONE ${zone}`, filter.dateTo);
-      }
-    }
-
-    if (filter.search) {
-      add(
-        (i) =>
-          `(dd.document_label ILIKE $${i} OR dd.student_name ILIKE $${i} OR dd.recipient_name ILIKE $${i} OR dd.recipient_contact ILIKE $${i})`,
-        `%${filter.search}%`,
-      );
+    this.applyScope(params, where, filter);
+    if (filter.status) {
+      params.push(filter.status);
+      where.push(`dd.status = $${params.length}`);
     }
 
     const whereSql = where.join(' AND ');
@@ -175,5 +199,42 @@ export class DocumentDeliveryRepository extends TenantRepository<DocumentDeliver
       },
     );
     return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * Confirms every `PREPARED` copy matching a scope in one statement — the
+   * office's own "yes, all of these went out" rather than one click per row.
+   *
+   * Deliberately not built from `confirm`: a thousand individual `UPDATE`s for
+   * a backlog is a thousand round trips, where this is one. Returns exactly
+   * what changed, so the service can write one audit entry per confirmation
+   * without a second read to find out what it just did.
+   */
+  async confirmAll(
+    schoolId: string,
+    scope: DeliveryScope,
+    by: { userId: string; name: string },
+  ): Promise<ConfirmedDelivery[]> {
+    const params: unknown[] = [schoolId];
+    const where = ['dd.school_id = $1', `dd.status = 'PREPARED'`];
+    this.applyScope(params, where, scope);
+
+    params.push(by.userId, by.name);
+    const userIdIndex = params.length - 1;
+    const nameIndex = params.length;
+
+    // `pg`/TypeORM hands an `UPDATE` back as `[rows, affectedCount]`, not bare
+    // rows the way a `SELECT` does — unlike every other query in this file.
+    const [rows]: [ConfirmedDelivery[], number] = await this.repo.query(
+      `UPDATE document_deliveries dd
+          SET status = 'CONFIRMED',
+              confirmed_by_user_id = $${userIdIndex},
+              confirmed_by_name = $${nameIndex},
+              confirmed_at = now()
+        WHERE ${where.join(' AND ')}
+        RETURNING dd.id, dd.document_type AS "documentType", dd.document_label AS "documentLabel", dd.channel`,
+      params,
+    );
+    return rows;
   }
 }

@@ -114,6 +114,16 @@ export function useConfirmDelivery(documentType: DeliveryDocumentType, documentI
   });
 }
 
+/** The register itself, plus every list that carries a "sent" mark — invalidated after any register-wide write. */
+function invalidateRegister(
+  queryClient: ReturnType<typeof useQueryClient>,
+  schoolId: string | null,
+) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.finance.deliveries(schoolId) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+}
+
 /**
  * Confirming from the register, where rows are of every kind at once — so there
  * is no single document whose card to refresh, only the register and the lists.
@@ -132,10 +142,38 @@ export function useConfirmDeliveryFromRegister() {
           delivery.documentId,
         ),
       });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.deliveries(schoolId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+      invalidateRegister(queryClient, schoolId);
       toast.success('Marked as delivered');
+    },
+  });
+}
+
+/**
+ * "Mark all as delivered" for whatever the register is currently filtered to.
+ *
+ * Takes the register's own filter object as its argument rather than closing
+ * over it, so the mutation always confirms exactly what is on screen at the
+ * moment it is clicked — even if a filter changes while the request is in
+ * flight, this cannot end up scoped to a stale one.
+ */
+export function useConfirmAllDeliveries() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (query: ListQuery) => FinanceEndpoints.confirmAllDeliveries(query),
+    onSuccess: ({ confirmed }) => {
+      invalidateRegister(queryClient, schoolId);
+      // No per-document cache to invalidate here, unlike a single confirm: a
+      // bulk confirm can touch documents whose own delivery-log card is not
+      // even open right now, so there is nothing narrower worth targeting.
+      if (confirmed === 0) {
+        toast.info('Nothing to confirm', {
+          description: 'Every copy matching these filters is already delivered, failed, or there is nothing here.',
+        });
+      } else {
+        toast.success(confirmed === 1 ? '1 copy marked as delivered' : `${confirmed} copies marked as delivered`);
+      }
     },
   });
 }

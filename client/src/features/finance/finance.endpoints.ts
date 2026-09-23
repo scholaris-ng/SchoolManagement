@@ -441,6 +441,15 @@ export const FinanceEndpoints = {
   confirmDelivery: (deliveryId: string) =>
     http.patch<DocumentDelivery>(`/document-deliveries/${deliveryId}/confirm`, {}),
 
+  /**
+   * "Mark all as delivered" for whatever the register is currently filtered to
+   * — every `PREPARED` copy the filters match, confirmed in one call. `query`
+   * is the same filter object the register's own list read takes, minus
+   * paging and sort, which have no meaning for a bulk write.
+   */
+  confirmAllDeliveries: (query: ListQuery) =>
+    http.patch<{ confirmed: number }>('/document-deliveries/confirm-all', undefined, { query }),
+
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),
 

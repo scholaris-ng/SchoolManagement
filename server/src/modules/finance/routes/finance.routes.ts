@@ -66,6 +66,7 @@ import {
   submitPaymentReceiptSchema,
 } from '../validators/paymentReceipts.schema';
 import {
+  confirmAllDeliveriesSchema,
   deliveryIdParamSchema,
   documentDeliveryParamSchema,
   fetchDeliveriesSchema,
@@ -539,6 +540,19 @@ router.patch(
   authorise('payment.manage', 'invoice.manage'),
   validate(deliveryIdParamSchema),
   DocumentDeliveriesController.confirm,
+);
+
+/**
+ * "Mark all as delivered" for the register's current filters — every `PREPARED`
+ * copy the filters match, confirmed in one call rather than one per row. No
+ * document id or delivery id in the path: the scope is entirely the query
+ * string, the same one `GET /document-deliveries` reads.
+ */
+router.patch(
+  '/document-deliveries/confirm-all',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(confirmAllDeliveriesSchema),
+  DocumentDeliveriesController.confirmAll,
 );
 
 router.get(

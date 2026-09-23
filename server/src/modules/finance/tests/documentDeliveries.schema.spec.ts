@@ -1,4 +1,5 @@
 import {
+  confirmAllDeliveriesSchema,
   fetchDeliveriesSchema,
   logPrintDeliverySchema,
   recordDeliverySchema,
@@ -212,5 +213,52 @@ describe('fetchDeliveriesSchema', () => {
     expect(fetchDeliveriesSchema.safeParse({ query: { sortBy: 'recipientContact' } }).success).toBe(
       false,
     );
+  });
+});
+
+describe('confirmAllDeliveriesSchema', () => {
+  it('accepts an unfiltered scope — every PREPARED copy in the school', () => {
+    const parsed = confirmAllDeliveriesSchema.parse({ query: {} });
+    expect(parsed.query).toEqual({});
+  });
+
+  it('narrows by the same filters the register itself reads', () => {
+    const parsed = confirmAllDeliveriesSchema.parse({
+      query: { documentType: 'RECEIPT', channel: 'PRINT', printFormat: 'POS', search: 'Chizea' },
+    });
+    expect(parsed.query).toMatchObject({
+      documentType: 'RECEIPT',
+      channel: 'PRINT',
+      printFormat: 'POS',
+      search: 'Chizea',
+    });
+  });
+
+  /**
+   * No `status` field at all: this only ever targets a `PREPARED` copy, and
+   * accepting one here would let a stray query param confirm what is already
+   * `CONFIRMED` or resurrect a `FAILED` send — neither of which "confirm" means.
+   * A stray `status` is silently dropped rather than refused, the same way an
+   * unrecognised key anywhere else in this object would be.
+   */
+  it('drops a status, page, or sort field rather than acting on it', () => {
+    const parsed = confirmAllDeliveriesSchema.parse({
+      query: { status: 'FAILED', page: '2', pageSize: '50', sortBy: 'sentAt' },
+    });
+    expect(parsed.query).not.toHaveProperty('status');
+    expect(parsed.query).not.toHaveProperty('page');
+    expect(parsed.query).not.toHaveProperty('sortBy');
+  });
+
+  it('refuses a document type it does not know, same as the register itself', () => {
+    expect(
+      confirmAllDeliveriesSchema.safeParse({ query: { documentType: 'REPORT_CARD' } }).success,
+    ).toBe(false);
+  });
+
+  it('refuses a date bound that is not a plain day', () => {
+    expect(
+      confirmAllDeliveriesSchema.safeParse({ query: { dateFrom: '21/09/2026' } }).success,
+    ).toBe(false);
   });
 });

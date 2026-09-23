@@ -1,12 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Send } from 'lucide-react';
+import { Check, CheckCheck, Send } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
 import { useListQuery } from '@/hooks/use-list-query';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
 import { FilterBar } from '@/components/data/filter-bar';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import type { DocumentDelivery } from '@/types/finance';
 import {
   CHANNEL_LABEL,
@@ -15,7 +16,11 @@ import {
   DeliveryStatusBadge,
   PRINT_FORMAT_LABEL,
 } from './document-delivery-log';
-import { useConfirmDeliveryFromRegister, useDeliveries } from './use-document-deliveries';
+import {
+  useConfirmAllDeliveries,
+  useConfirmDeliveryFromRegister,
+  useDeliveries,
+} from './use-document-deliveries';
 
 const TYPE_OPTIONS = [
   { value: 'RECEIPT', label: 'Receipts' },
@@ -73,6 +78,14 @@ export function DeliveriesPage() {
   });
   const deliveries = useDeliveries({ ...list.query, ...list.filters });
   const confirm = useConfirmDeliveryFromRegister();
+  const confirmAll = useConfirmAllDeliveries();
+  const [confirmAllOpen, setConfirmAllOpen] = useState(false);
+
+  // A confirm can only ever apply to a `PREPARED` copy, so a status filter
+  // pinned to anything else guarantees the button would find nothing — worth
+  // saying up front rather than letting somebody click it to learn that.
+  const statusExcludesPrepared =
+    list.filters.status === 'CONFIRMED' || list.filters.status === 'FAILED';
 
   const columns = useMemo<Column<DocumentDelivery>[]>(
     () => [
@@ -212,6 +225,22 @@ export function DeliveriesPage() {
         title="Documents sent"
         description="Every receipt, invoice, bill and fee schedule this school has sent out — printed, emailed or shared on WhatsApp."
         breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Documents sent' }]}
+        actions={
+          <Button
+            data-cy="deliveries-confirm-all"
+            variant="outline"
+            disabled={statusExcludesPrepared}
+            title={
+              statusExcludesPrepared
+                ? 'Filtered to a status that has nothing left to confirm'
+                : undefined
+            }
+            onClick={() => setConfirmAllOpen(true)}
+          >
+            <CheckCheck />
+            Mark all as delivered
+          </Button>
+        }
       />
 
       <FilterBar
@@ -265,6 +294,20 @@ export function DeliveriesPage() {
         emptyIcon={<Send />}
         emptyTitle={list.isFiltered ? 'Nothing matches that filter' : 'Nothing has gone out yet'}
         emptyDescription="Receipts, invoices and bills appear here as they are printed, emailed or shared."
+      />
+
+      <ConfirmDialog
+        data-cy="deliveries-confirm-all-dialog"
+        open={confirmAllOpen}
+        onOpenChange={setConfirmAllOpen}
+        title="Mark all as delivered?"
+        description="Confirms every copy that is still not confirmed and matches your current filters — the chips above this table — across every page, not only this one. A copy that already failed or was already confirmed is left exactly as it is."
+        confirmLabel="Mark all as delivered"
+        loading={confirmAll.isPending}
+        onConfirm={async () => {
+          await confirmAll.mutateAsync({ ...list.query, ...list.filters });
+          setConfirmAllOpen(false);
+        }}
       />
     </PageContainer>
   );

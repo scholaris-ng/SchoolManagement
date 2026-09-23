@@ -19,6 +19,7 @@ import type {
 } from '../entities/documentDelivery.entity';
 import type { DocumentDeliveryDTO } from '../dto/finance.dto';
 import type {
+  ConfirmAllDeliveriesQuery,
   FetchDeliveriesQuery,
   LogPrintDeliveryInput,
   RecordDeliveryInput,
@@ -255,6 +256,47 @@ export class DocumentDeliveriesService {
     const row = await this.deliveries.findOneRow(context.schoolId, id);
     if (!row) throw AppError.internal();
     return row;
+  }
+
+  /**
+   * "Yes, every copy on screen has reached its family" — one click for the
+   * whole backlog rather than one per row.
+   *
+   * Scoped exactly the way the register itself is: whatever filters the office
+   * has set (document, channel, paper, student, date range, search) apply here
+   * too, so "confirm all" means what it visibly means — never more than what is
+   * currently filtered in, and never limited to just the one page on screen.
+   * Only a `PREPARED` copy can be confirmed this way; `CONFIRMED` and `FAILED`
+   * rows within the same scope are simply not touched.
+   */
+  async confirmAll(
+    context: RequestContext,
+    query: ConfirmAllDeliveriesQuery,
+  ): Promise<{ confirmed: number }> {
+    const timezone =
+      query.dateFrom || query.dateTo ? await this.schoolTimezone(context.schoolId) : undefined;
+
+    const confirmed = await this.deliveries.confirmAll(
+      context.schoolId,
+      { ...query, timezone },
+      { userId: context.user.id, name: context.user.displayName },
+    );
+
+    // One entry per row, matching how every other bulk action in this module
+    // audits itself (see `InvoicesService.deleteInvoices`) — a school asking
+    // "was PAY-20260919-3F9A2C really confirmed, and by whom?" gets an answer
+    // that names that row, not just a count.
+    for (const row of confirmed) {
+      await this.audit.record(context, {
+        action: 'document.delivery.confirmed',
+        entityType: 'DocumentDelivery',
+        entityId: row.id,
+        entityLabel: `${row.documentLabel} · ${row.channel}`,
+        after: { status: 'CONFIRMED', bulk: true },
+      });
+    }
+
+    return { confirmed: confirmed.length };
   }
 
   /* -- Internals --------------------------------------------------------------- */

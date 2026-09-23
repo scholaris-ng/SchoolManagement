@@ -28,6 +28,23 @@ export const deliveryIdParamSchema = z.object({
 });
 
 /**
+ * The filters a read of the register and a bulk write against it share. Split
+ * out so `confirmAllDeliveriesSchema` cannot drift from what `fetchDeliveriesSchema`
+ * accepts — the register and "confirm everything on screen" have to agree on
+ * what a filter means.
+ */
+const deliveryScope = {
+  documentType: z.enum(DELIVERY_DOCUMENT_TYPES).optional(),
+  channel: z.enum(DELIVERY_CHANNELS).optional(),
+  /** Narrows prints to one shape of paper — "which receipts only ever got a till slip?". */
+  printFormat: z.enum(PRINT_FORMATS).optional(),
+  studentId: z.string().uuid().optional(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
+  search: z.string().trim().max(120).optional(),
+};
+
+/**
  * The register itself. Every filter is optional — the unfiltered page is the
  * useful default, since "what went out today" is what the office opens it for.
  */
@@ -35,18 +52,21 @@ export const fetchDeliveriesSchema = z.object({
   query: z.object({
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce.number().int().positive().max(100).default(25),
-    documentType: z.enum(DELIVERY_DOCUMENT_TYPES).optional(),
-    channel: z.enum(DELIVERY_CHANNELS).optional(),
-    /** Narrows prints to one shape of paper — "which receipts only ever got a till slip?". */
-    printFormat: z.enum(PRINT_FORMATS).optional(),
+    ...deliveryScope,
     status: z.enum(DELIVERY_STATUSES).optional(),
-    studentId: z.string().uuid().optional(),
-    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
-    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
-    search: z.string().trim().max(120).optional(),
     sortBy: z.enum(['sentAt', 'documentLabel', 'studentName']).optional(),
     sortDir: z.enum(['asc', 'desc']).optional(),
   }),
+});
+
+/**
+ * "Mark all as delivered" for whatever the office currently has the register
+ * filtered to. No `status` field: this only ever targets a `PREPARED` copy —
+ * accepting a status here would let a stray query param confirm what is already
+ * `CONFIRMED` or resurrect a `FAILED` send, neither of which "confirm" means.
+ */
+export const confirmAllDeliveriesSchema = z.object({
+  query: z.object(deliveryScope),
 });
 
 /**
@@ -108,6 +128,7 @@ export const logPrintDeliverySchema = z.object({
 });
 
 export type FetchDeliveriesQuery = z.infer<typeof fetchDeliveriesSchema>['query'];
+export type ConfirmAllDeliveriesQuery = z.infer<typeof confirmAllDeliveriesSchema>['query'];
 export type RecordDeliveryInput = z.infer<typeof recordDeliverySchema>['body'];
 export type LogPrintDeliveryInput = z.infer<typeof logPrintDeliverySchema>['body'];
 export type DeliveryDocumentParams = z.infer<typeof documentDeliveryParamSchema>['params'];

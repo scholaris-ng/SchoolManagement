@@ -3,6 +3,7 @@ import { ApiResponse } from '../../../shared/response/apiResponse';
 import { contextOf } from '../../../shared/middleware/tenant.middleware';
 import { DocumentDeliveriesService } from '../services/documentDeliveries.service';
 import type {
+  ConfirmAllDeliveriesQuery,
   DeliveryDocumentParams,
   FetchDeliveriesQuery,
   LogPrintDeliveryInput,
@@ -59,6 +60,16 @@ export class DocumentDeliveriesController {
       const { deliveryId } = req.validated!.params as { deliveryId: string };
       const delivery = await service().confirm(contextOf(req), deliveryId);
       res.status(200).json(ApiResponse.ok(delivery, 'Marked as delivered'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async confirmAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const query = req.validated!.query as ConfirmAllDeliveriesQuery;
+      const result = await service().confirmAll(contextOf(req), query);
+      res.status(200).json(ApiResponse.ok(result, 'Marked as delivered'));
     } catch (error) {
       next(error);
     }
