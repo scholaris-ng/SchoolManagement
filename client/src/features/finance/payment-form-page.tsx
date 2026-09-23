@@ -120,10 +120,20 @@ export function PaymentFormPage() {
       [invoiceId]: { ...(current[invoiceId] ?? {}), [lineId]: value },
     }));
 
+  // A line's box can be blank (never touched, or cleared back to "no
+  // opinion" — falls back to showing its balance as a placeholder) or hold
+  // an actual typed amount, including "0" for "not this one" — which is a
+  // real, counted answer, not the same as blank. Told apart by the raw
+  // string, since Number('') and Number('0') both come out falsy.
+  const namedLineValue = (invoiceId: string, lineId: string): number | null => {
+    const raw = lineAllocations[invoiceId]?.[lineId];
+    return raw !== undefined && raw !== '' ? Number(raw) || 0 : null;
+  };
+
   // Naming fee items is optional and never has to be exhaustive — a bursar
   // naming the one or two unusual charges on a bill and leaving the rest
-  // against the invoice at large is the common case, not an error. Only
-  // naming more than the payment actually puts towards the invoice is a real
+  // against the invoice at large is the common case, not an error. Naming
+  // more than the payment actually puts towards the invoice is a real
   // mistake, since that's money that isn't there.
   const overNamedInvoiceIds = new Set(
     Object.keys(lineAllocations).filter(
@@ -131,12 +141,32 @@ export function PaymentFormPage() {
     ),
   );
 
+  // While an invoice's fee items are open, every line is showing an
+  // amount — its named amount if it has one, its outstanding balance as a
+  // stand-in otherwise (see the line list below). Those figures need to add
+  // up to what's actually applied to the invoice, or the panel is lying
+  // about where the money is going. This only runs against the invoice
+  // that's currently expanded, since that's the only one whose charges are
+  // loaded and on screen.
+  const expandedLines =
+    expandedInvoiceId && !expandedInvoice.isPending
+      ? (expandedInvoice.data?.lines ?? []).filter((line) => line.balance > 0)
+      : [];
+  const expandedApplyTotal = expandedInvoiceId ? Number(allocations[expandedInvoiceId]) || 0 : 0;
+  const expandedVisibleTotal = expandedLines.reduce((sum, line) => {
+    const named = expandedInvoiceId ? namedLineValue(expandedInvoiceId, line.id) : null;
+    return sum + (named !== null ? named : line.balance);
+  }, 0);
+  const feeItemsMismatched =
+    expandedLines.length > 0 && Math.abs(expandedVisibleTotal - expandedApplyTotal) > 0.004;
+
   const valid =
     Boolean(studentId) &&
     Number(amount) > 0 &&
     Boolean(paidAt) &&
     !overAllocated &&
-    overNamedInvoiceIds.size === 0;
+    overNamedInvoiceIds.size === 0 &&
+    !feeItemsMismatched;
 
   const submit = async () => {
     if (!valid) return;
@@ -381,9 +411,7 @@ export function PaymentFormPage() {
               <ul className="space-y-2">
                 {invoices.map((invoice) => {
                   const expanded = expandedInvoiceId === invoice.id;
-                  const namedTotal = lineSumFor(invoice.id);
                   const applyTotal = Number(allocations[invoice.id]) || 0;
-                  const unnamed = applyTotal - namedTotal;
                   const overNamed = overNamedInvoiceIds.has(invoice.id);
                   return (
                     <li key={invoice.id} className="space-y-2 rounded-md border border-border p-3">
@@ -444,7 +472,7 @@ export function PaymentFormPage() {
                                     const lineEditing =
                                       editingLine?.invoiceId === invoice.id &&
                                       editingLine.lineId === line.id;
-                                    const namedValue = Number(lineAllocations[invoice.id]?.[line.id]) || 0;
+                                    const namedValue = namedLineValue(invoice.id, line.id);
                                     return (
                                       <li key={line.id} className="flex items-center gap-3">
                                         <div className="min-w-0 flex-1 text-xs">
@@ -511,11 +539,12 @@ export function PaymentFormPage() {
                                               data-cy={`finance-payment-form-line-${line.id}`}
                                               className={cn(
                                                 'w-24 text-right text-xs font-medium tabular-nums',
-                                                namedValue <= 0 && 'font-normal text-muted-foreground',
+                                                (namedValue === null || namedValue <= 0) &&
+                                                  'font-normal text-muted-foreground',
                                               )}
                                             >
                                               {formatCurrency(
-                                                namedValue > 0 ? namedValue : line.balance,
+                                                namedValue !== null ? namedValue : line.balance,
                                                 'NGN',
                                                 { showDecimals: false },
                                               )}
@@ -533,14 +562,32 @@ export function PaymentFormPage() {
                                     );
                                   })}
                               </ul>
-                              <p className={cn('text-xs', overNamed ? 'font-medium text-danger' : 'text-muted-foreground')}>
-                                {formatCurrency(namedTotal, 'NGN', { showDecimals: false })} of{' '}
-                                {formatCurrency(applyTotal, 'NGN', { showDecimals: false })} named by fee item
-                                {overNamed
-                                  ? ' — that is more than is being applied to this invoice'
-                                  : unnamed > 0.004
-                                    ? ` · ${formatCurrency(unnamed, 'NGN', { showDecimals: false })} against the invoice itself`
-                                    : ''}
+                              <p
+                                className={cn(
+                                  'text-xs',
+                                  feeItemsMismatched || overNamed
+                                    ? 'font-medium text-danger'
+                                    : 'text-muted-foreground',
+                                )}
+                              >
+                                {overNamed ? (
+                                  <>
+                                    {formatCurrency(lineSumFor(invoice.id), 'NGN', { showDecimals: false })} named
+                                    by fee item — that is more than is being applied to this invoice
+                                  </>
+                                ) : feeItemsMismatched ? (
+                                  <>
+                                    These fee items add up to{' '}
+                                    {formatCurrency(expandedVisibleTotal, 'NGN', { showDecimals: false })}, not the{' '}
+                                    {formatCurrency(applyTotal, 'NGN', { showDecimals: false })} being applied to
+                                    this invoice — edit one of the amounts above so they add up.
+                                  </>
+                                ) : (
+                                  <>
+                                    {formatCurrency(expandedVisibleTotal, 'NGN', { showDecimals: false })} across
+                                    these fee items, matching what's applied to this invoice
+                                  </>
+                                )}
                               </p>
                             </>
                           )}
@@ -577,6 +624,13 @@ export function PaymentFormPage() {
               <Alert tone="danger" title="A fee item is named for more than it should be">
                 Open "Name which fee item this pays for" on the invoice above — the amounts named
                 there add up to more than what's applied to that invoice.
+              </Alert>
+            )}
+
+            {!overAllocated && overNamedInvoiceIds.size === 0 && feeItemsMismatched && (
+              <Alert tone="danger" title="Fee items don't add up to what's applied">
+                Open "Name which fee item this pays for" on the invoice above and edit the amounts
+                so they add up to exactly what's applied to that invoice.
               </Alert>
             )}
           </CardContent>
