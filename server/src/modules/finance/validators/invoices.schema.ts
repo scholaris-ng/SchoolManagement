@@ -81,12 +81,29 @@ const invoiceLines = z
   );
 
 /**
- * Discounts the bursar ticked for this one bill, by id — on top of whatever
- * the student has been granted (`StudentDiscount`), which always applies. The
- * amounts are worked out server-side from the discount's own definition, never
- * accepted from the request, for the same reason a line's price never is.
+ * One discount the bursar ticked for this bill, and which of its lines it
+ * should come off — on top of whatever the student has been granted
+ * (`StudentDiscount`), which always applies to every line. The amount is
+ * worked out server-side from the discount's own definition, never accepted
+ * from the request, for the same reason a line's price never is; `feeItemIds`
+ * only narrows which lines it reaches, and only within whatever the discount
+ * was already defined to allow (`InvoicesService.discountsFor`) — empty means
+ * every line the discount can otherwise reach.
  */
-const discountIds = z.array(z.string().uuid()).max(10, 'That is more discounts than one invoice needs');
+const invoiceDiscount = z
+  .object({
+    discountId: z.string().uuid(),
+    feeItemIds: z.array(z.string().uuid()).max(50).default([]),
+  })
+  .strict();
+
+const invoiceDiscounts = z
+  .array(invoiceDiscount)
+  .max(10, 'That is more discounts than one invoice needs')
+  .refine(
+    (entries) => new Set(entries.map((entry) => entry.discountId)).size === entries.length,
+    'The same discount appears twice',
+  );
 
 export const createInvoiceSchema = z.object({
   body: z
@@ -95,7 +112,7 @@ export const createInvoiceSchema = z.object({
       termId: z.string().uuid('Choose the term this bill covers'),
       dueDate: isoDate,
       lines: invoiceLines,
-      discountIds: discountIds.default([]),
+      discounts: invoiceDiscounts.default([]),
       note: z.string().trim().max(2000).optional().or(z.literal('')),
     })
     .strict(),
@@ -119,7 +136,7 @@ export const updateInvoiceSchema = z.object({
       note: z.string().trim().max(2000).optional().or(z.literal('')),
       lines: invoiceLines.optional(),
       /** Only read alongside `lines`. Omitted, the invoice keeps the discounts it already carries. */
-      discountIds: discountIds.optional(),
+      discounts: invoiceDiscounts.optional(),
     })
     .strict(),
 });

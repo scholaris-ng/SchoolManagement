@@ -12,9 +12,9 @@ import {
   useStudentDiscounts,
   useUpdateInvoice,
 } from './api';
-import { grantReachesTerm } from './discount-scope';
+import { grantReachesTerm, resolveDiscountScope } from './discount-scope';
 import { previewDiscounts } from './discount-math';
-import { InvoiceDiscountsPicker } from './invoice-discounts-picker';
+import { InvoiceDiscountsPicker, type ChosenDiscount } from './invoice-discounts-picker';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Card,
@@ -40,6 +40,10 @@ interface LineDraft {
   description: string;
   /** One of the fee item's own named prices; unset bills the item's own `amount`. */
   priceOptionId?: string;
+  /** A discount keyed straight onto this charge, no named reason attached. */
+  discountMode: 'FIXED' | 'PERCENTAGE';
+  /** As typed — a currency amount under `FIXED`, 0-100 under `PERCENTAGE`. Blank means no discount. */
+  discountValue: string;
 }
 
 /**
@@ -66,8 +70,12 @@ export function InvoiceEditPage() {
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([]);
   // Starts as the discounts the invoice already carries, so saving without
-  // touching the picker keeps them; the server drops any that are no longer active.
-  const [chosenDiscountIds, setChosenDiscountIds] = useState<string[]>([]);
+  // touching the picker keeps them; the server drops any that are no longer
+  // active. The invoice's own record of an applied discount has no memory of
+  // which lines it was scoped to, only what it waived in total, so a
+  // previously-scoped discount reopens applying to every eligible line —
+  // re-narrow it here if that bill only ever meant to cover one charge.
+  const [chosenDiscounts, setChosenDiscounts] = useState<ChosenDiscount[]>([]);
   const [initialised, setInitialised] = useState(false);
 
   // Waits on both the invoice and the fee item list: reconstructing which
@@ -77,7 +85,9 @@ export function InvoiceEditPage() {
     if (!invoice.data || !feeItems.data || initialised) return;
     setDueDate(toDateInputValue(invoice.data.dueDate));
     setNote(invoice.data.note ?? '');
-    setChosenDiscountIds(invoice.data.appliedDiscounts.map((entry) => entry.discountId));
+    setChosenDiscounts(
+      invoice.data.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
+    );
     setLines(
       invoice.data.lines.map((line) => {
         const item = feeItems.data.items.find((entry) => entry.id === line.feeItemId);
@@ -110,6 +120,13 @@ export function InvoiceEditPage() {
           accountIds: matched.length > 0 ? matched : (item?.accounts.map((a) => a.id) ?? []),
           description: line.description,
           priceOptionId: matchedPriceOption?.id,
+          // The line only snapshots the combined total taken off it — manual
+          // and named discounts together, with no record of how much of it
+          // came from which. Reopening it as a manual amount would double it
+          // up once the named discounts above are reapplied on top, so this
+          // starts blank; re-key it here if this bill still needs it.
+          discountMode: 'FIXED',
+          discountValue: '',
         };
       }),
     );
@@ -154,6 +171,25 @@ export function InvoiceEditPage() {
     [lines, amountFor],
   );
 
+  const grossFor = useCallback(
+    (line: LineDraft) => amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+    [amountFor],
+  );
+
+  // A discount keyed straight onto a charge, no named reason attached.
+  // Never more than the charge itself, whether typed as a currency amount or
+  // a percentage of it.
+  const manualDiscountFor = useCallback(
+    (line: LineDraft) => {
+      const value = Number(line.discountValue);
+      if (!value || value <= 0) return 0;
+      const gross = grossFor(line);
+      const raw = line.discountMode === 'PERCENTAGE' ? (gross * value) / 100 : value;
+      return Math.min(gross, raw);
+    },
+    [grossFor],
+  );
+
   const activeDiscounts = useMemo(
     () => (discounts.data ?? []).filter((discount) => discount.isActive),
     [discounts.data],
@@ -170,19 +206,44 @@ export function InvoiceEditPage() {
       .map((grant) => grant.discountId);
   }, [invoice.data, studentDiscounts.data, activeDiscounts]);
 
+  // The fee items actually on this bill, for the discount picker's own "Apply
+  // to" choices.
+  const lineFeeItems = useMemo(() => {
+    const seen = new Set<string>();
+    return lines
+      .filter((line) => (seen.has(line.feeItemId) ? false : (seen.add(line.feeItemId), true)))
+      .map((line) => ({
+        id: line.feeItemId,
+        name: items.find((item) => item.id === line.feeItemId)?.name ?? line.feeItemId,
+      }));
+  }, [lines, items]);
+
   // Granted discounts first, then the ones ticked for this bill — the order
   // the server takes them in. A preview only; the server prices the real bill.
   const discountPreview = useMemo(() => {
-    const ids = Array.from(new Set([...grantedIds, ...chosenDiscountIds]));
+    const grantedEntries = grantedIds.flatMap((id) => activeDiscounts.find((d) => d.id === id) ?? []);
+    const chosenEntries = chosenDiscounts.flatMap(({ discountId, feeItemIds }) => {
+      const definition = activeDiscounts.find((d) => d.id === discountId);
+      if (!definition) return [];
+      return [{ ...definition, appliesToFeeItemIds: resolveDiscountScope(definition.appliesToFeeItemIds, feeItemIds) }];
+    });
     return previewDiscounts(
       lines.map((line) => ({
         feeItemId: line.feeItemId,
         unitAmount: amountFor(line.feeItemId, line.priceOptionId),
         quantity: line.quantity,
+        discountAmount: manualDiscountFor(line),
       })),
-      ids.flatMap((id) => activeDiscounts.find((discount) => discount.id === id) ?? []),
+      [...grantedEntries, ...chosenEntries],
     );
-  }, [lines, amountFor, grantedIds, chosenDiscountIds, activeDiscounts]);
+  }, [lines, amountFor, manualDiscountFor, grantedIds, chosenDiscounts, activeDiscounts]);
+
+  // The hand-typed line discounts alone, shown as their own row in the totals
+  // below since they carry no name the way a ticked discount does.
+  const manualDiscountTotal = useMemo(
+    () => lines.reduce((sum, line) => sum + manualDiscountFor(line), 0),
+    [lines, manualDiscountFor],
+  );
 
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
@@ -194,6 +255,8 @@ export function InvoiceEditPage() {
         quantity: 1,
         accountIds: firstUnused.accounts.map((account) => account.id),
         description: firstUnused.name,
+        discountMode: 'FIXED',
+        discountValue: '',
       },
     ]);
   };
@@ -258,6 +321,8 @@ export function InvoiceEditPage() {
             quantity: 1,
             accountIds: item?.accounts.map((account) => account.id) ?? [],
             description: item?.name ?? '',
+            discountMode: 'FIXED' as const,
+            discountValue: '',
           };
         });
       added = missing.length;
@@ -334,11 +399,11 @@ export function InvoiceEditPage() {
                 lines: lines.map((line) => ({
                   feeItemId: line.feeItemId,
                   quantity: line.quantity,
-                  discountAmount: 0,
+                  discountAmount: manualDiscountFor(line),
                   accountIds: line.accountIds,
                   priceOptionId: line.priceOptionId,
                 })),
-                discountIds: chosenDiscountIds,
+                discounts: chosenDiscounts,
               }),
         },
       });
@@ -436,6 +501,8 @@ export function InvoiceEditPage() {
               {lines.map((line, index) => {
                 const item = items.find((entry) => entry.id === line.feeItemId);
                 const missing = !item;
+                const gross = grossFor(line);
+                const lineDiscount = manualDiscountFor(line);
                 return (
                   <li key={index} className="space-y-2 rounded-md border border-border p-3">
                     <div className="flex items-end gap-3">
@@ -469,6 +536,8 @@ export function InvoiceEditPage() {
                                         accountIds: next?.accounts.map((a) => a.id) ?? [],
                                         description: next?.name ?? entry.description,
                                         priceOptionId: undefined,
+                                        discountMode: 'FIXED',
+                                        discountValue: '',
                                       }
                                     : entry,
                                 ),
@@ -535,6 +604,48 @@ export function InvoiceEditPage() {
                           />
                         </div>
                       )}
+                      {!missing && !amountLocked && (
+                        <div className="w-48 shrink-0 space-y-1.5">
+                          <Label htmlFor={`edit-line-discount-${index}`}>Discount</Label>
+                          <div className="flex gap-1.5">
+                            <NativeSelect
+                              data-cy="finance-invoice-edit-discount-mode"
+                              aria-label="Discount type"
+                              className="w-16 shrink-0 px-1"
+                              value={line.discountMode}
+                              onChange={(event) => {
+                                const discountMode = event.target.value as LineDraft['discountMode'];
+                                setLines((current) =>
+                                  current.map((entry, i) =>
+                                    i === index ? { ...entry, discountMode } : entry,
+                                  ),
+                                );
+                              }}
+                            >
+                              <option value="FIXED">₦</option>
+                              <option value="PERCENTAGE">%</option>
+                            </NativeSelect>
+                            <Input
+                              data-cy="finance-invoice-edit-discount-value"
+                              id={`edit-line-discount-${index}`}
+                              type="number"
+                              min={0}
+                              max={line.discountMode === 'PERCENTAGE' ? 100 : undefined}
+                              placeholder="0"
+                              className="min-w-0 flex-1"
+                              value={line.discountValue}
+                              onChange={(event) => {
+                                const discountValue = event.target.value;
+                                setLines((current) =>
+                                  current.map((entry, i) =>
+                                    i === index ? { ...entry, discountValue } : entry,
+                                  ),
+                                );
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                       {!missing && (
                         <div className="shrink-0 text-right text-sm">
                           <p className="text-xs text-muted-foreground">
@@ -544,13 +655,24 @@ export function InvoiceEditPage() {
                                 : 'Line total'
                               : 'Amount'}
                           </p>
-                          <p className="font-medium tabular-nums">
-                            {formatCurrency(
-                              amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
-                              'NGN',
-                              { showDecimals: false },
-                            )}
-                          </p>
+                          {!amountLocked && lineDiscount > 0 ? (
+                            <>
+                              <p className="text-xs text-muted-foreground line-through">
+                                {formatCurrency(gross, 'NGN', { showDecimals: false })}
+                              </p>
+                              <p className="font-medium tabular-nums">
+                                {formatCurrency(gross - lineDiscount, 'NGN', { showDecimals: false })}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="font-medium tabular-nums">
+                              {formatCurrency(
+                                amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+                                'NGN',
+                                { showDecimals: false },
+                              )}
+                            </p>
+                          )}
                         </div>
                       )}
                       {!amountLocked && (
@@ -620,9 +742,10 @@ export function InvoiceEditPage() {
           {!amountLocked && (
             <InvoiceDiscountsPicker
               discounts={activeDiscounts}
+              feeItems={lineFeeItems}
               grantedIds={grantedIds}
-              selectedIds={chosenDiscountIds}
-              onChange={setChosenDiscountIds}
+              selected={chosenDiscounts}
+              onChange={setChosenDiscounts}
               applied={discountPreview.applied}
               studentName={record.studentName}
             />
@@ -639,12 +762,18 @@ export function InvoiceEditPage() {
               />
             ) : (
               <>
-                {discountPreview.applied.length > 0 && (
+                {(discountPreview.applied.length > 0 || manualDiscountTotal > 0) && (
                   <>
                     <Row
                       label="Subtotal"
                       value={formatCurrency(subtotal, 'NGN', { showDecimals: false })}
                     />
+                    {manualDiscountTotal > 0 && (
+                      <Row
+                        label="Charge discounts"
+                        value={`− ${formatCurrency(manualDiscountTotal, 'NGN', { showDecimals: false })}`}
+                      />
+                    )}
                     {discountPreview.applied.map((entry) => (
                       <Row
                         key={entry.discountId}

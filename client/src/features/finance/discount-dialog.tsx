@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { humanizeEnum } from '@/lib/utils';
 import { Toggle } from './fees-page-parts';
 import type { Discount } from '@/types/finance';
+import { useFeeItems } from './api';
 import {
   Label,
 } from '@/components/ui/primitives';
@@ -34,6 +35,17 @@ export function DiscountDialog({
   const [value, setValue] = useState(String(state.discount?.value ?? ''));
   const [description, setDescription] = useState(state.discount?.description ?? '');
   const [isActive, setIsActive] = useState(state.discount?.isActive ?? true);
+  const [appliesTo, setAppliesTo] = useState<string[]>(state.discount?.appliesToFeeItemIds ?? []);
+
+  const feeItems = useFeeItems();
+  const items = useMemo(() => feeItems.data?.items ?? [], [feeItems.data]);
+
+  const toggleFeeItem = (feeItemId: string) =>
+    setAppliesTo((current) =>
+      current.includes(feeItemId)
+        ? current.filter((id) => id !== feeItemId)
+        : [...current, feeItemId],
+    );
 
   const valid = name.trim() && Number(value) > 0;
 
@@ -108,6 +120,32 @@ export function DiscountDialog({
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
+          <fieldset className="space-y-2 rounded-md border border-border p-3 sm:col-span-2">
+            <legend className="px-1 text-sm font-medium">Applies to</legend>
+            <p className="text-xs text-muted-foreground">
+              Leave every fee item unticked to take this discount off any charge on the invoice.
+              Tick specific items to limit it to just those — e.g. a scholarship that only covers
+              tuition.
+            </p>
+            {items.length > 0 && (
+              <ul className="grid gap-1.5 sm:grid-cols-2">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        data-cy="discount-applies-to-fee-item"
+                        type="checkbox"
+                        className="size-4 rounded border-input"
+                        checked={appliesTo.includes(item.id)}
+                        onChange={() => toggleFeeItem(item.id)}
+                      />
+                      {item.name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </fieldset>
           <div className="sm:col-span-2">
             <Toggle label="Active" checked={isActive} onChange={setIsActive} />
           </div>
@@ -128,6 +166,7 @@ export function DiscountDialog({
                 mode: mode as Discount['mode'],
                 value: Number(value),
                 description: description.trim() || null,
+                appliesToFeeItemIds: appliesTo,
                 isActive,
               })
             }

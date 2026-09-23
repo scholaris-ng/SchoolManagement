@@ -13,9 +13,9 @@ import {
   useResolveFeeStructure,
   useStudentDiscounts,
 } from './api';
-import { grantReachesTerm } from './discount-scope';
+import { grantReachesTerm, resolveDiscountScope } from './discount-scope';
 import { previewDiscounts } from './discount-math';
-import { InvoiceDiscountsPicker } from './invoice-discounts-picker';
+import { InvoiceDiscountsPicker, type ChosenDiscount } from './invoice-discounts-picker';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Card,
@@ -39,6 +39,10 @@ interface LineDraft {
   accountIds: string[];
   /** One of the fee item's own named prices; unset bills the item's own `amount`. */
   priceOptionId?: string;
+  /** A discount keyed straight onto this charge, no named reason attached. */
+  discountMode: 'FIXED' | 'PERCENTAGE';
+  /** As typed — a currency amount under `FIXED`, 0-100 under `PERCENTAGE`. Blank means no discount. */
+  discountValue: string;
 }
 
 /**
@@ -112,7 +116,7 @@ export function InvoiceFormPage() {
   // preview of that — the server works the real amounts out itself.
   const discounts = useDiscounts();
   const studentDiscounts = useStudentDiscounts(student?.id);
-  const [chosenDiscountIds, setChosenDiscountIds] = useState<string[]>([]);
+  const [chosenDiscounts, setChosenDiscounts] = useState<ChosenDiscount[]>([]);
   const selectedTerm = (terms.data ?? []).find((term) => term.id === effectiveTermId);
   const activeDiscounts = useMemo(
     () => (discounts.data ?? []).filter((discount) => discount.isActive),
@@ -160,19 +164,67 @@ export function InvoiceFormPage() {
     [lines, amountFor],
   );
 
+  const grossFor = useCallback(
+    (line: LineDraft) => amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
+    [amountFor],
+  );
+
+  // A discount keyed straight onto a charge, no named reason attached — e.g.
+  // "just take ₦5,000 off Development for this family." Never more than the
+  // charge itself, whether typed as a currency amount or a percentage of it.
+  const manualDiscountFor = useCallback(
+    (line: LineDraft) => {
+      const value = Number(line.discountValue);
+      if (!value || value <= 0) return 0;
+      const gross = grossFor(line);
+      const raw = line.discountMode === 'PERCENTAGE' ? (gross * value) / 100 : value;
+      return Math.min(gross, raw);
+    },
+    [grossFor],
+  );
+
+  // The fee items actually on this bill, for the discount picker's own "Apply
+  // to" choices — scoping a discount to a charge that isn't even here yet
+  // would mean nothing.
+  const lineFeeItems = useMemo(() => {
+    const seen = new Set<string>();
+    return lines
+      .filter((line) => (seen.has(line.feeItemId) ? false : (seen.add(line.feeItemId), true)))
+      .map((line) => ({
+        id: line.feeItemId,
+        name: items.find((item) => item.id === line.feeItemId)?.name ?? line.feeItemId,
+      }));
+  }, [lines, items]);
+
   // Granted discounts first, then the ones ticked for this bill — the order
-  // the server takes them in.
+  // the server takes them in. A discount ticked here can be narrowed to just
+  // the lines the bursar picked (`resolveDiscountScope` also honours a
+  // discount already limited to certain fee items under Finance → Fees),
+  // mirroring what `InvoicesService.discountsFor` does when it actually bills.
   const discountPreview = useMemo(() => {
-    const ids = Array.from(new Set([...grantedIds, ...chosenDiscountIds]));
+    const grantedEntries = grantedIds.flatMap((id) => activeDiscounts.find((d) => d.id === id) ?? []);
+    const chosenEntries = chosenDiscounts.flatMap(({ discountId, feeItemIds }) => {
+      const definition = activeDiscounts.find((d) => d.id === discountId);
+      if (!definition) return [];
+      return [{ ...definition, appliesToFeeItemIds: resolveDiscountScope(definition.appliesToFeeItemIds, feeItemIds) }];
+    });
     return previewDiscounts(
       lines.map((line) => ({
         feeItemId: line.feeItemId,
         unitAmount: amountFor(line.feeItemId, line.priceOptionId),
         quantity: line.quantity,
+        discountAmount: manualDiscountFor(line),
       })),
-      ids.flatMap((id) => activeDiscounts.find((discount) => discount.id === id) ?? []),
+      [...grantedEntries, ...chosenEntries],
     );
-  }, [lines, amountFor, grantedIds, chosenDiscountIds, activeDiscounts]);
+  }, [lines, amountFor, manualDiscountFor, grantedIds, chosenDiscounts, activeDiscounts]);
+
+  // The hand-typed line discounts alone, shown as their own row in the totals
+  // below since they carry no name the way a ticked discount does.
+  const manualDiscountTotal = useMemo(
+    () => lines.reduce((sum, line) => sum + manualDiscountFor(line), 0),
+    [lines, manualDiscountFor],
+  );
 
   const addLine = () => {
     const firstUnused = items.find((item) => !lines.some((line) => line.feeItemId === item.id));
@@ -183,6 +235,8 @@ export function InvoiceFormPage() {
         feeItemId: firstUnused.id,
         quantity: 1,
         accountIds: firstUnused.accounts.map((account) => account.id),
+        discountMode: 'FIXED',
+        discountValue: '',
       },
     ]);
   };
@@ -241,6 +295,8 @@ export function InvoiceFormPage() {
           feeItemId,
           quantity: 1,
           accountIds: items.find((item) => item.id === feeItemId)?.accounts.map((a) => a.id) ?? [],
+          discountMode: 'FIXED' as const,
+          discountValue: '',
         }));
       added = missing.length;
       return [...current, ...missing];
@@ -296,8 +352,14 @@ export function InvoiceFormPage() {
         studentId: student.id,
         termId: effectiveTermId,
         dueDate,
-        lines: lines.map((line) => ({ ...line, discountAmount: 0 })),
-        discountIds: chosenDiscountIds,
+        lines: lines.map((line) => ({
+          feeItemId: line.feeItemId,
+          quantity: line.quantity,
+          accountIds: line.accountIds,
+          priceOptionId: line.priceOptionId,
+          discountAmount: manualDiscountFor(line),
+        })),
+        discounts: chosenDiscounts,
         note: note.trim() || undefined,
       });
       navigate(`/finance/invoices/${invoice.id}`);
@@ -444,6 +506,8 @@ export function InvoiceFormPage() {
             <ul className="space-y-2">
               {lines.map((line, index) => {
                 const item = items.find((entry) => entry.id === line.feeItemId);
+                const gross = grossFor(line);
+                const lineDiscount = manualDiscountFor(line);
                 return (
                   <li key={index} className="space-y-2 rounded-md border border-border p-3">
                     <div className="flex items-end gap-3">
@@ -466,6 +530,8 @@ export function InvoiceFormPage() {
                                       quantity: 1,
                                       accountIds: next?.accounts.map((a) => a.id) ?? [],
                                       priceOptionId: undefined,
+                                      discountMode: 'FIXED',
+                                      discountValue: '',
                                     }
                                   : entry,
                               ),
@@ -530,17 +596,64 @@ export function InvoiceFormPage() {
                           />
                         </div>
                       )}
+                      <div className="w-48 shrink-0 space-y-1.5">
+                        <Label htmlFor={`line-discount-${index}`}>Discount</Label>
+                        <div className="flex gap-1.5">
+                          <NativeSelect
+                            data-cy="finance-invoice-form-discount-mode"
+                            aria-label="Discount type"
+                            className="w-16 shrink-0 px-1"
+                            value={line.discountMode}
+                            onChange={(event) => {
+                              const discountMode = event.target.value as LineDraft['discountMode'];
+                              setLines((current) =>
+                                current.map((entry, i) =>
+                                  i === index ? { ...entry, discountMode } : entry,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="FIXED">₦</option>
+                            <option value="PERCENTAGE">%</option>
+                          </NativeSelect>
+                          <Input
+                            data-cy="finance-invoice-form-discount-value"
+                            id={`line-discount-${index}`}
+                            type="number"
+                            min={0}
+                            max={line.discountMode === 'PERCENTAGE' ? 100 : undefined}
+                            placeholder="0"
+                            className="min-w-0 flex-1"
+                            value={line.discountValue}
+                            onChange={(event) => {
+                              const discountValue = event.target.value;
+                              setLines((current) =>
+                                current.map((entry, i) =>
+                                  i === index ? { ...entry, discountValue } : entry,
+                                ),
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
                       <div className="shrink-0 text-right text-sm">
                         <p className="text-xs text-muted-foreground">
                           {item?.hasQuantity ? 'Line total' : 'Amount'}
                         </p>
-                        <p className="font-medium tabular-nums">
-                          {formatCurrency(
-                            amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
-                            'NGN',
-                            { showDecimals: false },
-                          )}
-                        </p>
+                        {lineDiscount > 0 ? (
+                          <>
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatCurrency(gross, 'NGN', { showDecimals: false })}
+                            </p>
+                            <p className="font-medium tabular-nums">
+                              {formatCurrency(gross - lineDiscount, 'NGN', { showDecimals: false })}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="font-medium tabular-nums">
+                            {formatCurrency(gross, 'NGN', { showDecimals: false })}
+                          </p>
+                        )}
                       </div>
                       <Button
                         data-cy="finance-invoice-form-remove-line"
@@ -607,18 +720,25 @@ export function InvoiceFormPage() {
           {student && (
             <InvoiceDiscountsPicker
               discounts={activeDiscounts}
+              feeItems={lineFeeItems}
               grantedIds={grantedIds}
-              selectedIds={chosenDiscountIds}
-              onChange={setChosenDiscountIds}
+              selected={chosenDiscounts}
+              onChange={setChosenDiscounts}
               applied={discountPreview.applied}
               studentName={student.name}
             />
           )}
 
           <dl className="space-y-1 border-t border-border pt-3 text-sm">
-            {discountPreview.applied.length > 0 && (
+            {(discountPreview.applied.length > 0 || manualDiscountTotal > 0) && (
               <>
                 <Row label="Subtotal" value={formatCurrency(subtotal, 'NGN', { showDecimals: false })} />
+                {manualDiscountTotal > 0 && (
+                  <Row
+                    label="Charge discounts"
+                    value={`− ${formatCurrency(manualDiscountTotal, 'NGN', { showDecimals: false })}`}
+                  />
+                )}
                 {discountPreview.applied.map((entry) => (
                   <Row
                     key={entry.discountId}

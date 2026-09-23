@@ -377,10 +377,13 @@ export async function buildInvoicePdfAttachment(params: {
     description: string;
     quantity: number;
     unitAmount: number;
+    discountAmount: number;
     lineTotal: number;
     isOptional: boolean;
     accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
   }>;
+  /** Discounts ticked by name — a discount keyed straight onto a line instead carries no name here, only its share of `discountTotal`. */
+  appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
   accounts: Array<{ label: string; accountNumber: string; accountName: string }>;
 }): Promise<Buffer> {
   return renderPdf(async (doc) => {
@@ -465,13 +468,25 @@ export async function buildInvoicePdfAttachment(params: {
               .map((account) => `${account.label || account.bankName} — ${account.accountNumber} · ${account.accountName}`)
               .join(' | ')
           : '';
+      // A discount keyed onto this line (named or not) is called out right
+      // under its amount, so a parent can see which charge it came off
+      // without hunting through the totals below.
+      const hasDiscount = line.discountAmount > 0;
+      const discountNote = hasDiscount
+        ? `${formatPdfCurrency(line.unitAmount * line.quantity)} less ${formatPdfCurrency(line.discountAmount)} discount`
+        : '';
       // A long description or a charge with several accounts wraps, so the
       // row is measured rather than assumed to be one fixed height.
       const descriptionHeight = doc.fontSize(10).font('Helvetica-Bold').heightOfString(line.description, { width: 320 });
       const accountHeight = accountText
         ? doc.fontSize(8).font('Helvetica').heightOfString(accountText, { width: 330 })
         : 0;
-      const rowHeight = 8 + descriptionHeight + (line.isOptional ? 12 : 0) + (accountText ? accountHeight + 2 : 0) + 8;
+      const discountHeight = hasDiscount
+        ? doc.fontSize(7).font('Helvetica').heightOfString(discountNote, { width: 90 })
+        : 0;
+      const leftHeight = descriptionHeight + (line.isOptional ? 12 : 0) + (accountText ? accountHeight + 2 : 0);
+      const rightHeight = hasDiscount ? 13 + discountHeight : 0;
+      const rowHeight = 8 + Math.max(leftHeight, rightHeight) + 8;
 
       if (y + rowHeight > pageBottom) {
         doc.addPage();
@@ -492,6 +507,12 @@ export async function buildInvoicePdfAttachment(params: {
         width: 90,
         align: 'right',
       });
+      if (hasDiscount) {
+        doc.fillColor('#166534').fontSize(7).font('Helvetica').text(discountNote, left + 390, y + 8 + 13, {
+          width: 90,
+          align: 'right',
+        });
+      }
       y += rowHeight;
       doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
       y += 4;
@@ -500,8 +521,17 @@ export async function buildInvoicePdfAttachment(params: {
     const accountTotals = summariseAccountsByTotal(params.lines);
     // The payment summary grows with the number of accounts (two per row).
     const summaryHeight = 44 + Math.max(1, Math.ceil(accountTotals.length / 2)) * 34 + 22;
+    // A discount keyed straight onto a line has no name the way a ticked
+    // discount does — whatever of `discountTotal` the named ones don't
+    // already account for gets one line of its own, so the total always adds up.
+    const namedDiscounts = params.appliedDiscounts.filter((discount) => discount.amount > 0);
+    const unnamedDiscountTotal =
+      params.discountTotal - namedDiscounts.reduce((sum, discount) => sum + discount.amount, 0);
+    const discountRowCount = namedDiscounts.length + (unnamedDiscountTotal > 0 ? 1 : 0);
+    const totalsRowCount = 2 + discountRowCount + (params.broughtForward > 0 ? 1 : 0);
+    const totalsHeight = totalsRowCount * 18 + 4 + 26 + 24;
     // Totals and the summary read as one block; keep it together on one page.
-    if (y + 8 + 150 + summaryHeight > pageBottom) {
+    if (y + 8 + totalsHeight + summaryHeight > pageBottom) {
       doc.addPage();
       y = 50;
     }
@@ -515,7 +545,10 @@ export async function buildInvoicePdfAttachment(params: {
       totalsY += 18;
     };
     totalsRow('Subtotal', formatPdfCurrency(params.subtotal));
-    if (params.discountTotal > 0) totalsRow('Discount', `- ${formatPdfCurrency(params.discountTotal)}`);
+    for (const discount of namedDiscounts) {
+      totalsRow(discount.name, `- ${formatPdfCurrency(discount.amount)}`);
+    }
+    if (unnamedDiscountTotal > 0) totalsRow('Charge discounts', `- ${formatPdfCurrency(unnamedDiscountTotal)}`);
     if (params.broughtForward > 0) totalsRow('Brought forward', formatPdfCurrency(params.broughtForward));
     totalsRow('Total', formatPdfCurrency(params.total));
     totalsRow('Paid', formatPdfCurrency(params.amountPaid));
@@ -1311,10 +1344,12 @@ export async function sendInvoiceEmail(params: {
     description: string;
     quantity: number;
     unitAmount: number;
+    discountAmount: number;
     lineTotal: number;
     isOptional: boolean;
     accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
   }>;
+  appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
   accounts: { label: string; accountNumber: string; accountName: string }[];
   contactEmail: string;
 }): Promise<void> {
@@ -1342,6 +1377,7 @@ export async function sendInvoiceEmail(params: {
     balance,
     note,
     lines,
+    appliedDiscounts,
     accounts,
     contactEmail,
   } = params;
@@ -1382,6 +1418,7 @@ export async function sendInvoiceEmail(params: {
     balance,
     note,
     lines,
+    appliedDiscounts,
     accounts,
   });
 

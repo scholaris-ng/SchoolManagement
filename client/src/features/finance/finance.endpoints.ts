@@ -91,17 +91,28 @@ export interface InvoiceLineInput {
   priceOptionId?: string;
 }
 
+/**
+ * One discount ticked for this bill alone — on top of whatever the student
+ * has been granted, which always applies to every line. The server works out
+ * the amounts; nothing here names one.
+ */
+export interface InvoiceDiscountInput {
+  discountId: string;
+  /**
+   * Which of this invoice's own lines it comes off, by fee item id. Empty
+   * means every line the discount is otherwise allowed to reach — narrowing a
+   * discount already limited to certain fee items can only pick among those,
+   * never widen it past them.
+   */
+  feeItemIds: string[];
+}
+
 export interface CreateInvoiceInput {
   studentId: string;
   termId: string;
   dueDate: string;
   lines: InvoiceLineInput[];
-  /**
-   * Discounts ticked for this bill alone, by id — on top of whatever the
-   * student has been granted, which always applies. The server works out the
-   * amounts; nothing here names one.
-   */
-  discountIds?: string[];
+  discounts?: InvoiceDiscountInput[];
   note?: string;
 }
 
@@ -115,7 +126,7 @@ export interface UpdateInvoiceInput {
   note?: string;
   lines?: InvoiceLineInput[];
   /** Read only alongside `lines`; omitted, the invoice keeps the discounts it already carries. */
-  discountIds?: string[];
+  discounts?: InvoiceDiscountInput[];
 }
 
 /** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */

@@ -31,6 +31,19 @@ export interface DiscountableLine {
 }
 
 /**
+ * A discount's own definition can already be limited to certain fee items
+ * (`Discount.appliesToFeeItemIds`); a bursar ticking it onto one bill can
+ * narrow that further — to just the Tuition line, say — but never widen it
+ * past what the discount was defined for. Mirrored on the client
+ * (`discount-scope.ts`) so a bursar's preview never disagrees with this.
+ */
+export function resolveDiscountScope(definitionScope: string[], chosenScope: string[]): string[] {
+  if (definitionScope.length === 0) return chosenScope;
+  if (chosenScope.length === 0) return definitionScope;
+  return definitionScope.filter((id) => chosenScope.includes(id));
+}
+
+/**
  * Works out what a student's granted discounts take off an invoice.
  *
  * A percentage is taken from each in-scope line's full price, and a fixed

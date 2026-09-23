@@ -53,4 +53,15 @@ describe('previewDiscounts', () => {
     expect(total).toBe(0);
     expect(applied).toEqual([]);
   });
+
+  it('counts a discount already typed on a line as taken, same as the server', () => {
+    const { total, applied } = previewDiscounts(
+      [{ feeItemId: 'tuition', unitAmount: 50_000, quantity: 1, discountAmount: 20_000 }],
+      [discount({ value: 50 })],
+    );
+    // The named discount still has room for its full 50% (25,000) on top of
+    // the 20,000 already typed onto the line — together under the 50,000 charge.
+    expect(applied[0].amount).toBe(25_000);
+    expect(total).toBe(45_000);
+  });
 });

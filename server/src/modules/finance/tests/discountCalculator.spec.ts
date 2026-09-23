@@ -1,5 +1,6 @@
 import {
   applyDiscounts,
+  resolveDiscountScope,
   type ApplicableDiscount,
   type DiscountableLine,
 } from '../services/discountCalculator';
@@ -110,5 +111,27 @@ describe('applyDiscounts', () => {
     const { lineDiscounts, applied } = applyDiscounts(lines, []);
     expect(lineDiscounts).toEqual([0, 0]);
     expect(applied).toEqual([]);
+  });
+});
+
+describe('resolveDiscountScope', () => {
+  it('lets an unscoped discount take whatever the bill narrows it to', () => {
+    expect(resolveDiscountScope([], [TUITION])).toEqual([TUITION]);
+  });
+
+  it('applies to every line when neither the discount nor the bill narrows it', () => {
+    expect(resolveDiscountScope([], [])).toEqual([]);
+  });
+
+  it('keeps the discount\'s own scope when the bill does not narrow it further', () => {
+    expect(resolveDiscountScope([TUITION, TRANSPORT], [])).toEqual([TUITION, TRANSPORT]);
+  });
+
+  it('cannot widen a discount past what it was defined for', () => {
+    expect(resolveDiscountScope([TUITION], [TRANSPORT])).toEqual([]);
+  });
+
+  it('intersects when both the discount and the bill narrow it', () => {
+    expect(resolveDiscountScope([TUITION, TRANSPORT], [TRANSPORT])).toEqual([TRANSPORT]);
   });
 });

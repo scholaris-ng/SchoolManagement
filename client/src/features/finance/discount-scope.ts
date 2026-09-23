@@ -9,6 +9,31 @@ export function describeDiscountValue(discount: Pick<Discount, 'mode' | 'value'>
     : formatCurrency(discount.value, 'NGN', { showDecimals: false });
 }
 
+/** Which charges a discount reaches, in words — "every charge" or the fee items it's limited to. */
+export function describeDiscountScope(
+  discount: Pick<Discount, 'appliesToFeeItemIds'>,
+  feeItemNameById: Map<string, string>,
+): string {
+  if (discount.appliesToFeeItemIds.length === 0) return 'every charge';
+  return discount.appliesToFeeItemIds
+    .map((id) => feeItemNameById.get(id) ?? 'a removed fee item')
+    .join(', ');
+}
+
+/**
+ * A discount's own definition can already be limited to certain fee items
+ * (set under Finance → Fees → Discounts); a bursar ticking it onto one bill
+ * can narrow that further — to just the Tuition line, say — but never widen
+ * it past what the discount was defined for. Mirrors the same combination
+ * `InvoicesService.discountsFor` does server-side, so the preview a bursar
+ * sees while building an invoice never disagrees with what gets billed.
+ */
+export function resolveDiscountScope(definitionScope: string[], chosenScope: string[]): string[] {
+  if (definitionScope.length === 0) return chosenScope;
+  if (chosenScope.length === 0) return definitionScope;
+  return definitionScope.filter((id) => chosenScope.includes(id));
+}
+
 /** Which bills a grant reaches, in words. */
 export function describeGrantScope(
   grant: Pick<StudentDiscount, 'termName' | 'sessionName' | 'termId' | 'sessionId'>,

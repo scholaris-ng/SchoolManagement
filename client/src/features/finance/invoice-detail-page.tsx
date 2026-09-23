@@ -100,6 +100,12 @@ export function InvoiceDetailPage() {
   const onPrimary = contrastingTextColor(primary);
   const logoUrl = record.schoolLogoUrl || membership?.branding.logoUrl || DEFAULT_LOGO;
   const accountSummary = summarizeByAccount(record.lines, (line) => line.lineTotal);
+  // `appliedDiscounts` only ever names a ticked discount — a discount keyed
+  // straight onto a charge (no name attached) still counts toward
+  // `discountTotal` but has no row of its own above; the remainder is shown
+  // as one "Charge discounts" line so the summary never falls short of it.
+  const unnamedDiscountTotal =
+    record.discountTotal - record.appliedDiscounts.reduce((sum, entry) => sum + entry.amount, 0);
 
   return (
     <PageContainer width="narrow">
@@ -284,7 +290,22 @@ export function InvoiceDetailPage() {
                       ))}
                     </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">
-                      {formatCurrency(line.lineTotal, currency, { showDecimals: false })}
+                      {line.discountAmount > 0 ? (
+                        <>
+                          <span className="block font-normal text-muted-foreground line-through">
+                            {formatCurrency(line.unitAmount * line.quantity, currency, {
+                              showDecimals: false,
+                            })}
+                          </span>
+                          <span>{formatCurrency(line.lineTotal, currency, { showDecimals: false })}</span>
+                          <span className="block text-xs font-normal text-success">
+                            − {formatCurrency(line.discountAmount, currency, { showDecimals: false })}{' '}
+                            discount
+                          </span>
+                        </>
+                      ) : (
+                        formatCurrency(line.lineTotal, currency, { showDecimals: false })
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                       {line.amountPaid > 0
@@ -320,22 +341,23 @@ export function InvoiceDetailPage() {
                 label="Subtotal"
                 value={formatCurrency(record.subtotal, currency, { showDecimals: false })}
               />
-              {record.appliedDiscounts.length > 0 ? (
-                record.appliedDiscounts.map((discount) => (
-                  <Row
-                    key={discount.discountId}
-                    label={discount.name}
-                    hint={describeDiscountValue(discount)}
-                    value={`− ${formatCurrency(discount.amount, currency, { showDecimals: false })}`}
-                  />
-                ))
-              ) : (
-                record.discountTotal > 0 && (
-                  <Row
-                    label="Discounts"
-                    value={`− ${formatCurrency(record.discountTotal, currency, { showDecimals: false })}`}
-                  />
-                )
+              {record.appliedDiscounts.map((discount) => (
+                <Row
+                  key={discount.discountId}
+                  label={discount.name}
+                  hint={describeDiscountValue(discount)}
+                  value={`− ${formatCurrency(discount.amount, currency, { showDecimals: false })}`}
+                />
+              ))}
+              {/* A discount keyed straight onto a charge (see the table above)
+                  carries no name the way a ticked discount does — whatever of
+                  `discountTotal` the named rows above don't already account
+                  for is shown here, so the summary is never short of the total. */}
+              {unnamedDiscountTotal > 0 && (
+                <Row
+                  label="Charge discounts"
+                  value={`− ${formatCurrency(unnamedDiscountTotal, currency, { showDecimals: false })}`}
+                />
               )}
               {record.broughtForward > 0 && (
                 <Row

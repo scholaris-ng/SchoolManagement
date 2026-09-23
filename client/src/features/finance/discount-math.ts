@@ -11,6 +11,8 @@ export interface PreviewLine {
   feeItemId: string;
   unitAmount: number;
   quantity: number;
+  /** Keyed onto this line by hand, before any named discount is added on top. */
+  discountAmount?: number;
 }
 
 /**
@@ -22,14 +24,17 @@ export interface PreviewLine {
  * A percentage is taken from each in-scope line's full price; a fixed amount
  * is one flat sum for the whole invoice, spread down the in-scope lines. The
  * discounts are handled in the order given and together never take a line
- * below zero. One that ends up waiving nothing is left out.
+ * below zero — a hand-typed line discount counts as already taken, the same
+ * as the server treats it. One that ends up waiving nothing is left out.
  */
 export function previewDiscounts(
   lines: PreviewLine[],
   discounts: PreviewDiscount[],
 ): { applied: AppliedDiscount[]; total: number } {
   const gross = lines.map((line) => Math.round(line.unitAmount * line.quantity * MONEY_SCALE));
-  const taken = lines.map(() => 0);
+  const taken = lines.map((line, index) =>
+    Math.min(gross[index], Math.round((line.discountAmount ?? 0) * MONEY_SCALE)),
+  );
   const applied: AppliedDiscount[] = [];
 
   for (const discount of discounts) {

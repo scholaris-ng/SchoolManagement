@@ -34,6 +34,12 @@ export function InvoicePos({
   record: Invoice;
   accountSummary: AccountSummaryRow[];
 }) {
+  // A discount keyed straight onto a charge has no name the way a ticked one
+  // does — whatever of `discountTotal` the named rows below don't already
+  // account for is shown as one line, so the summary is never short of it.
+  const unnamedDiscountTotal =
+    record.discountTotal - record.appliedDiscounts.reduce((sum, entry) => sum + entry.amount, 0);
+
   return createPortal(
     <div
       data-cy="finance-invoice-pos"
@@ -77,6 +83,12 @@ export function InvoicePos({
                 {formatCurrency(line.lineTotal, 'NGN', { showDecimals: false })}
               </span>
             </div>
+            {line.discountAmount > 0 && (
+              <p className="text-[9px] italic">
+                {formatCurrency(line.unitAmount * line.quantity, 'NGN', { showDecimals: false })}{' '}
+                less {formatCurrency(line.discountAmount, 'NGN', { showDecimals: false })} discount
+              </p>
+            )}
             {line.amountPaid > 0 && (
               <p className="text-[9px] italic">
                 {formatCurrency(line.amountPaid, 'NGN', { showDecimals: false })} paid
@@ -91,10 +103,17 @@ export function InvoicePos({
 
       <div className="space-y-[0.6mm]">
         <Row label="Subtotal" value={formatCurrency(record.subtotal, 'NGN', { showDecimals: false })} />
-        {record.discountTotal > 0 && (
+        {record.appliedDiscounts.map((discount) => (
           <Row
-            label="Discounts"
-            value={`− ${formatCurrency(record.discountTotal, 'NGN', { showDecimals: false })}`}
+            key={discount.discountId}
+            label={discount.name}
+            value={`− ${formatCurrency(discount.amount, 'NGN', { showDecimals: false })}`}
+          />
+        ))}
+        {unnamedDiscountTotal > 0 && (
+          <Row
+            label="Charge discounts"
+            value={`− ${formatCurrency(unnamedDiscountTotal, 'NGN', { showDecimals: false })}`}
           />
         )}
         {record.broughtForward > 0 && (

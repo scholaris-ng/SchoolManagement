@@ -22,7 +22,7 @@ import { InvoiceRepository, type CarryForwardCandidate } from '../repositories/i
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { DiscountRepository } from '../repositories/discount.repository';
-import { applyDiscounts, type ApplicableDiscount } from './discountCalculator';
+import { applyDiscounts, resolveDiscountScope, type ApplicableDiscount } from './discountCalculator';
 import { DocumentDeliveriesService, type DeliveryDocument } from './documentDeliveries.service';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLine, InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
@@ -242,6 +242,7 @@ export class InvoicesService {
       balance: invoice.balance,
       note: invoice.note,
       lines: invoice.lines,
+      appliedDiscounts: invoice.appliedDiscounts,
       accounts: uniqueAccounts(invoice.lines),
       contactEmail: invoice.schoolEmail ?? '',
     });
@@ -309,6 +310,7 @@ export class InvoicesService {
       balance: invoice.balance,
       note: invoice.note,
       lines: invoice.lines,
+      appliedDiscounts: invoice.appliedDiscounts,
       accounts: uniqueAccounts(invoice.lines),
     });
 
@@ -425,7 +427,7 @@ export class InvoicesService {
       student.id,
       term.sessionId,
       term.id,
-      input.discountIds,
+      input.discounts,
     );
 
     const invoice = await AppDataSource.transaction(async (manager) => {
@@ -667,8 +669,13 @@ export class InvoicesService {
         existing.studentId,
         existing.sessionId,
         existing.termId,
-        input.discountIds ?? existing.appliedDiscounts.map((entry) => entry.discountId),
-        input.discountIds !== undefined,
+        // The invoice's own record of a previously-applied discount has no
+        // memory of which lines it was scoped to, only what it waived in
+        // total — an edit that does not resend `discounts` reopens each one
+        // applying to every line it can reach, same as `feeItemIds: []`.
+        input.discounts ??
+          existing.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
+        input.discounts !== undefined,
       );
       const { lineDiscounts, applied } = applyDiscounts(priced, discounts);
       newLines = priced.map((line, index) => ({ ...line, discountAmount: lineDiscounts[index] }));
@@ -811,6 +818,13 @@ export class InvoicesService {
    * session and term, then any others the bursar ticked for this bill alone.
    * A ticked discount the pupil already holds is not applied twice.
    *
+   * A discount ticked by hand can also name which of this bill's own lines it
+   * comes off (`feeItemIds`) — combined with the discount's own configured
+   * scope by `resolveDiscountScope`, so a bill can narrow a discount's reach
+   * but never widen it past what the discount was defined for. A granted
+   * discount always keeps its full reach; it is not something raising one
+   * bill gets to redefine.
+   *
    * `strict` refuses an id that is not an active discount of this school;
    * without it such an id is skipped, for callers replaying a bill's own
    * earlier discounts rather than taking a choice from the browser.
@@ -820,35 +834,38 @@ export class InvoicesService {
     studentId: string,
     sessionId: string,
     termId: string,
-    chosenIds: string[] = [],
+    chosen: { discountId: string; feeItemIds: string[] }[] = [],
     strict = true,
   ): Promise<ApplicableDiscount[]> {
     const byStudent = await this.grants.fetchApplicable(schoolId, [studentId], sessionId, termId);
     const granted = byStudent.get(studentId) ?? [];
 
-    const extraIds = Array.from(new Set(chosenIds)).filter(
-      (id) => !granted.some((discount) => discount.discountId === id),
+    const extra = chosen.filter(
+      (entry) => !granted.some((discount) => discount.discountId === entry.discountId),
     );
-    if (extraIds.length === 0) return granted;
+    if (extra.length === 0) return granted;
 
     const definitions = await this.discountDefinitions.fetchForSchool(schoolId);
-    const chosen: ApplicableDiscount[] = [];
-    for (const id of extraIds) {
-      const definition = definitions.find((entry) => entry.id === id && entry.isActive);
+    const picked: ApplicableDiscount[] = [];
+    const seen = new Set<string>();
+    for (const entry of extra) {
+      if (seen.has(entry.discountId)) continue;
+      seen.add(entry.discountId);
+      const definition = definitions.find((row) => row.id === entry.discountId && row.isActive);
       if (!definition) {
         if (strict) throw AppError.validation('One of those discounts is not available.');
         continue;
       }
-      chosen.push({
+      picked.push({
         discountId: definition.id,
         name: definition.name,
         type: definition.type,
         mode: definition.mode,
         value: definition.value,
-        appliesToFeeItemIds: definition.appliesToFeeItemIds,
+        appliesToFeeItemIds: resolveDiscountScope(definition.appliesToFeeItemIds, entry.feeItemIds),
       });
     }
-    return [...granted, ...chosen];
+    return [...granted, ...picked];
   }
 
   /**

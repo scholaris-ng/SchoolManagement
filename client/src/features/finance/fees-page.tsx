@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Coins, Copy, Landmark, Percent, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
+import { describeDiscountScope } from './discount-scope';
 import {
   useDeleteFeeItems,
   useDeleteFeeStructure,
@@ -62,6 +63,14 @@ export function FeesPage() {
 
   const feeItemsList = useListQuery({ namespace: 'items', defaultPageSize: 20 });
   const feeItems = useFeeItems(feeItemsList.query);
+  // A discount's scope can name any fee item, not just whatever page of the
+  // paginated list above happens to be showing — fetched separately so the
+  // discounts tab can label a scoped discount correctly regardless.
+  const allFeeItems = useFeeItems();
+  const feeItemNameById = useMemo(
+    () => new Map((allFeeItems.data?.items ?? []).map((item) => [item.id, item.name])),
+    [allFeeItems.data],
+  );
   const structures = useFeeStructures();
   const discounts = useDiscounts();
   const paymentDestinations = usePaymentDestinations();
@@ -470,6 +479,9 @@ export function FeesPage() {
                       <p className="truncate font-medium">{discount.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {discount.description ?? humanizeEnum(discount.type)}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Applies to {describeDiscountScope(discount, feeItemNameById)}
                       </p>
                     </div>
                     <Badge tone="neutral">{humanizeEnum(discount.type)}</Badge>
