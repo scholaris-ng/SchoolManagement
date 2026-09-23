@@ -60,6 +60,11 @@ const RECORD_TYPES: Record<string, string> = {
   PaymentDestination: 'School bank account',
   PaymentAccount: 'Collection account',
   AdmissionApplication: 'Admission application',
+  // Also two different things, and "Payment receipt" for the first would read
+  // as the second: one is the slip a family photographed for the office to
+  // check, the other a copy of the school's own receipt going out to them.
+  PaymentReceipt: 'Payment slip from a family',
+  ReceiptDelivery: 'Receipt sent to a family',
 };
 
 /** `SchoolClass` → "Class". */

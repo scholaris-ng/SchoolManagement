@@ -42,6 +42,9 @@ export const teachingKeys = {
     paymentAccounts: (schoolId: Scope, studentId: string) =>
       scoped(schoolId, 'payment-accounts', studentId),
     receipt: (schoolId: Scope, paymentId: string) => scoped(schoolId, 'receipts', paymentId),
+    /** The copies of one receipt that have gone out — the office's own delivery register. */
+    receiptDeliveries: (schoolId: Scope, paymentId: string) =>
+      scoped(schoolId, 'receipts', paymentId, 'deliveries'),
     debtors: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'debtors', query ?? {}),
     /** One student's own submitted claims — the family's view and the office's, on one student. */
     paymentReceipts: (schoolId: Scope, studentId: string) =>

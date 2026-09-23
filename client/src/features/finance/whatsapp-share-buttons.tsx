@@ -17,9 +17,16 @@ import { FinanceEndpoints } from './finance.endpoints';
  */
 export function WhatsAppShareButton({
   share,
+  onShared,
   'data-cy': dataCy,
 }: {
   share: () => Promise<WhatsAppShare>;
+  /**
+   * Called once the server has prepared the message — for a caller that keeps
+   * its own record of copies going out (see `ReceiptDeliveryLog`). Not a promise
+   * that anything was sent: that still depends on the person in the other tab.
+   */
+  onShared?: () => void;
   'data-cy': string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -40,6 +47,7 @@ export function WhatsAppShareButton({
     setBusy(true);
     try {
       const result = await share();
+      onShared?.();
       const url = whatsAppUrl(result);
       if (result.notice) {
         // Said here, not in WhatsApp: a message opening on a list of contacts
@@ -98,15 +106,19 @@ export function ShareInvoiceButton({ invoiceId }: { invoiceId: string }) {
 export function ShareReceiptButton({
   paymentId,
   includeCharges,
+  onShared,
 }: {
   paymentId: string;
   includeCharges: boolean;
+  /** Lets the receipt page pick up the entry the server just added to its delivery register. */
+  onShared?: () => void;
 }) {
   return (
     <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
       <WhatsAppShareButton
         data-cy="finance-receipt-whatsapp"
         share={() => FinanceEndpoints.shareReceiptWhatsApp(paymentId, includeCharges)}
+        onShared={onShared}
       />
     </PermissionGate>
   );

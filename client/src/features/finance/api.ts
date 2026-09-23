@@ -21,5 +21,6 @@ export * from './use-invoices';
 export * from './use-payments';
 export * from './use-finance-export';
 export * from './use-payment-receipts';
+export * from './use-receipt-deliveries';
 export * from './use-custom-bills';
 export * from './use-payment-destinations';

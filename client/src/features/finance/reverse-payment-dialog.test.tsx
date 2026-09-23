@@ -32,6 +32,7 @@ const payment: Payment = {
   unallocatedAmount: 0,
   isReconciled: false,
   receiptNo: 'PAY-20260919-3F9A2C',
+  receiptSentCount: 0,
 };
 
 describe('ReversePaymentDialog', () => {

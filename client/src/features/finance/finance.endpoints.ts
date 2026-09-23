@@ -15,6 +15,8 @@ import type {
   PaymentMethod,
   PaymentReceiptSubmission,
   Receipt,
+  ReceiptDelivery,
+  ReceiptDeliveryChannel,
   ResolveFeeStructureResult,
   StudentDiscount,
   StudentFinanceSummary,
@@ -375,6 +377,43 @@ export const FinanceEndpoints = {
 
   shareReceiptWhatsApp: (paymentId: string, includeCharges: boolean) =>
     http.post<WhatsAppShare>(`/receipts/${paymentId}/whatsapp`, { includeCharges }),
+
+  /* -- The delivery register: copies of a receipt that went out -------------- */
+
+  fetchReceiptDeliveries: (paymentId: string) =>
+    http.get<ReceiptDelivery[]>(`/receipts/${paymentId}/deliveries`),
+
+  /**
+   * Records a copy the office sent by its own means — paper over the counter, a
+   * message from a staff member's own phone, a posted copy. Always confirmed:
+   * somebody is vouching for it.
+   */
+  recordReceiptDelivery: (
+    paymentId: string,
+    input: {
+      channel: ReceiptDeliveryChannel;
+      guardianId?: string;
+      recipientName?: string;
+      recipientContact?: string;
+      includeCharges?: boolean;
+      note?: string;
+      sentAt?: string;
+    },
+  ) => http.post<ReceiptDelivery>(`/receipts/${paymentId}/deliveries`, input),
+
+  /**
+   * Notes that this receipt has just gone to a printer. Separate from
+   * `recordReceiptDelivery` because a print proves nothing about what the
+   * family holds — the server logs it as prepared, never as delivered.
+   */
+  logReceiptPrint: (paymentId: string, input: { includeCharges: boolean; note?: string }) =>
+    http.post<ReceiptDelivery>(`/receipts/${paymentId}/deliveries/print`, {
+      channel: 'PRINT',
+      ...input,
+    }),
+
+  confirmReceiptDelivery: (deliveryId: string) =>
+    http.patch<ReceiptDelivery>(`/receipt-deliveries/${deliveryId}/confirm`, {}),
 
   fetchDebtors: (query: ListQuery) =>
     http.get<Paginated<StudentFinanceSummary>>('/debtors', { query }),

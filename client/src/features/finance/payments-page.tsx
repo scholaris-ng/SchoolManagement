@@ -74,6 +74,27 @@ export function PaymentsPage() {
             <p className="truncate text-xs text-muted-foreground">
               {formatDateTime(payment.paidAt)}
             </p>
+            {/* Whether the family has the receipt for this money. Under the
+                receipt number rather than in a column of its own: it only ever
+                matters next to the receipt it belongs to, and only a successful
+                payment has a receipt worth chasing — a reversed one is no
+                longer proof of anything, and the server refuses to send it. */}
+            {payment.status === 'SUCCESSFUL' &&
+              (payment.receiptSentCount > 0 ? (
+                <p
+                  className="truncate text-xs text-success"
+                  title={
+                    payment.receiptLastSentAt
+                      ? `Last sent ${formatDateTime(payment.receiptLastSentAt)}`
+                      : undefined
+                  }
+                >
+                  Receipt sent
+                  {payment.receiptSentCount > 1 ? ` ${payment.receiptSentCount}×` : ''}
+                </p>
+              ) : (
+                <p className="truncate text-xs text-warning">Receipt not sent</p>
+              ))}
           </div>
         ),
       },

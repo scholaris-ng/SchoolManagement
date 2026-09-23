@@ -28,6 +28,7 @@ const AUDITED_RECORD_TYPES = [
   'PaymentAccount',
   'PaymentDestination',
   'PaymentReceipt',
+  'ReceiptDelivery',
   'Role',
   'Room',
   'SchemeOfWork',

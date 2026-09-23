@@ -9,6 +9,7 @@ import { StudentDiscountsController } from '../controllers/studentDiscounts.cont
 import { InvoicesController } from '../controllers/invoices.controller';
 import { PaymentsController } from '../controllers/payments.controller';
 import { PaymentReceiptsController } from '../controllers/paymentReceipts.controller';
+import { ReceiptDeliveriesController } from '../controllers/receiptDeliveries.controller';
 import { CustomBillsController } from '../controllers/customBills.controller';
 import { PaymentDestinationsController } from '../controllers/paymentDestinations.controller';
 import {
@@ -64,6 +65,12 @@ import {
   RECEIPT_FILE_MIME_TYPES,
   submitPaymentReceiptSchema,
 } from '../validators/paymentReceipts.schema';
+import {
+  deliveryIdParamSchema,
+  logReceiptDeliverySchema,
+  receiptDeliveryParamSchema,
+  recordReceiptDeliverySchema,
+} from '../validators/receiptDeliveries.schema';
 import {
   createCustomBillSchema,
   customBillParamSchema,
@@ -485,6 +492,43 @@ router.post(
   authorise('payment.manage', 'invoice.manage'),
   validate(shareReceiptWhatsAppSchema),
   PaymentsController.shareReceiptWhatsApp,
+);
+
+/**
+ * The register of copies of a receipt that have gone out — see
+ * `ReceiptDeliveriesService`.
+ *
+ * Gated the same as sending one rather than as reading a receipt: a parent may
+ * read their own child's receipt with `finance.read`, but who the office has
+ * sent copies to, and by whose hand, is the office's own record.
+ */
+router.get(
+  '/receipts/:paymentId/deliveries',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(receiptDeliveryParamSchema),
+  ReceiptDeliveriesController.fetchForPayment,
+);
+
+router.post(
+  '/receipts/:paymentId/deliveries',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(recordReceiptDeliverySchema),
+  ReceiptDeliveriesController.record,
+);
+
+/** What the browser logs for itself once it has sent a receipt to a printer. */
+router.post(
+  '/receipts/:paymentId/deliveries/print',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(logReceiptDeliverySchema),
+  ReceiptDeliveriesController.logPrint,
+);
+
+router.patch(
+  '/receipt-deliveries/:deliveryId/confirm',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(deliveryIdParamSchema),
+  ReceiptDeliveriesController.confirm,
 );
 
 router.get(

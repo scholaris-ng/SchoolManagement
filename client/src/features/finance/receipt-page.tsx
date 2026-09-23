@@ -6,19 +6,21 @@ import { cn, humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useMarkReceiptItems, useReceipt, useSetReceiptItemAmounts } from './api';
+import { useLogReceiptPrint, useReceiptDeliveries } from './use-receipt-deliveries';
+import { ReceiptDeliveryLog, deliverySummary } from './receipt-delivery-log';
 import { EmailReceiptDialog } from './email-receipt-dialog';
-import { PrintReceiptDialog } from './print-receipt-dialog';
+import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { usePrintMode } from './pos-print';
 import { PosReceipt, isPartPayment } from './receipt-pos';
 import { ShareReceiptButton } from './whatsapp-share-buttons';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
-import { Card, CardContent } from '@/components/ui/primitives';
+import { Badge, Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { QrCode } from '@/components/data/qr-code';
 import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
-import type { Receipt } from '@/types/finance';
+import type { Receipt, ReceiptDelivery } from '@/types/finance';
 
 /**
  * A printable receipt.
@@ -35,7 +37,28 @@ export function ReceiptPage() {
   const [printOpen, setPrintOpen] = useState(false);
   const printReceipt = usePrintMode();
   const { can } = useAuth();
-  const canMarkItems = can({ anyOf: ['payment.manage', 'invoice.manage'] });
+  // The same permission gates marking fee items, sending the receipt, and
+  // seeing who it has already been sent to — all of it is the office's work.
+  const canManageReceipt = can({ anyOf: ['payment.manage', 'invoice.manage'] });
+
+  const logPrint = useLogReceiptPrint(paymentId ?? '');
+  // Read here as well as inside the log card — one shared query — so the header
+  // can say whether the family has this receipt before anybody scrolls.
+  const deliveries = useReceiptDeliveries(canManageReceipt ? paymentId : undefined);
+
+  /**
+   * Printing also notes the print in the delivery register. Logged before the
+   * print dialog opens, because `window.print()` blocks this thread until the
+   * person dismisses it, and a request fired afterwards would sit waiting on a
+   * dialog somebody may have wandered away from.
+   */
+  const printAndLog = (mode: PrintMode) => {
+    logPrint.mutate({
+      includeCharges: showItems,
+      note: mode === 'pos' ? 'POS slip, 78mm roll' : 'Full page',
+    });
+    printReceipt(mode);
+  };
 
   const breadcrumbs = [
     { label: 'Finance', to: '/finance' },
@@ -78,10 +101,22 @@ export function ReceiptPage() {
             title={`Receipt ${record.receiptNo}`}
             description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
             breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
+            meta={
+              // Answered before anyone has to ask: does the family actually
+              // hold this receipt? Only shown once the register has loaded, so
+              // a slow read never reads as "not sent yet".
+              canManageReceipt && deliveries.data ? <DeliveryBadge deliveries={deliveries.data} /> : null
+            }
             actions={
               reversed ? undefined : (
                 <>
-                  <ShareReceiptButton paymentId={record.paymentId} includeCharges={showItems} />
+                  <ShareReceiptButton
+                    paymentId={record.paymentId}
+                    includeCharges={showItems}
+                    // The server logs the share; this is what brings the new
+                    // entry onto the page the sender is still looking at.
+                    onShared={() => void deliveries.refetch()}
+                  />
                   <PermissionGate require={{ anyOf: ['payment.manage', 'invoice.manage'] }}>
                     <Button
                       data-cy="finance-receipt-email"
@@ -114,7 +149,7 @@ export function ReceiptPage() {
               />
               Show each invoice's charges on the receipt
             </label>
-            {showItems && canMarkItems && (
+            {showItems && canManageReceipt && (
               <p className="pl-6 text-xs text-muted-foreground">
                 Tick the fee items this payment was for, or use "Part payment" to name an exact
                 amount for one.
@@ -204,7 +239,7 @@ export function ReceiptPage() {
                           <AllocationLines
                             allocation={allocation}
                             paymentId={record.paymentId}
-                            interactive={canMarkItems}
+                            interactive={canManageReceipt}
                           />
                         )}
                       </Fragment>
@@ -235,9 +270,20 @@ export function ReceiptPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Below the receipt, and never on the paper: this is the office's own
+            record of where copies went, not part of the document itself. */}
+        {canManageReceipt && (
+          <ReceiptDeliveryLog
+            paymentId={record.paymentId}
+            studentId={record.studentId}
+            includeCharges={showItems}
+            sendable={!reversed}
+          />
+        )}
     </PageContainer>
       <PosReceipt record={record} verifyUrl={verifyUrl} showItems={showItems} />
-      <PrintReceiptDialog open={printOpen} onOpenChange={setPrintOpen} onPrint={printReceipt} />
+      <PrintReceiptDialog open={printOpen} onOpenChange={setPrintOpen} onPrint={printAndLog} />
       <EmailReceiptDialog
         open={emailOpen}
         onOpenChange={setEmailOpen}
@@ -245,6 +291,16 @@ export function ReceiptPage() {
         studentId={record.studentId}
       />
     </>
+  );
+}
+
+/** Whether the family holds this receipt, in one word, next to its number. */
+function DeliveryBadge({ deliveries }: { deliveries: ReceiptDelivery[] }) {
+  const summary = deliverySummary(deliveries);
+  return (
+    <Badge data-cy="finance-receipt-sent-badge" tone={summary.tone}>
+      {summary.label}
+    </Badge>
   );
 }
 

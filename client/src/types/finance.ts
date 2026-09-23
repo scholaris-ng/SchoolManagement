@@ -324,6 +324,13 @@ export interface Payment {
   isReconciled: boolean;
   receiptNo?: string | null;
   note?: string | null;
+  /**
+   * How many copies of this payment's receipt have reached the family — see
+   * `ReceiptDelivery`. `0` is the interesting value: the money is in, and the
+   * family has nothing in hand to show for it.
+   */
+  receiptSentCount: number;
+  receiptLastSentAt?: string | null;
   /** Set on a `REVERSED` payment: when it was undone, and the reason given. */
   reversedAt?: string | null;
   reversalReason?: string | null;
@@ -455,6 +462,44 @@ export interface Receipt {
   /** A `REVERSED` receipt is still readable but is no longer proof of payment. */
   status: PaymentStatus;
   reversalReason?: string | null;
+}
+
+/** How a copy of a receipt reached a family. `OTHER` is post, a courier, or a staff member's own phone. */
+export type ReceiptDeliveryChannel = 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'OTHER';
+
+/**
+ * How much is actually known about a copy going out.
+ *
+ * `CONFIRMED` means the system delivered it itself (an email the mail server
+ * took) or a member of staff has vouched for it. `PREPARED` is a print the
+ * browser started or a WhatsApp message opened but perhaps never sent — real
+ * enough to record, not enough to claim the family has it. `FAILED` is a send
+ * that was refused, kept because "we tried and it bounced" is worth knowing.
+ */
+export type ReceiptDeliveryStatus = 'PREPARED' | 'CONFIRMED' | 'FAILED';
+
+/**
+ * One copy of a receipt that left the office. Mirrors `ReceiptDeliveryDTO` in
+ * `server/src/modules/finance/dto/finance.dto.ts`.
+ */
+export interface ReceiptDelivery {
+  id: string;
+  paymentId: string;
+  channel: ReceiptDeliveryChannel;
+  status: ReceiptDeliveryStatus;
+  /** Who it went to. `null` for a print handed across the counter. */
+  recipientName?: string | null;
+  /** The address or number it went to, as used at the time. */
+  recipientContact?: string | null;
+  guardianId?: string | null;
+  /** Whether the copy that went out carried each invoice's itemised charges. */
+  includeCharges: boolean;
+  note?: string | null;
+  failureReason?: string | null;
+  sentByName: string;
+  sentAt: string;
+  confirmedByName?: string | null;
+  confirmedAt?: string | null;
 }
 
 /**

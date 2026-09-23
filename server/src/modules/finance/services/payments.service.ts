@@ -7,7 +7,7 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { AppDataSource } from '../../../infrastructure/database/dataSource';
 import { amountInWords } from '../../../shared/utils/numberToWords';
 import { buildReceiptPdfAttachment, sendReceiptEmail } from '../../../shared/utils/mailer';
-import { chooseRecipient } from '../../../shared/utils/whatsapp';
+import { chooseRecipient, guardianGreeting } from '../../../shared/utils/whatsapp';
 import { resolveTimezone } from '../../../shared/utils/timezone';
 import {
   WhatsAppShareService,
@@ -24,6 +24,7 @@ import { InvoiceRepository, type InvoiceBrief } from '../repositories/invoice.re
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { PaymentRepository } from '../repositories/payment.repository';
 import { RavenClient, type RavenCollection } from './raven.client';
+import { ReceiptDeliveriesService } from './receiptDeliveries.service';
 import { Payment, type PaymentMethod } from '../entities/payment.entity';
 import { PaymentAccount } from '../entities/paymentAccount.entity';
 import type { PaymentAccountDTO, PaymentDTO, ReceiptDTO } from '../dto/finance.dto';
@@ -105,6 +106,7 @@ export class PaymentsService {
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
     private readonly sharing = WhatsAppShareService.Instance,
+    private readonly deliveries = ReceiptDeliveriesService.Instance,
   ) {}
 
   /* -- Reads ----------------------------------------------------------------- */
@@ -159,11 +161,20 @@ export class PaymentsService {
     ]);
     if (!school) throw AppError.internal();
 
+    // Who the delivery register will say it went to, whether or not the send
+    // works: a bounced attempt is worth recording, and is recorded as `FAILED`.
+    const addressee = {
+      recipientName: guardianGreeting(guardian),
+      recipientContact: guardian.email,
+      guardianId: input.guardianId,
+      includeCharges: input.includeCharges,
+    };
+
     // The same contact details `InvoicesService.fetchInvoice` gives an
     // invoice — the school's published website contact where it has one, its
     // own record otherwise — so a family reads one address on both. The
     // school's own email still routes the send (see `SendArgs.schoolEmail`).
-    await sendReceiptEmail({
+    const emailParams = {
       to: guardian.email,
       firstName: guardian.firstName,
       schoolName: receipt.schoolName,
@@ -186,7 +197,40 @@ export class PaymentsService {
       verificationCode: receipt.verificationCode,
       contactEmail: website.contactEmail || school.email,
       includeCharges: input.includeCharges,
-    });
+    };
+
+    try {
+      await sendReceiptEmail(emailParams);
+    } catch (error) {
+      // A refused send is logged before the error travels on — "we tried and it
+      // bounced" is precisely what the office needs to see later. The log's own
+      // failure must never replace the real reason the email did not go.
+      await this.deliveries
+        .log(context, receipt.paymentId, {
+          channel: 'EMAIL',
+          status: 'FAILED',
+          ...addressee,
+          failureReason:
+            error instanceof Error ? error.message : 'The mail server refused the message.',
+        })
+        .catch(() => undefined);
+      throw error;
+    }
+
+    // The only channel that starts out `CONFIRMED`: this server handed the
+    // message to the mail server itself and it was accepted.
+    //
+    // Not allowed to fail the call. The email has gone and cannot be recalled,
+    // so an error here would tell the office the send failed and invite them to
+    // send a second copy — the one outcome worse than a missing register entry,
+    // which the audit trail's own `receipt.emailed` still records either way.
+    await this.deliveries
+      .log(context, receipt.paymentId, {
+        channel: 'EMAIL',
+        status: 'CONFIRMED',
+        ...addressee,
+      })
+      .catch(() => undefined);
 
     await this.audit.record(context, {
       action: 'receipt.emailed',
@@ -267,6 +311,20 @@ export class PaymentsService {
       confidential: true,
       schoolName: receipt.schoolName,
       contactEmail,
+    });
+
+    // `PREPARED`, not sent: all this did was write the message and store the
+    // PDF. Whether it reaches the family depends on a person pressing Send in
+    // WhatsApp, which happens outside this system entirely — so the register
+    // says only that a copy was made ready, until somebody confirms it.
+    await this.deliveries.log(context, receipt.paymentId, {
+      channel: 'WHATSAPP',
+      status: 'PREPARED',
+      recipientName: recipient.greeting,
+      recipientContact: share.phone,
+      guardianId: recipient.guardian?.id ?? null,
+      includeCharges: input.includeCharges,
+      note: share.phone ? null : 'WhatsApp asked the sender to choose the chat.',
     });
 
     await this.audit.record(context, {

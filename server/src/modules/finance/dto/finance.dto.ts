@@ -4,6 +4,10 @@ import type { AppliedDiscount } from '../services/discountCalculator';
 import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentAccount.entity';
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
 import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
+import type {
+  ReceiptDeliveryChannel,
+  ReceiptDeliveryStatus,
+} from '../entities/receiptDelivery.entity';
 
 /**
  * The status the *client* knows about. `OVERDUE` is not a stored state — see
@@ -382,6 +386,27 @@ export interface ReceiptDTO {
   reversalReason: string | null;
 }
 
+/**
+ * One copy of a receipt that went out. Mirrors `ReceiptDelivery` in
+ * `client/src/types/finance.ts`.
+ */
+export interface ReceiptDeliveryDTO {
+  id: string;
+  paymentId: string;
+  channel: ReceiptDeliveryChannel;
+  status: ReceiptDeliveryStatus;
+  recipientName: string | null;
+  recipientContact: string | null;
+  guardianId: string | null;
+  includeCharges: boolean;
+  note: string | null;
+  failureReason: string | null;
+  sentByName: string;
+  sentAt: string;
+  confirmedByName: string | null;
+  confirmedAt: string | null;
+}
+
 /** Mirrors `PaymentAccount` in `client/src/types/finance.ts`. */
 export interface PaymentAccountDTO {
   id: string;
@@ -427,6 +452,13 @@ export interface PaymentDTO {
   isReconciled: boolean;
   receiptNo: string | null;
   note: string | null;
+  /**
+   * How many copies of this receipt have gone out — printed, emailed or sent on
+   * WhatsApp (see `ReceiptDeliveryDTO`). A refused send is not counted, since
+   * nobody holds it. `0` is the one worth showing: the family has no receipt.
+   */
+  receiptSentCount: number;
+  receiptLastSentAt: string | null;
   reversedAt: string | null;
   reversalReason: string | null;
 }

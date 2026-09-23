@@ -56,6 +56,8 @@ const PAYMENT_PROJECTION = `
   p.is_reconciled AS "isReconciled",
   p.reference AS "receiptNo",
   p.note,
+  COALESCE(del.sent_count, 0)::int AS "receiptSentCount",
+  del.last_sent_at AS "receiptLastSentAt",
   p.reversed_at AS "reversedAt",
   p.reversal_reason AS "reversalReason"
 `;
@@ -79,6 +81,15 @@ const JOINS = `
       JOIN invoices i ON i.id = al.invoice_id
      WHERE al.payment_id = p.id
   ) alloc ON TRUE
+  -- Whether the receipt for this payment ever left the office, so a list can
+  -- show the ones that never did (see ReceiptDeliveriesService). A refused
+  -- send is not a copy anybody holds, so it does not count as one.
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) FILTER (WHERE rd.status <> 'FAILED') AS sent_count,
+           MAX(rd.sent_at) FILTER (WHERE rd.status <> 'FAILED') AS last_sent_at
+      FROM receipt_deliveries rd
+     WHERE rd.payment_id = p.id
+  ) del ON TRUE
 `;
 
 const SORTABLE: Record<string, string> = {

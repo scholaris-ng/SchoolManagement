@@ -179,10 +179,19 @@ export function useSetReceiptItemAmounts(paymentId: string | undefined) {
 }
 
 export function useSendReceiptEmail(paymentId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ guardianId, includeCharges }: { guardianId: string; includeCharges: boolean }) =>
       FinanceEndpoints.sendReceiptEmail(paymentId, guardianId, includeCharges),
     onSuccess: (result) => {
+      // The server logs the send in the receipt's delivery register, and the
+      // payments list carries a "sent" mark per row — both go stale here.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.receiptDeliveries(schoolId, paymentId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.payments(schoolId) });
       toast.success('Receipt emailed', { description: result.email });
     },
   });
