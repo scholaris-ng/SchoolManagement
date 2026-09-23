@@ -363,6 +363,13 @@ export interface ReceiptDTO {
        * for a payment that settled the invoice as a lump sum.
        */
       amountPaidByThisPayment: number | null;
+      /**
+       * What is still owed on this charge across every payment. Sent so the
+       * screen can cap a re-itemized amount without a second read; note that
+       * this payment's own `amountPaidByThisPayment` is *already off* it, and
+       * comes back when its breakdown is replaced.
+       */
+      balance: number;
     }[];
   }[];
   balanceAfter: number;

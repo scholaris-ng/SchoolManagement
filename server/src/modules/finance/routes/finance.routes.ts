@@ -47,6 +47,7 @@ import {
   createPaymentAccountSchema,
   fetchPaymentsSchema,
   markReceiptItemsSchema,
+  setReceiptItemAmountsSchema,
   receiptParamSchema,
   reconcilePaymentSchema,
   recordPaymentSchema,
@@ -458,6 +459,18 @@ router.patch(
   authorise('payment.manage', 'invoice.manage'),
   validate(markReceiptItemsSchema),
   PaymentsController.markReceiptItems,
+);
+
+/**
+ * Saying how much of a payment each of an invoice's charges took — the real
+ * ledger, unlike the annotation above, so it carries the same permission as
+ * recording the payment in the first place.
+ */
+router.patch(
+  '/receipts/:paymentId/item-amounts',
+  authorise('payment.manage', 'invoice.manage'),
+  validate(setReceiptItemAmountsSchema),
+  PaymentsController.setReceiptItemAmounts,
 );
 
 router.post(

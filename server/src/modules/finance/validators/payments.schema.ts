@@ -144,6 +144,40 @@ export const markReceiptItemsSchema = z.object({
     .strict(),
 });
 
+/**
+ * How much of a recorded payment settled each of one invoice's charges.
+ *
+ * The real ledger, unlike `markReceiptItemsSchema` above, which only labels a
+ * receipt: these amounts are what each charge's own balance is worked out
+ * from. They replace whatever breakdown the payment carried for that invoice,
+ * so an empty `lines` clears it and puts the money back to settling the
+ * invoice as a whole. The service checks they add up to what this payment put
+ * towards that invoice.
+ */
+export const setReceiptItemAmountsSchema = z.object({
+  params: z.object({ paymentId: z.string().uuid() }),
+  body: z
+    .object({
+      invoiceId: z.string().uuid(),
+      lines: z
+        .array(
+          z
+            .object({
+              lineId: z.string().uuid(),
+              amount: z.coerce.number().positive('A charge cannot be paid a negative amount'),
+            })
+            .strict(),
+        )
+        .max(50)
+        .default([])
+        .refine(
+          (rows) => new Set(rows.map((row) => row.lineId)).size === rows.length,
+          'The same charge appears twice — add the amounts together instead',
+        ),
+    })
+    .strict(),
+});
+
 export const sendReceiptEmailSchema = z.object({
   params: z.object({ paymentId: z.string().uuid() }),
   body: z
@@ -224,6 +258,7 @@ export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>['body'];
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>['body'];
 export type ReversePaymentInput = z.infer<typeof reversePaymentSchema>['body'];
 export type MarkReceiptItemsInput = z.infer<typeof markReceiptItemsSchema>['body'];
+export type SetReceiptItemAmountsInput = z.infer<typeof setReceiptItemAmountsSchema>['body'];
 export type SendReceiptEmailInput = z.infer<typeof sendReceiptEmailSchema>['body'];
 export type ShareReceiptWhatsAppInput = z.infer<typeof shareReceiptWhatsAppSchema>['body'];
 export type CreatePaymentAccountInput = z.infer<typeof createPaymentAccountSchema>['body'];

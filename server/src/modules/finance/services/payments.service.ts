@@ -369,6 +369,7 @@ export class PaymentsService {
             amount: line.amount,
             paid: paidLineIds.has(line.id),
             amountPaidByThisPayment: paidByThisPayment.get(line.id) ?? null,
+            balance: line.balance,
           })),
         };
       }),
@@ -425,6 +426,78 @@ export class PaymentsService {
       entityId: paymentId,
       entityLabel: payment.reference,
       after: { invoiceId, lineIds: unique },
+    });
+
+    return this.fetchReceipt(context, paymentId);
+  }
+
+  /**
+   * Says how much of a payment settled each of one invoice's charges, after
+   * the fact — the itemization `recordManualPayment` takes up front, for a
+   * payment that was taken as a lump sum or itemized wrongly.
+   *
+   * Real money, unlike `markReceiptItems`: these amounts are what each
+   * charge's own balance is worked out from. The invoice's total balance does
+   * not move — this only names what the money already applied to it was for —
+   * so no status is re-derived here.
+   *
+   * The breakdown is replaced wholesale, and an empty `lines` clears it, which
+   * is how a payment goes back to settling the invoice as a whole.
+   */
+  async setReceiptItemAmounts(
+    context: RequestContext,
+    paymentId: string,
+    invoiceId: string,
+    lines: { lineId: string; amount: number }[],
+  ): Promise<ReceiptDTO> {
+    const payment = await this.payments.findEntity(context.schoolId, paymentId);
+    if (!payment) throw AppError.notFound('Payment');
+    // A reversed credit is no longer counted anywhere, so saying which charges
+    // it covered would be describing money the ledger does not have.
+    if (payment.status !== 'SUCCESSFUL') {
+      throw AppError.conflict('Only a successful payment can have its charges itemized.');
+    }
+
+    await AppDataSource.transaction(async (manager) => {
+      await this.invoices.lockForAllocation(manager, context.schoolId, [invoiceId]);
+
+      const allocation = await this.payments.findAllocation(
+        manager,
+        context.schoolId,
+        paymentId,
+        invoiceId,
+      );
+      if (!allocation) throw AppError.validation('This payment was not applied to that invoice.');
+
+      // The old rows go first, so the balances the new ones are checked
+      // against no longer count this payment's own earlier answer — otherwise
+      // re-saving the same split would read as paying every charge twice.
+      await this.payments.deleteLineAllocations(manager, allocation.id);
+      if (lines.length === 0) return;
+
+      await this.assertLineAllocatable(manager, context.schoolId, {
+        invoiceId,
+        amount: allocation.amount,
+        lines,
+      });
+
+      await this.payments.createLineAllocations(
+        lines.map((line) => ({
+          schoolId: context.schoolId,
+          paymentAllocationId: allocation.id,
+          invoiceLineId: line.lineId,
+          amount: line.amount.toFixed(2),
+        })),
+        manager,
+      );
+    });
+
+    await this.audit.record(context, {
+      action: 'receipt.itemAmountsSet',
+      entityType: 'Payment',
+      entityId: paymentId,
+      entityLabel: payment.reference,
+      after: { invoiceId, lines },
     });
 
     return this.fetchReceipt(context, paymentId);
@@ -740,9 +813,13 @@ export class PaymentsService {
    * when the office named none — an allocation with no `lines` is money
    * against the invoice as a whole, exactly as before this existed.
    *
-   * The breakdown must sum to the allocation's own amount exactly: a partial,
-   * unexplained remainder would leave one of the invoice's charges with an
-   * ambiguous balance, so it is refused rather than guessed at.
+   * The breakdown may come to less than the allocation without being wrong:
+   * an invoice's charges do not always add up to what it bills, since a
+   * discount takes money off and a balance brought forward from last term
+   * puts money on that belongs to no charge here. What is left over is money
+   * against the invoice itself, which is what it was before any of this. It
+   * may never come to *more*, though — that would pay charges with money the
+   * invoice never received.
    */
   private async assertLineAllocatable(
     manager: EntityManager,
@@ -756,9 +833,9 @@ export class PaymentsService {
       (sum, row) => sum + Math.round(row.amount * MONEY_SCALE),
       0,
     );
-    if (lineTotalKobo !== allocationKobo) {
+    if (lineTotalKobo > allocationKobo) {
       throw AppError.validation(
-        'Those charges do not add up to the amount applied to that invoice.',
+        'Those charges add up to more than the amount applied to that invoice.',
       );
     }
 

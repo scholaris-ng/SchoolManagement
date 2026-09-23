@@ -5,6 +5,8 @@ import { formatCurrency, formatDate, toDateInputValue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useStudent, useStudentLedger, useStudentSearch } from '@/features/students/api';
 import { useInvoice, useInvoices, useRecordPayment } from './api';
+import { ItemiseModeSwitch } from './itemise-mode-switch';
+import { splitAcrossLines, sumAmounts } from './split-across-lines';
 import type { PaymentMethod } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -76,6 +78,10 @@ export function PaymentFormPage() {
   // up, so expanding it again does not lose what was typed.
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
   const [lineAllocations, setLineAllocations] = useState<Record<string, Record<string, string>>>({});
+  // Worked out rather than typed, until somebody says otherwise: opening the
+  // charges on a bill should show what the money already covers, not a column
+  // of empty boxes to fill in by hand.
+  const [lineMode, setLineMode] = useState<Record<string, 'auto' | 'manual'>>({});
   const expandedInvoice = useInvoice(expandedInvoiceId ?? undefined);
 
   const invoices = useMemo(
@@ -107,8 +113,7 @@ export function PaymentFormPage() {
   const unallocated = Math.max(0, (Number(amount) || 0) - allocatedTotal);
   const overAllocated = allocatedTotal > (Number(amount) || 0);
 
-  const lineSumFor = (invoiceId: string) =>
-    Object.values(lineAllocations[invoiceId] ?? {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const lineSumFor = (invoiceId: string) => sumAmounts(lineAllocations[invoiceId] ?? {});
 
   const setLineAmount = (invoiceId: string, lineId: string, value: string) =>
     setLineAllocations((current) => ({
@@ -116,18 +121,34 @@ export function PaymentFormPage() {
       [invoiceId]: { ...(current[invoiceId] ?? {}), [lineId]: value },
     }));
 
-  // A line breakdown only has to add up once it has been started — typing
-  // nothing into any of an invoice's charges leaves it a plain lump sum, same
-  // as before this existed. The moment one is filled in, though, the whole
-  // amount applied to that invoice must be accounted for by name, the same
-  // invariant the server enforces — caught here so the mismatch is obvious
-  // before submitting rather than after.
-  const mismatchedInvoiceIds = new Set(
-    Object.keys(lineAllocations).filter((invoiceId) => {
-      const lineSum = lineSumFor(invoiceId);
-      if (lineSum <= 0) return false;
-      return Math.abs(lineSum - (Number(allocations[invoiceId]) || 0)) > 0.004;
-    }),
+  const expandedMode = expandedInvoiceId ? lineMode[expandedInvoiceId] ?? 'auto' : 'auto';
+  const expandedLines = expandedInvoice.data?.lines;
+  const expandedApply = expandedInvoiceId ? allocations[expandedInvoiceId] ?? '' : '';
+
+  // In automatic mode the split is derived rather than typed, so it is worked
+  // out again whenever the amount applied to this invoice moves — the figures
+  // on screen are always the ones that would be recorded. Switching to manual
+  // stops this, leaving whatever it last worked out there to be edited, which
+  // is the point: a bursar changing one charge should not have to key in the
+  // other four again.
+  useEffect(() => {
+    if (!expandedInvoiceId || !expandedLines || expandedMode !== 'auto') return;
+    const split = splitAcrossLines(
+      expandedLines.filter((line) => line.balance > 0),
+      (line) => line.balance,
+      Number(expandedApply) || 0,
+    );
+    setLineAllocations((current) => ({ ...current, [expandedInvoiceId]: split }));
+  }, [expandedInvoiceId, expandedLines, expandedApply, expandedMode]);
+
+  // An invoice's charges may come to less than what is being applied to it —
+  // a discount or a balance brought forward from last term belongs to no
+  // charge on this bill — and the server takes that as money against the
+  // invoice itself. Only the other direction is wrong.
+  const overNamedInvoiceIds = new Set(
+    Object.keys(lineAllocations).filter(
+      (invoiceId) => lineSumFor(invoiceId) - (Number(allocations[invoiceId]) || 0) > 0.004,
+    ),
   );
 
   const valid =
@@ -135,7 +156,7 @@ export function PaymentFormPage() {
     Number(amount) > 0 &&
     Boolean(paidAt) &&
     !overAllocated &&
-    mismatchedInvoiceIds.size === 0;
+    overNamedInvoiceIds.size === 0;
 
   const submit = async () => {
     if (!valid) return;
@@ -369,7 +390,11 @@ export function PaymentFormPage() {
               <ul className="space-y-2">
                 {invoices.map((invoice) => {
                   const expanded = expandedInvoiceId === invoice.id;
-                  const mismatched = mismatchedInvoiceIds.has(invoice.id);
+                  const manual = (lineMode[invoice.id] ?? 'auto') === 'manual';
+                  const overNamed = overNamedInvoiceIds.has(invoice.id);
+                  const namedTotal = lineSumFor(invoice.id);
+                  const applyTotal = Number(allocations[invoice.id]) || 0;
+                  const unnamed = applyTotal - namedTotal;
                   return (
                     <li key={invoice.id} className="space-y-2 rounded-md border border-border p-3">
                       <div className="flex flex-wrap items-center gap-3">
@@ -422,37 +447,17 @@ export function PaymentFormPage() {
                             <p className="text-xs text-muted-foreground">Loading charges…</p>
                           ) : (
                             <>
-                              {(() => {
-                                const openLines = (expandedInvoice.data?.lines ?? []).filter(
-                                  (line) => line.balance > 0,
-                                );
-                                const linesBalance = openLines.reduce((sum, line) => sum + line.balance, 0);
-                                // Only worth offering when it lines up with what is being
-                                // applied to the invoice — otherwise "in full" on every
-                                // charge would just trip the mismatch warning below.
-                                const canFillAll =
-                                  openLines.length > 1 &&
-                                  Math.abs(linesBalance - (Number(allocations[invoice.id]) || 0)) < 0.005;
-                                return (
-                                  canFillAll && (
-                                    <button
-                                      type="button"
-                                      data-cy={`finance-payment-form-fill-all-${invoice.id}`}
-                                      className="text-xs text-primary hover:underline"
-                                      onClick={() =>
-                                        setLineAllocations((current) => ({
-                                          ...current,
-                                          [invoice.id]: Object.fromEntries(
-                                            openLines.map((line) => [line.id, String(line.balance)]),
-                                          ),
-                                        }))
-                                      }
-                                    >
-                                      Every charge is being paid in full — fill them all
-                                    </button>
-                                  )
-                                );
-                              })()}
+                              <ItemiseModeSwitch
+                                dataCy={`finance-payment-form-line-mode-${invoice.id}`}
+                                value={manual ? 'manual' : 'auto'}
+                                onChange={(mode) =>
+                                  setLineMode((current) => ({ ...current, [invoice.id]: mode }))
+                                }
+                                options={[
+                                  { value: 'auto', label: 'Split it for me' },
+                                  { value: 'manual', label: 'Type the amounts' },
+                                ]}
+                              />
                               <ul className="space-y-2">
                                 {(expandedInvoice.data?.lines ?? [])
                                   .filter((line) => line.balance > 0)
@@ -462,36 +467,58 @@ export function PaymentFormPage() {
                                         <p className="truncate">{line.description}</p>
                                         <p className="text-muted-foreground">
                                           balance {formatCurrency(line.balance, 'NGN', { showDecimals: false })}
-                                          {' · '}
-                                          <button
-                                            type="button"
-                                            data-cy={`finance-payment-form-line-full-${line.id}`}
-                                            className="text-primary hover:underline"
-                                            onClick={() => setLineAmount(invoice.id, line.id, String(line.balance))}
-                                          >
-                                            Pay in full
-                                          </button>
+                                          {manual && (
+                                            <>
+                                              {' · '}
+                                              <button
+                                                type="button"
+                                                data-cy={`finance-payment-form-line-full-${line.id}`}
+                                                className="text-primary hover:underline"
+                                                onClick={() =>
+                                                  setLineAmount(invoice.id, line.id, String(line.balance))
+                                                }
+                                              >
+                                                Pay in full
+                                              </button>
+                                            </>
+                                          )}
                                         </p>
                                       </div>
-                                      <Input
-                                        data-cy={`finance-payment-form-line-${line.id}`}
-                                        type="number"
-                                        min={0}
-                                        max={line.balance}
-                                        value={lineAllocations[invoice.id]?.[line.id] ?? ''}
-                                        onChange={(event) => setLineAmount(invoice.id, line.id, event.target.value)}
-                                        className="h-8 w-28"
-                                      />
+                                      {manual ? (
+                                        <Input
+                                          data-cy={`finance-payment-form-line-${line.id}`}
+                                          type="number"
+                                          min={0}
+                                          max={line.balance}
+                                          value={lineAllocations[invoice.id]?.[line.id] ?? ''}
+                                          onChange={(event) =>
+                                            setLineAmount(invoice.id, line.id, event.target.value)
+                                          }
+                                          className="h-8 w-28"
+                                        />
+                                      ) : (
+                                        <span
+                                          data-cy={`finance-payment-form-line-${line.id}`}
+                                          className="w-28 text-right text-xs font-medium tabular-nums"
+                                        >
+                                          {formatCurrency(
+                                            Number(lineAllocations[invoice.id]?.[line.id]) || 0,
+                                            'NGN',
+                                            { showDecimals: false },
+                                          )}
+                                        </span>
+                                      )}
                                     </li>
                                   ))}
                               </ul>
-                              <p className={cn('text-xs', mismatched ? 'font-medium text-danger' : 'text-muted-foreground')}>
-                                {formatCurrency(lineSumFor(invoice.id), 'NGN', { showDecimals: false })} of{' '}
-                                {formatCurrency(Number(allocations[invoice.id]) || 0, 'NGN', {
-                                  showDecimals: false,
-                                })}{' '}
-                                applied named by fee item
-                                {mismatched && ' — these must add up to the amount applied above'}
+                              <p className={cn('text-xs', overNamed ? 'font-medium text-danger' : 'text-muted-foreground')}>
+                                {formatCurrency(namedTotal, 'NGN', { showDecimals: false })} of{' '}
+                                {formatCurrency(applyTotal, 'NGN', { showDecimals: false })} named by fee item
+                                {overNamed
+                                  ? ' — that is more than is being applied to this invoice'
+                                  : unnamed > 0.004
+                                    ? ` · ${formatCurrency(unnamed, 'NGN', { showDecimals: false })} against the invoice itself`
+                                    : ''}
                               </p>
                             </>
                           )}

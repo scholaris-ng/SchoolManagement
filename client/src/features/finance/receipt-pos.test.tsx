@@ -34,6 +34,7 @@ const receipt: Receipt = {
           amount: 250_000,
           paid: false,
           amountPaidByThisPayment: null,
+          balance: 250_000,
         },
         {
           id: 'line2',
@@ -42,6 +43,7 @@ const receipt: Receipt = {
           amount: 77_500,
           paid: false,
           amountPaidByThisPayment: null,
+          balance: 77_500,
         },
       ],
     },

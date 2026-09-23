@@ -122,6 +122,8 @@ export interface ReceiptLineRow {
   description: string;
   isOptional: boolean;
   amount: number;
+  /** What is still owed on this charge across every payment, itemized or not. */
+  balance: number;
 }
 
 /** An earlier bill about to be absorbed into a new one. */
@@ -313,9 +315,17 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     if (ids.length === 0) return [];
     return this.repo.query(
       `SELECT il.id, il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
-              il.line_total::float AS amount
+              il.line_total::float AS amount,
+              (il.line_total - COALESCE(lpd.paid, 0))::float AS balance
          FROM invoice_lines il
          JOIN invoices i ON i.id = il.invoice_id
+         LEFT JOIN LATERAL (
+           SELECT SUM(pla.amount) AS paid
+             FROM payment_line_allocations pla
+             JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+             JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+            WHERE pla.invoice_line_id = il.id
+         ) lpd ON TRUE
         WHERE i.school_id = $1 AND il.invoice_id = ANY($2::uuid[])
         ORDER BY il.invoice_id, il.sort_order, il.description`,
       [schoolId, ids],

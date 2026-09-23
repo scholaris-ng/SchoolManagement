@@ -355,6 +355,18 @@ export const FinanceEndpoints = {
   markReceiptItems: (paymentId: string, invoiceId: string, lineIds: string[]) =>
     http.patch<Receipt>(`/receipts/${paymentId}/items`, { invoiceId, lineIds }),
 
+  /**
+   * Replaces how much of this payment each of one invoice's charges took —
+   * the real ledger behind each charge's balance, not the receipt label
+   * `markReceiptItems` sets. An empty `lines` puts the payment back to
+   * settling the invoice as a whole.
+   */
+  setReceiptItemAmounts: (
+    paymentId: string,
+    invoiceId: string,
+    lines: { lineId: string; amount: number }[],
+  ) => http.patch<Receipt>(`/receipts/${paymentId}/item-amounts`, { invoiceId, lines }),
+
   sendReceiptEmail: (paymentId: string, guardianId: string, includeCharges: boolean) =>
     http.post<{ sent: boolean; email: string }>(`/receipts/${paymentId}/email`, {
       guardianId,

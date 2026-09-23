@@ -6,6 +6,7 @@ import type {
   CreatePaymentAccountInput,
   FetchPaymentsQuery,
   MarkReceiptItemsInput,
+  SetReceiptItemAmountsInput,
   RavenWebhookBody,
   ReconcilePaymentInput,
   RecordPaymentInput,
@@ -79,6 +80,17 @@ export class PaymentsController {
       const { invoiceId, lineIds } = req.validated!.body as MarkReceiptItemsInput;
       const receipt = await service().markReceiptItems(contextOf(req), paymentId, invoiceId, lineIds);
       res.status(200).json(ApiResponse.ok(receipt, 'Fee items updated'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async setReceiptItemAmounts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { paymentId } = req.validated!.params as { paymentId: string };
+      const { invoiceId, lines } = req.validated!.body as SetReceiptItemAmountsInput;
+      const receipt = await service().setReceiptItemAmounts(contextOf(req), paymentId, invoiceId, lines);
+      res.status(200).json(ApiResponse.ok(receipt, 'Fee item amounts updated'));
     } catch (error) {
       next(error);
     }

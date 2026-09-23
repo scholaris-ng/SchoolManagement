@@ -152,6 +152,32 @@ export function useMarkReceiptItems(paymentId: string | undefined) {
   });
 }
 
+/**
+ * Saves how much of this payment each of an invoice's charges took. Unlike
+ * `useMarkReceiptItems` this moves real money between charges, so every
+ * screen that reads a per-charge balance — the invoice itself above all — is
+ * refetched alongside writing the receipt back into the cache.
+ */
+export function useSetReceiptItemAmounts(paymentId: string | undefined) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ invoiceId, lines }: { invoiceId: string; lines: { lineId: string; amount: number }[] }) =>
+      FinanceEndpoints.setReceiptItemAmounts(paymentId ?? '', invoiceId, lines),
+    onSuccess: (receipt, variables) => {
+      queryClient.setQueryData(queryKeys.finance.receipt(schoolId, paymentId ?? ''), receipt);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.invoice(schoolId, variables.invoiceId),
+      });
+      toast.success('Fee item amounts saved');
+    },
+    onError: () => {
+      toast.error('Could not save the amounts for those fee items');
+    },
+  });
+}
+
 export function useSendReceiptEmail(paymentId: string) {
   return useMutation({
     mutationFn: ({ guardianId, includeCharges }: { guardianId: string; includeCharges: boolean }) =>

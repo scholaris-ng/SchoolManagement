@@ -208,6 +208,31 @@ export class PaymentRepository extends TenantRepository<Payment> {
   }
 
   /**
+   * The allocation a payment holds against one invoice, for re-itemizing it
+   * after the fact. Read inside the transaction that locked the invoice, the
+   * same as every other allocation write.
+   */
+  async findAllocation(
+    manager: EntityManager,
+    schoolId: string,
+    paymentId: string,
+    invoiceId: string,
+  ): Promise<{ id: string; amount: number } | null> {
+    const rows: { id: string; amount: number }[] = await manager.query(
+      `SELECT pa.id, pa.amount::float AS amount
+         FROM payment_allocations pa
+        WHERE pa.school_id = $1 AND pa.payment_id = $2 AND pa.invoice_id = $3`,
+      [schoolId, paymentId, invoiceId],
+    );
+    return rows[0] ?? null;
+  }
+
+  /** Clears one allocation's itemized breakdown, so a fresh one can replace it. */
+  async deleteLineAllocations(manager: EntityManager, paymentAllocationId: string): Promise<void> {
+    await manager.getRepository(PaymentLineAllocation).delete({ paymentAllocationId });
+  }
+
+  /**
    * This payment's own itemized breakdown, per invoice — what `fetchReceipt`
    * shows as the real amount applied to each charge, alongside the cosmetic
    * `paidLineIds` mark. Empty for a payment that settled its invoice(s) as a

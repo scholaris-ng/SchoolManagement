@@ -441,6 +441,13 @@ export interface Receipt {
       paid: boolean;
       /** What this payment actually applied to this charge, when itemized at record time. */
       amountPaidByThisPayment: number | null;
+      /**
+       * What is still owed on this charge across every payment. This payment's
+       * own `amountPaidByThisPayment` is already off it, and comes back if its
+       * breakdown is replaced — so what this payment may claim for the charge
+       * is the two added together.
+       */
+      balance: number;
     }[];
   }[];
   balanceAfter: number;
