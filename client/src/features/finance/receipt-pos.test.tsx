@@ -26,12 +26,15 @@ const receipt: Receipt = {
       description: 'First Term · 2026/2027 fees',
       amount: 327_500,
       invoiceTotal: 327_500,
+      discountTotal: 0,
+      appliedDiscounts: [],
       lines: [
         {
           id: 'line1',
           description: 'Tuition',
           isOptional: false,
           amount: 250_000,
+          discountAmount: 0,
           paid: false,
           amountPaidByThisPayment: null,
           balance: 250_000,
@@ -41,6 +44,7 @@ const receipt: Receipt = {
           description: 'Transport',
           isOptional: true,
           amount: 77_500,
+          discountAmount: 0,
           paid: false,
           amountPaidByThisPayment: null,
           balance: 77_500,
