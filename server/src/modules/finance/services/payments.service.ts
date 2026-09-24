@@ -933,7 +933,7 @@ export class PaymentsService {
       note: string | null;
     },
   ): Promise<PaymentDTO> {
-    return AppDataSource.transaction(async (manager) => {
+    const created = await AppDataSource.transaction(async (manager) => {
       let invoice: InvoiceBrief | null = null;
       if (input.invoiceId) {
         const [locked] = await this.invoices.lockForAllocation(manager, context.schoolId, [
@@ -988,10 +988,16 @@ export class PaymentsService {
         }
       }
 
-      const dto = await this.payments.findOneDTO(context.schoolId, created.id);
-      if (!dto) throw AppError.internal();
-      return dto;
+      return created;
     });
+
+    // Outside the transaction, which `findOneDTO` (on the pool's own
+    // connection) needs committed to see — done inside it, the row is still
+    // invisible to a query on a different connection and this always threw,
+    // rolling the whole payment back. See `recordManualPayment` above.
+    const dto = await this.payments.findOneDTO(context.schoolId, created.id);
+    if (!dto) throw AppError.internal();
+    return dto;
   }
 
   /* -- Asking Raven for an account number ------------------------------------ */
