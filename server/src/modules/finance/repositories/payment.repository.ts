@@ -244,6 +244,32 @@ export class PaymentRepository extends TenantRepository<Payment> {
   }
 
   /**
+   * Clears every itemized breakdown row a reversed payment left behind.
+   *
+   * `payment_allocations` — "this payment applied ₦80,000 to invoice X" — is
+   * never touched here and never will be; that is the permanent record
+   * `PaymentsService.reversePayment` promises to keep. But its optional,
+   * per-line breakdown (`payment_line_allocations`, "…and ₦70,000 of it was
+   * for Uniform") exists only to stop that specific charge from being deleted
+   * while the money against it is real. Once the payment is reversed the
+   * money no longer is, so the breakdown no longer earns its `RESTRICT` —
+   * left in place, it would permanently block editing the invoice's charges
+   * even though the invoice-level balance has already gone back to zero.
+   */
+  async deleteLineAllocationsForPayment(
+    manager: EntityManager,
+    schoolId: string,
+    paymentId: string,
+  ): Promise<void> {
+    await manager.query(
+      `DELETE FROM payment_line_allocations
+        WHERE school_id = $1
+          AND payment_allocation_id IN (SELECT id FROM payment_allocations WHERE payment_id = $2)`,
+      [schoolId, paymentId],
+    );
+  }
+
+  /**
    * This payment's own itemized breakdown, per invoice — what `fetchReceipt`
    * shows as the real amount applied to each charge, alongside the cosmetic
    * `paidLineIds` mark. Empty for a payment that settled its invoice(s) as a
@@ -337,8 +363,9 @@ export class PaymentRepository extends TenantRepository<Payment> {
   /**
    * The bills a payment settled, and whether each has since been folded into a
    * later invoice — see `PaymentsService.reversePayment` for why that matters.
-   * The allocation rows themselves are never deleted by a reversal: they are
-   * the record of what the payment once did.
+   * These allocation rows themselves are never deleted by a reversal: they are
+   * the record of what the payment once did. Their optional per-line breakdown
+   * is a narrower exception — see `deleteLineAllocationsForPayment`.
    */
   async allocatedInvoices(
     manager: EntityManager,

@@ -720,6 +720,12 @@ export class PaymentsService {
    * only `SUCCESSFUL` ones, so flipping the status is what makes the ledger,
    * the debtors list and each invoice's balance correct themselves.
    *
+   * The one exception is the itemized, per-line breakdown of an allocation
+   * (`payment_line_allocations`) — see `PaymentRepository.deleteLineAllocationsForPayment`.
+   * That is cleared, because leaving it in place would permanently stop the
+   * invoice's charges from ever being edited again, even though the invoice
+   * itself is back to owing exactly what it owed before this payment.
+   *
    * The invoices it had settled are locked first, the way recording a payment
    * locks them, so a reversal and a fresh payment against the same bill queue
    * instead of racing. Their status is then re-derived — a `PAID` bill goes
@@ -764,6 +770,8 @@ export class PaymentsService {
         // Somebody reversed or reconciled it between the check above and now.
         throw AppError.conflict('That payment can no longer be reversed. Refresh and check its status.');
       }
+
+      await this.payments.deleteLineAllocationsForPayment(manager, context.schoolId, id);
 
       for (const row of settled) {
         await this.invoices.recalculateStatus(manager, row.invoiceId);
