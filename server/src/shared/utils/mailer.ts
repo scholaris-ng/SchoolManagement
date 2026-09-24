@@ -1498,10 +1498,16 @@ export async function buildReceiptPdfAttachment(params: {
     amount: number;
     /** The invoice's full total — larger than `amount` for a part-payment. */
     invoiceTotal: number;
+    /** What the invoice's charges were reduced by in total — 0 for one with no discount. */
+    discountTotal?: number;
+    /** Which discounts made up `discountTotal`, for a named "Discount applied" line. */
+    appliedDiscounts?: Array<{ name: string }>;
     lines: Array<{
       description: string;
       isOptional: boolean;
       amount: number;
+      /** What this charge itself was discounted by — 0 for an undiscounted one. */
+      discountAmount?: number;
       /** What this payment actually applied to this charge, when itemized at record time. */
       amountPaidByThisPayment?: number | null;
     }>;
@@ -1580,6 +1586,20 @@ export async function buildReceiptPdfAttachment(params: {
           { width: 350 },
         );
         y += 12;
+        if (allocation.discountTotal && allocation.discountTotal > 0) {
+          if (y + 12 > pageBottom) {
+            doc.addPage();
+            y = 50;
+          }
+          const names = (allocation.appliedDiscounts ?? []).map((discount) => discount.name).join(', ');
+          doc.fillColor('#16a34a').fontSize(8).font('Helvetica').text(
+            `Discount applied: −${formatPdfCurrency(allocation.discountTotal)}${names ? ` (${names})` : ''}`,
+            left + 120,
+            y - 4,
+            { width: 350 },
+          );
+          y += 12;
+        }
         if (params.includeCharges && allocation.lines.length > 0) {
           for (const line of allocation.lines) {
             if (y + 14 > pageBottom) {
@@ -1589,6 +1609,14 @@ export async function buildReceiptPdfAttachment(params: {
             doc.fillColor(muted).fontSize(8).font('Helvetica').text(`${line.description}${line.isOptional ? ' (optional)' : ''}`, left + 18, y, { width: 260 });
             doc.fillColor(muted).fontSize(8).font('Helvetica').text(formatPdfCurrency(line.amount), left + 360, y, { width: 110, align: 'right' });
             y += 14;
+            if (line.discountAmount && line.discountAmount > 0) {
+              if (y + 12 > pageBottom) {
+                doc.addPage();
+                y = 50;
+              }
+              doc.fillColor('#16a34a').fontSize(7).font('Helvetica-Oblique').text(`−${formatPdfCurrency(line.discountAmount)} discount`, left + 18, y, { width: 260 });
+              y += 12;
+            }
             if (line.amountPaidByThisPayment != null) {
               if (y + 12 > pageBottom) {
                 doc.addPage();
@@ -1644,10 +1672,16 @@ export async function sendReceiptEmail(params: {
     amount: number;
     /** The invoice's full total — larger than `amount` for a part-payment. */
     invoiceTotal: number;
+    /** What the invoice's charges were reduced by in total — 0 for one with no discount. */
+    discountTotal?: number;
+    /** Which discounts made up `discountTotal`, for a named "Discount applied" line. */
+    appliedDiscounts?: Array<{ name: string }>;
     lines: Array<{
       description: string;
       isOptional: boolean;
       amount: number;
+      /** What this charge itself was discounted by — 0 for an undiscounted one. */
+      discountAmount?: number;
       amountPaidByThisPayment?: number | null;
     }>;
   }>;

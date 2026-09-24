@@ -5,6 +5,7 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceLine } from '../entities/invoiceLine.entity';
 import type { InvoiceDTO } from '../dto/finance.dto';
+import type { AppliedDiscount } from '../services/discountCalculator';
 
 /**
  * Everything the client's `Invoice` needs, assembled in SQL.
@@ -124,6 +125,9 @@ export interface InvoiceBrief {
   status: string;
   termName: string;
   sessionName: string;
+  /** What a receipt's "Discount applied" line needs — see `PaymentsService.fetchReceipt`. */
+  discountTotal: number;
+  appliedDiscounts: AppliedDiscount[];
 }
 
 /** One charge, for `findLinesForInvoices` — see its doc comment. */
@@ -135,6 +139,7 @@ export interface ReceiptLineRow {
   amount: number;
   /** What is still owed on this charge across every payment, itemized or not. */
   balance: number;
+  discountAmount: number;
 }
 
 /** An earlier bill about to be absorbed into a new one. */
@@ -301,7 +306,9 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
               i.term_id AS "termId",
               i.total::float AS total,
               COALESCE(pd.paid, 0)::float AS paid,
-              i.status, t.name AS "termName", ses.name AS "sessionName"
+              i.status, t.name AS "termName", ses.name AS "sessionName",
+              i.discount_total::float AS "discountTotal",
+              i.applied_discounts AS "appliedDiscounts"
          FROM invoices i
          JOIN terms t ON t.id = i.term_id
          JOIN academic_sessions ses ON ses.id = i.session_id
@@ -318,16 +325,19 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
 
   /**
    * The charges behind a set of invoices — what a receipt's optional
-   * itemised breakdown shows per invoice it was applied to. No accounts, no
-   * quantity or discount: a receipt is proof of what was paid, not a second
-   * copy of the bill.
+   * itemised breakdown shows per invoice it was applied to. No accounts or
+   * quantity: a receipt is proof of what was paid, not a second copy of the
+   * bill. `discountAmount` is the one exception — without it, a discounted
+   * charge's already-reduced total looks on the receipt like it was never
+   * discounted at all.
    */
   async findLinesForInvoices(schoolId: string, ids: string[]): Promise<ReceiptLineRow[]> {
     if (ids.length === 0) return [];
     return this.repo.query(
       `SELECT il.id, il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
               il.line_total::float AS amount,
-              (il.line_total - COALESCE(lpd.paid, 0))::float AS balance
+              (il.line_total - COALESCE(lpd.paid, 0))::float AS balance,
+              il.discount_amount::float AS "discountAmount"
          FROM invoice_lines il
          JOIN invoices i ON i.id = il.invoice_id
          LEFT JOIN LATERAL (

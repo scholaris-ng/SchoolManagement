@@ -445,12 +445,18 @@ export interface Receipt {
     amount: number;
     /** The invoice's full total, so a part-payment can be shown as one. */
     invoiceTotal: number;
+    /** What the invoice's charges were reduced by in total — 0 for one with no discount. */
+    discountTotal: number;
+    /** Which discounts made up `discountTotal`, for a named "Discount applied" line. */
+    appliedDiscounts: AppliedDiscount[];
     /** The invoice's own charges, for the receipt's optional itemised view. */
     lines: {
       id: string;
       description: string;
       isOptional: boolean;
       amount: number;
+      /** What this charge itself was discounted by — 0 for an undiscounted one. */
+      discountAmount: number;
       /** Whether the office has marked this charge as covered by this payment. */
       paid: boolean;
       /** What this payment actually applied to this charge, when itemized at record time. */

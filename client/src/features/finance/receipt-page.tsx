@@ -32,7 +32,7 @@ import type { DocumentDelivery, Receipt } from '@/types/finance';
 export function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
   const receipt = useReceipt(paymentId);
-  const [showItems, setShowItems] = useState(false);
+  const [showItems, setShowItems] = useState(true);
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printReceipt = usePrintMode();
@@ -230,6 +230,15 @@ export function ReceiptPage() {
                                 <span className="italic"> · Part payment</span>
                               )}
                             </span>
+                            {allocation.discountTotal > 0 && (
+                              <span className="block text-xs text-success">
+                                Discount applied: −{' '}
+                                {formatCurrency(allocation.discountTotal, 'NGN', { showDecimals: false })}
+                                {allocation.appliedDiscounts.length > 0 && (
+                                  <> ({allocation.appliedDiscounts.map((discount) => discount.name).join(', ')})</>
+                                )}
+                              </span>
+                            )}
                           </td>
                           <td className="py-1.5 text-right tabular-nums">
                             {formatCurrency(allocation.invoiceTotal, 'NGN', { showDecimals: false })}
@@ -489,6 +498,11 @@ function AllocationLines({
                 ) : (
                   <>
                     {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
+                    {line.discountAmount > 0 && (
+                      <span className="block text-[11px] font-normal text-success">
+                        − {formatCurrency(line.discountAmount, 'NGN', { showDecimals: false })} discount
+                      </span>
+                    )}
                     {interactive && (line.amountPaidByThisPayment != null || checked.has(line.id)) && (
                       <button
                         type="button"

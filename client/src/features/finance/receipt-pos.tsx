@@ -101,6 +101,12 @@ export function PosReceipt({
                     {formatCurrency(allocation.amount, 'NGN', { showDecimals: false })}
                     {isPartPayment(allocation) && <span className="italic"> · Part payment</span>}
                   </p>
+                  {allocation.discountTotal > 0 && (
+                    <p className="text-[10px]">
+                      Discount applied: −{' '}
+                      {formatCurrency(allocation.discountTotal, 'NGN', { showDecimals: false })}
+                    </p>
+                  )}
                   {showItems &&
                     allocation.lines.map((line, lineIndex) => (
                       <div key={lineIndex} className="pl-[3mm] text-[10px]">
@@ -114,6 +120,11 @@ export function PosReceipt({
                             {formatCurrency(line.amount, 'NGN', { showDecimals: false })}
                           </span>
                         </div>
+                        {line.discountAmount > 0 && (
+                          <p className="text-[9px] italic">
+                            − {formatCurrency(line.discountAmount, 'NGN', { showDecimals: false })} discount
+                          </p>
+                        )}
                         {line.amountPaidByThisPayment != null && (
                           <p className="text-[9px] italic">
                             {formatCurrency(line.amountPaidByThisPayment, 'NGN', { showDecimals: false })} applied

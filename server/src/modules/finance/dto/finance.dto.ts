@@ -359,6 +359,10 @@ export interface ReceiptDTO {
      * amount that is smaller, and read as an arithmetic error.
      */
     invoiceTotal: number;
+    /** What the invoice's charges were reduced by in total — 0 for one with no discount. */
+    discountTotal: number;
+    /** Which discounts made up `discountTotal`, for a named "Discount applied" line. */
+    appliedDiscounts: AppliedDiscount[];
     /**
      * The invoice's own charges — tuition, boarding, exam and so on — for a
      * receipt's optional itemised view. Whether to show them is the
@@ -369,6 +373,8 @@ export interface ReceiptDTO {
       description: string;
       isOptional: boolean;
       amount: number;
+      /** What this charge itself was discounted by — 0 for an undiscounted one. */
+      discountAmount: number;
       /** Whether the office has marked this line as covered by this payment. */
       paid: boolean;
       /**
