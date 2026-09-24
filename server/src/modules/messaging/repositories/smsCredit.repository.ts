@@ -76,20 +76,79 @@ export class SmsCreditRepository {
     return balance ?? 0;
   }
 
-  /** A platform administrator's top-up (positive) or correction (either sign). */
+  /**
+   * A platform administrator's top-up: money in, whole pages out. A top-up
+   * rarely divides evenly by the unit price, so the leftover naira is banked
+   * on the school (`sms_credit_remainder_ngn`) and folded into the *next*
+   * top-up instead of being discarded — two ₦100 top-ups at ₦8/page credit
+   * 12 pages each (₦96) if done independently, losing ₦4 every time, but 25
+   * pages between them once the first top-up's ₦4 carries into the second.
+   *
+   * The remainder is read and written inside the same transaction as the
+   * balance update (with `FOR UPDATE`), so two top-ups racing on one school
+   * can't both read the same leftover and double-bank it.
+   */
+  async topUp(
+    schoolId: string,
+    amountNgn: number,
+    unitPriceNgn: number,
+    note: string | null,
+    actor: Actor,
+  ): Promise<{ balance: number; unitsAdded: number } | null> {
+    return AppDataSource.transaction(async (manager) => {
+      const [school]: { remainder: string }[] = await manager.query(
+        `SELECT sms_credit_remainder_ngn AS remainder
+           FROM schools
+          WHERE id = $1 AND deleted_at IS NULL
+          FOR UPDATE`,
+        [schoolId],
+      );
+      if (!school) return null;
+
+      const total = Number(school.remainder) + amountNgn;
+      const units = Math.floor(total / unitPriceNgn);
+      const remainderAfter = Math.round((total - units * unitPriceNgn) * 100) / 100;
+
+      const [row]: { balance: number }[] = await manager.query(
+        `UPDATE schools
+            SET sms_credits = sms_credits + $2,
+                sms_credit_remainder_ngn = $3,
+                updated_at = now()
+          WHERE id = $1 AND deleted_at IS NULL
+          RETURNING sms_credits AS balance`,
+        [schoolId, units, remainderAfter],
+      );
+      const balance = row?.balance;
+      if (balance === undefined) return null;
+
+      await manager.query(
+        `INSERT INTO sms_credit_entries
+           (school_id, type, units, balance_after, note, actor_user_id, actor_name,
+            amount_ngn, unit_price_ngn)
+         VALUES ($1, 'TOPUP', $2, $3, $4, $5, $6, $7, $8)`,
+        [schoolId, units, balance, note, actor.userId, actor.name, amountNgn, unitPriceNgn],
+      );
+
+      return { balance: Number(balance), unitsAdded: units };
+    });
+  }
+
+  /**
+   * A platform administrator's manual correction, in whole pages either
+   * direction. Money-based top-ups go through `topUp` instead, so the
+   * remainder-carrying logic there can't be bypassed.
+   */
   async adjust(
     schoolId: string,
     units: number,
-    type: Extract<SmsCreditEntryType, 'TOPUP' | 'ADJUSTMENT'>,
     note: string | null,
     actor: Actor,
-    paid: { amountNgn: number; unitPriceNgn: number } | null = null,
   ): Promise<number | null> {
-    return this.move(schoolId, units, type, {
+    return this.move(schoolId, units, 'ADJUSTMENT', {
       note,
       smsMessageId: null,
       actor,
-      paid,
+      paid: null,
       // A negative correction must not push the school below zero.
       requireBalance: units < 0,
     });

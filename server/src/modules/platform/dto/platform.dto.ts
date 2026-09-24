@@ -44,5 +44,7 @@ export interface SchoolSmsCreditsDTO {
   schoolName: string;
   balance: number;
   unitPriceNgn: number;
+  /** Naira banked from a top-up that didn't divide evenly, waiting on the next one. */
+  remainderNgn: number;
   entries: SmsCreditEntryDTO[];
 }

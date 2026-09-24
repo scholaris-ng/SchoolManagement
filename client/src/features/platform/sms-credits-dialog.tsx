@@ -66,8 +66,11 @@ export function SmsCreditsDialog({
 
   const amount = Number(text);
   const price = credits.data?.unitPriceNgn ?? null;
+  // Any naira banked from a previous top-up that didn't divide evenly carries into this one.
+  const remainder = credits.data?.remainderNgn ?? 0;
   // Rounded down, the same way the server does it — a fraction of a page is never given.
-  const units = price ? Math.floor(amount / price) : 0;
+  const units = price ? Math.floor((amount + remainder) / price) : 0;
+  const remainderAfter = price ? Math.round((amount + remainder - units * price) * 100) / 100 : 0;
   const valid =
     text.trim() !== '' && Number.isFinite(amount) && amount > 0 && amount <= MAX_TOPUP_NGN && (price === null || units >= 1);
   const balance = credits.data?.balance ?? school?.smsCredits ?? 0;
@@ -91,6 +94,7 @@ export function SmsCreditsDialog({
               </span>
               {price !== null && <> ({naira(balance * price)} worth)</>} left.
               {price !== null && <> Each SMS is {naira(price)}; a birthday greeting is one SMS.</>}
+              {remainder > 0 && <> {naira(remainder)} from an earlier top-up is banked toward the next one.</>}
             </DialogDescription>
             <p className="text-xs text-muted-foreground">
               Recipients with Do-Not-Disturb (DND) active on their line won't receive these texts
@@ -145,7 +149,9 @@ export function SmsCreditsDialog({
                     : 'Enter the amount paid, in naira.'
                   : price === null
                     ? 'Converted to SMS at the platform price once you confirm.'
-                    : `${naira(amount)} buys ${formatNumber(units)} SMS at ${naira(price)} each. Balance will then be ${formatNumber(balance + units)} SMS.`}
+                    : `${naira(amount)} buys ${formatNumber(units)} SMS at ${naira(price)} each${
+                        remainderAfter > 0 ? `, with ${naira(remainderAfter)} banked toward the next top-up` : ''
+                      }. Balance will then be ${formatNumber(balance + units)} SMS.`}
               </p>
             </div>
 

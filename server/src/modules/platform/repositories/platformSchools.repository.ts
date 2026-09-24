@@ -13,6 +13,7 @@ export interface PlatformSchoolRow {
   lastActivatedAt: Date | null;
   lastActivatedBy: string | null;
   smsCredits: number;
+  smsCreditRemainderNgn: number;
   createdAt: Date;
 }
 
@@ -22,6 +23,7 @@ const COLUMNS = `
   s.last_activated_at   AS "lastActivatedAt",
   s.last_activated_by   AS "lastActivatedBy",
   s.sms_credits         AS "smsCredits",
+  s.sms_credit_remainder_ngn::float AS "smsCreditRemainderNgn",
   s.created_at          AS "createdAt"
 `;
 

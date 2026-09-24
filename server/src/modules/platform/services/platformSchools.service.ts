@@ -101,6 +101,7 @@ export class PlatformSchoolsService {
       schoolName: row.name,
       balance: Number(row.smsCredits),
       unitPriceNgn: env.sms.unitPriceNgn,
+      remainderNgn: Number(row.smsCreditRemainderNgn),
       entries,
     };
   }
@@ -120,22 +121,18 @@ export class PlatformSchoolsService {
     if (!row) throw AppError.notFound('School');
 
     const unitPriceNgn = env.sms.unitPriceNgn;
-    const units = Math.floor(amountNgn / unitPriceNgn);
-    if (units < 1) {
+    if (amountNgn < unitPriceNgn) {
       throw AppError.badRequest(
         `₦${amountNgn.toLocaleString()} does not buy a single SMS at ₦${unitPriceNgn} each.`,
       );
     }
 
-    const balance = await this.credits.adjust(
-      schoolId,
-      units,
-      'TOPUP',
-      note,
-      { userId: admin.userId ?? null, name: admin.email },
-      { amountNgn, unitPriceNgn },
-    );
-    if (balance === null) throw AppError.notFound('School');
+    const result = await this.credits.topUp(schoolId, amountNgn, unitPriceNgn, note, {
+      userId: admin.userId ?? null,
+      name: admin.email,
+    });
+    if (result === null) throw AppError.notFound('School');
+    const { balance, unitsAdded } = result;
 
     await this.audit.recordSystem(schoolId, {
       action: 'school.sms_credits_added',
@@ -143,7 +140,7 @@ export class PlatformSchoolsService {
       entityId: schoolId,
       entityLabel: row.name,
       before: { smsCredits: Number(row.smsCredits) },
-      after: { smsCredits: balance, unitsAdded: units, amountNgn, unitPriceNgn, note },
+      after: { smsCredits: balance, unitsAdded, amountNgn, unitPriceNgn, note },
       actorName: admin.email,
       actorRole: 'Platform administrator',
       requestId: admin.requestId,
@@ -151,7 +148,7 @@ export class PlatformSchoolsService {
       userAgent: admin.userAgent,
     });
 
-    return { ...(await this.smsCredits(schoolId)), unitsAdded: units };
+    return { ...(await this.smsCredits(schoolId)), unitsAdded };
   }
 }
 

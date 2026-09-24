@@ -111,6 +111,14 @@ export class School extends SoftDeletableEntity {
   smsCredits: number;
 
   /**
+   * Naira left over from a top-up that didn't divide evenly by the SMS unit
+   * price (₦100 at ₦8/page buys 12 pages with ₦4 to spare). Folded into the
+   * next top-up rather than discarded — see `SmsCreditRepository.topUp`.
+   */
+  @Column({ name: 'sms_credit_remainder_ngn', type: 'numeric', precision: 10, scale: 2, default: 0 })
+  smsCreditRemainderNgn: string;
+
+  /**
    * Optimistic lock (spec section 34). Two administrators editing branding at
    * once must not silently overwrite each other; the client sends the value it
    * loaded as `If-Match`.
