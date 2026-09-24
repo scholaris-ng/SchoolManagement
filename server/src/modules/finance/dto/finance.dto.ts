@@ -495,7 +495,7 @@ export interface PaymentReceiptDTO {
   paidAt: string;
   reference: string | null;
   note: string | null;
-  /** Minted fresh on every read — see `signedDownloadUrl`. Never stored. */
+  /** The Cloudinary link the slip was uploaded to. */
   fileUrl: string;
   mimeType: string;
   sizeBytes: number;

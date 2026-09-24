@@ -1,14 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import type { Paginated } from '../../../shared/response/apiResponse';
-import { uploadObject, signedDownloadUrl } from '../../../infrastructure/firebase/firebaseStorage';
+import { StorageService } from '../../../shared/services/storage.service';
 import { AuditService } from '../../audit/services/audit.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { StudentRepository } from '../../students/repositories/student.repository';
 import { StudentAccessService } from '../../students/services/studentAccess.service';
 import { InvoiceRepository } from '../repositories/invoice.repository';
-import { PaymentReceiptRepository, type PaymentReceiptRow } from '../repositories/paymentReceipt.repository';
+import { PaymentReceiptRepository } from '../repositories/paymentReceipt.repository';
 import { PaymentsService } from './payments.service';
 import type { PaymentReceiptDTO } from '../dto/finance.dto';
 import type {
@@ -22,12 +21,6 @@ export interface ReceiptFile {
   mimetype: string;
   size: number;
 }
-
-const EXTENSION_BY_MIME: Record<string, string> = {
-  'application/pdf': 'pdf',
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-};
 
 /**
  * A family's own evidence of a payment made outside the system, and the
@@ -51,6 +44,7 @@ export class PaymentReceiptsService {
     private readonly payments = PaymentsService.Instance,
     private readonly audit = AuditService.Instance,
     private readonly notifications = NotificationsService.Instance,
+    private readonly storage = StorageService.Instance,
   ) {}
 
   /* -- The family's side ------------------------------------------------------ */
@@ -81,9 +75,11 @@ export class PaymentReceiptsService {
     const paidAt = new Date(input.paidAt);
     if (Number.isNaN(paidAt.getTime())) throw AppError.validation('That payment date is not valid.');
 
-    const extension = EXTENSION_BY_MIME[file.mimetype] ?? 'bin';
-    const storagePath = `schools/${context.schoolId}/payment-receipts/${student.id}/${randomUUID()}.${extension}`;
-    await uploadObject(storagePath, file.buffer, file.mimetype);
+    const { url: fileUrl } = await this.storage.uploadReceipt(file.buffer, {
+      folder: `scholaris/finance/payment-receipt/${context.schoolId}/${student.id}`,
+      name: student.fullName,
+      mimeType: file.mimetype,
+    });
 
     const created = await this.receipts.create({
       schoolId: context.schoolId,
@@ -94,7 +90,7 @@ export class PaymentReceiptsService {
       paidAt,
       reference: input.reference ? input.reference : null,
       note: input.note ? input.note : null,
-      storagePath,
+      fileUrl,
       mimeType: file.mimetype,
       sizeBytes: String(file.size),
       status: 'PENDING',
@@ -122,7 +118,7 @@ export class PaymentReceiptsService {
 
     const row = await this.receipts.findOneRow(context.schoolId, created.id);
     if (!row) throw AppError.internal();
-    return toDTO(row);
+    return row;
   }
 
   async fetchReceiptsForStudent(
@@ -137,7 +133,7 @@ export class PaymentReceiptsService {
       pageSize: 100,
       studentId,
     });
-    return Promise.all(page.items.map(toDTO));
+    return page.items;
   }
 
   /* -- The office's side -------------------------------------------------------- */
@@ -146,9 +142,7 @@ export class PaymentReceiptsService {
     context: RequestContext,
     query: FetchPaymentReceiptsQuery,
   ): Promise<Paginated<PaymentReceiptDTO>> {
-    const page = await this.receipts.fetchPaginated(context.schoolId, query);
-    const items = await Promise.all(page.items.map(toDTO));
-    return { ...page, items };
+    return this.receipts.fetchPaginated(context.schoolId, query);
   }
 
   /**
@@ -209,7 +203,7 @@ export class PaymentReceiptsService {
 
     const row = await this.receipts.findOneRow(context.schoolId, id);
     if (!row) throw AppError.internal();
-    return toDTO(row);
+    return row;
   }
 
   async rejectReceipt(context: RequestContext, id: string, note: string): Promise<PaymentReceiptDTO> {
@@ -251,11 +245,6 @@ export class PaymentReceiptsService {
 
     const row = await this.receipts.findOneRow(context.schoolId, id);
     if (!row) throw AppError.internal();
-    return toDTO(row);
+    return row;
   }
-}
-
-async function toDTO(row: PaymentReceiptRow): Promise<PaymentReceiptDTO> {
-  const { storagePath, ...rest } = row;
-  return { ...rest, fileUrl: await signedDownloadUrl(storagePath) };
 }

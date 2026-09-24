@@ -5,8 +5,7 @@ import type { Paginated } from '../../../shared/response/apiResponse';
 import { PaymentReceipt } from '../entities/paymentReceipt.entity';
 import type { PaymentReceiptDTO } from '../dto/finance.dto';
 
-/** What the repository hands back before the service mints a `fileUrl` for `storagePath`. */
-export type PaymentReceiptRow = Omit<PaymentReceiptDTO, 'fileUrl'> & { storagePath: string };
+export type PaymentReceiptRow = PaymentReceiptDTO;
 
 const PROJECTION = `
   pr.id, pr.school_id AS "schoolId", pr.student_id AS "studentId",
@@ -15,7 +14,7 @@ const PROJECTION = `
   pr.invoice_id AS "invoiceId", i.invoice_no AS "invoiceNo",
   pr.amount::float AS amount, pr.method, pr.paid_at AS "paidAt",
   pr.reference, pr.note,
-  pr.storage_path AS "storagePath", pr.mime_type AS "mimeType", pr.size_bytes AS "sizeBytes",
+  pr.file_url AS "fileUrl", pr.mime_type AS "mimeType", pr.size_bytes AS "sizeBytes",
   pr.status,
   pr.submitted_by_name AS "submittedByName", pr.created_at AS "submittedAt",
   pr.reviewed_by_name AS "reviewedByName", pr.reviewed_at AS "reviewedAt", pr.review_note AS "reviewNote",

@@ -65,9 +65,9 @@ export class PaymentReceipt extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   note: string | null;
 
-  /** Path within the storage bucket — needed to re-sign or delete the object. */
-  @Column({ name: 'storage_path', type: 'varchar', length: 500 })
-  storagePath: string;
+  /** The Cloudinary link the slip was uploaded to — stable, so nothing re-signs it on read. */
+  @Column({ name: 'file_url', type: 'varchar', length: 1000 })
+  fileUrl: string;
 
   @Column({ name: 'mime_type', type: 'varchar', length: 120 })
   mimeType: string;
