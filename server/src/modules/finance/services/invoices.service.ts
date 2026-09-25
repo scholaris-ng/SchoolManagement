@@ -28,6 +28,7 @@ import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLine, InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type {
+  CarriedInvoiceDTO,
   DeleteInvoicesResultDTO,
   FeeItemDTO,
   InvoiceDTO,
@@ -80,6 +81,13 @@ export interface IssueInvoiceParams {
    * generated one cannot disagree about what a scholarship is worth.
    */
   discounts?: ApplicableDiscount[];
+  /**
+   * Open invoices of this same student and term whose unpaid balance this one
+   * takes over, closing them — a follow-up bill, on top of the earlier-term
+   * arrears every bill already absorbs. Never set by the bulk generator:
+   * same-term invoices are only ever carried when somebody asks.
+   */
+  carryInvoiceIds?: string[];
   createdByUserId: string | null;
 }
 
@@ -171,6 +179,7 @@ export class InvoicesService {
 
     return {
       ...invoice,
+      carriedFrom: await this.carriedFromFor(context.schoolId, invoice),
       schoolName: school.name,
       schoolLogoUrl: school.branding?.logoUrl ?? null,
       schoolAddress:
@@ -181,6 +190,50 @@ export class InvoicesService {
       schoolPhone: website.contactPhone || school.phone,
       schoolEmail: website.contactEmail || school.email,
     };
+  }
+
+  /**
+   * What a balance brought forward was made of, fee item by fee item, so the
+   * printed invoice can say more than a single lump figure.
+   *
+   * The amount that moved is the one recorded when it was carried — that is
+   * what the total counts — and the items are read from the closed invoice as
+   * they stand. Money paid on it without naming a fee item lowers its balance
+   * but no item's, so the two can differ; `unassigned` is exactly that
+   * difference, which keeps the breakdown adding up to the amount carried.
+   */
+  private async carriedFromFor(schoolId: string, invoice: InvoiceDTO): Promise<CarriedInvoiceDTO[]> {
+    if (invoice.broughtForward <= 0) return [];
+    const sources = await this.invoices.findBroughtForwardSources(schoolId, invoice.id);
+    if (sources.length === 0) return [];
+
+    const lines = await this.invoices.findLinesForInvoices(
+      schoolId,
+      sources.map((source) => source.invoiceId),
+    );
+    const linesByInvoice = groupBy(lines, (line) => line.invoiceId);
+
+    return sources.map((source) => {
+      const items = (linesByInvoice.get(source.invoiceId) ?? [])
+        .filter((line) => Math.round(line.balance * MONEY_SCALE) > 0)
+        .map((line) => ({
+          description: line.description,
+          amount: line.amount,
+          paid:
+            (Math.round(line.amount * MONEY_SCALE) - Math.round(line.balance * MONEY_SCALE)) /
+            MONEY_SCALE,
+          balance: line.balance,
+        }));
+      const itemsKobo = items.reduce((sum, item) => sum + Math.round(item.balance * MONEY_SCALE), 0);
+
+      return {
+        invoiceId: source.invoiceId,
+        invoiceNo: source.invoiceNo,
+        amount: source.amount,
+        items,
+        unassigned: (Math.round(source.amount * MONEY_SCALE) - itemsKobo) / MONEY_SCALE,
+      };
+    });
   }
 
   /**
@@ -243,6 +296,7 @@ export class InvoicesService {
       note: invoice.note,
       lines: invoice.lines,
       appliedDiscounts: invoice.appliedDiscounts,
+      carriedFrom: invoice.carriedFrom,
       accounts: uniqueAccounts(invoice.lines),
       contactEmail: invoice.schoolEmail ?? '',
     });
@@ -311,6 +365,7 @@ export class InvoicesService {
       note: invoice.note,
       lines: invoice.lines,
       appliedDiscounts: invoice.appliedDiscounts,
+      carriedFrom: invoice.carriedFrom,
       accounts: uniqueAccounts(invoice.lines),
     });
 
@@ -448,6 +503,7 @@ export class InvoicesService {
         note: input.note ? input.note : null,
         lines,
         discounts,
+        carryInvoiceIds: input.carryInvoiceIds,
         createdByUserId: context.user.id,
       });
     });
@@ -460,6 +516,7 @@ export class InvoicesService {
       after: {
         total: invoice.total,
         broughtForward: invoice.broughtForward,
+        carriedInvoices: input.carryInvoiceIds.length,
         termId: term.id,
         lines: lines.length,
         discounts: invoice.appliedDiscounts.map((discount) => discount.name),
@@ -519,6 +576,38 @@ export class InvoicesService {
         { sessionStartDate: group[0].sessionStartDate, termSequence: group[0].termSequence },
       );
       for (const [studentId, rows] of carried) carriedByStudent.set(studentId, rows);
+    }
+
+    // A follow-up bill that asked to take over same-term invoices. Each was
+    // named on a screen that may since have gone stale — paid off, cancelled or
+    // carried elsewhere — so a short result is refused rather than quietly
+    // billing for less than the person saw.
+    for (const params of batch) {
+      const wanted = params.carryInvoiceIds ?? [];
+      if (wanted.length === 0) continue;
+
+      const taken = await this.invoices.lockOpenInvoicesInTerm(
+        manager,
+        params.schoolId,
+        params.studentId,
+        params.termId,
+        wanted,
+      );
+      if (taken.length !== wanted.length) {
+        throw AppError.conflict(
+          'An earlier invoice for this term has changed since this page loaded — it may have been paid off or cancelled. Reload and try again.',
+        );
+      }
+      if (
+        params.lines.length === 0 &&
+        !taken.some((row) => Math.round(row.balance * MONEY_SCALE) > 0)
+      ) {
+        throw AppError.conflict('Nothing is left to pay on those invoices, so there is nothing to bill.');
+      }
+      carriedByStudent.set(params.studentId, [
+        ...(carriedByStudent.get(params.studentId) ?? []),
+        ...taken,
+      ]);
     }
 
     const computed = batch.map((params) =>

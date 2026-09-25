@@ -163,6 +163,60 @@ describe('emailed PDFs', () => {
     expect(pageCount(pdf)).toBeGreaterThan(1);
   });
 
+  describe('a balance brought forward, itemized', () => {
+    const carried = (itemCount: number) => [
+      {
+        invoiceNo: 'INV/2026-2027/00018',
+        items: Array.from({ length: itemCount }, (_, index) => ({
+          description: `Fee item ${index + 1}`,
+          amount: 55_000,
+          paid: index % 2 === 0 ? 30_000 : 0,
+          balance: index % 2 === 0 ? 25_000 : 55_000,
+        })),
+        unassigned: -65_000,
+      },
+    ];
+
+    it('prints on one page with its totals when there are no charges of its own', async () => {
+      await sendInvoiceEmail(
+        invoiceParams(0, {
+          broughtForward: 106_000,
+          total: 106_000,
+          balance: 106_000,
+          carriedFrom: carried(5),
+        }),
+      );
+      const pdf = attachment();
+      keep('invoice-carried.pdf', pdf);
+
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      expect(pageCount(pdf)).toBe(1);
+    });
+
+    it('runs a long list of carried items onto more pages instead of losing the totals', async () => {
+      await sendInvoiceEmail(
+        invoiceParams(3, { broughtForward: 106_000, total: 181_000, balance: 181_000, carriedFrom: carried(40) }),
+      );
+      const pdf = attachment();
+      keep('invoice-carried-long.pdf', pdf);
+
+      expect(pageCount(pdf)).toBeGreaterThan(1);
+    });
+
+    it('draws the same when nothing is left over to reconcile, or nothing was itemized', async () => {
+      await sendInvoiceEmail(
+        invoiceParams(0, {
+          broughtForward: 25_000,
+          total: 25_000,
+          balance: 25_000,
+          carriedFrom: [{ ...carried(1)[0], unassigned: 0 }, { invoiceNo: 'INV/2026-2027/00019', items: [], unassigned: 0 }],
+        }),
+      );
+
+      expect(pageCount(attachment())).toBe(1);
+    });
+  });
+
   it('fails, rather than hangs, when the PDF cannot be drawn', async () => {
     await expect(sendInvoiceEmail(invoiceParams(2, { issueDate: 'not-a-date' }))).rejects.toThrow();
     expect(sent).toHaveLength(0);

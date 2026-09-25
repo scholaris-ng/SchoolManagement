@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
@@ -29,6 +35,22 @@ export function useInvoice(id: string | undefined) {
     queryKey: queryKeys.finance.invoice(schoolId, id ?? ''),
     queryFn: () => FinanceEndpoints.fetchInvoice(id ?? ''),
     enabled: Boolean(schoolId && id),
+  });
+}
+
+/**
+ * Several invoices' full detail at once, results in the same order as `ids`.
+ * Shares `useInvoice`'s cache entries, so an invoice already open elsewhere on
+ * the page is not fetched twice.
+ */
+export function useInvoiceDetails(ids: string[]) {
+  const schoolId = useSchoolId();
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: queryKeys.finance.invoice(schoolId, id),
+      queryFn: () => FinanceEndpoints.fetchInvoice(id),
+      enabled: Boolean(schoolId),
+    })),
   });
 }
 

@@ -147,6 +147,97 @@ describe('InvoicesService.issueInvoices', () => {
     ]);
   });
 
+  describe('a follow-up bill that takes over same-term invoices', () => {
+    const arrangeFollowUp = (taken: CarryForwardCandidate[]) => {
+      const base = arrange(new Map(), ['new-a']);
+      const lockInTerm = jest
+        .spyOn(InvoiceRepository.Instance, 'lockOpenInvoicesInTerm')
+        .mockResolvedValue(taken);
+      return { ...base, lockInTerm };
+    };
+
+    it('moves their balance onto the new bill and closes them against it', async () => {
+      const { createMany, close, lockInTerm } = arrangeFollowUp([
+        { id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 106000 },
+      ]);
+
+      await InvoicesService.Instance.issueInvoices(manager, [
+        { ...params('stu-a', 9, []), carryInvoiceIds: ['same-1'] },
+      ]);
+
+      // Looked up against this student and term, not whatever the request claims.
+      expect(lockInTerm).toHaveBeenCalledWith(manager, 'school-1', 'stu-a', 'term-1', ['same-1']);
+      expect(createMany.mock.calls[0][0][0]).toMatchObject({
+        subtotal: '0.00',
+        broughtForward: '106000.00',
+        broughtForwardFrom: [{ invoiceId: 'same-1', invoiceNo: 'INV/2025-2026/00003', amount: 106000 }],
+        total: '106000.00',
+        status: 'ISSUED',
+      });
+      expect(close.mock.calls[0][1]).toEqual([
+        {
+          id: 'same-1',
+          intoInvoiceId: 'new-a',
+          intoInvoiceNo: 'INV/2025-2026/00009',
+          closedByUserId: 'user-1',
+        },
+      ]);
+    });
+
+    it('adds charges of its own on top of what it carries', async () => {
+      const { createMany } = arrangeFollowUp([
+        { id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 106000 },
+      ]);
+
+      await InvoicesService.Instance.issueInvoices(manager, [
+        { ...params('stu-a', 9, [line('item-1', 5000)]), carryInvoiceIds: ['same-1'] },
+      ]);
+
+      expect(createMany.mock.calls[0][0][0]).toMatchObject({
+        subtotal: '5000.00',
+        broughtForward: '106000.00',
+        total: '111000.00',
+      });
+    });
+
+    it('refuses when an invoice it was told to carry is no longer open', async () => {
+      const { createMany, close } = arrangeFollowUp([
+        { id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 106000 },
+      ]);
+
+      await expect(
+        InvoicesService.Instance.issueInvoices(manager, [
+          { ...params('stu-a', 9, []), carryInvoiceIds: ['same-1', 'paid-since'] },
+        ]),
+      ).rejects.toThrow(/changed since this page loaded/);
+
+      expect(createMany).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+    });
+
+    it('refuses a bill with no charges once nothing is left owing on what it carries', async () => {
+      const { createMany } = arrangeFollowUp([
+        { id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 0 },
+      ]);
+
+      await expect(
+        InvoicesService.Instance.issueInvoices(manager, [
+          { ...params('stu-a', 9, []), carryInvoiceIds: ['same-1'] },
+        ]),
+      ).rejects.toThrow(/nothing to bill/);
+
+      expect(createMany).not.toHaveBeenCalled();
+    });
+
+    it('leaves same-term invoices alone when nothing asks to carry them', async () => {
+      const { lockInTerm } = arrangeFollowUp([]);
+
+      await InvoicesService.Instance.issueInvoices(manager, [params('stu-a', 9, [line('item-1', 5000)])]);
+
+      expect(lockInTerm).not.toHaveBeenCalled();
+    });
+  });
+
   it('settles a bill that comes to nothing rather than reporting it as owed', async () => {
     const { createMany } = arrange(new Map(), ['new-a']);
 

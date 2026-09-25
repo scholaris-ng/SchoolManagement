@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -6,6 +6,7 @@ import { cn, contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useDeleteInvoices, useInvoice } from './api';
 import { summarizeByAccount } from './account-summary';
+import { carriedRows } from './carried-rows';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
 import { ShareInvoiceButton } from './whatsapp-share-buttons';
@@ -321,6 +322,44 @@ export function InvoiceDetailPage() {
                       {formatCurrency(line.balance, currency, { showDecimals: false })}
                     </td>
                   </tr>
+                ))}
+                {/* A balance brought forward, itemized rather than one lump, so the
+                    family sees which fee items it is still for. */}
+                {record.carriedFrom.map((source) => (
+                  <Fragment key={source.invoiceId}>
+                    <tr className="bg-muted/40">
+                      <th
+                        scope="colgroup"
+                        colSpan={4}
+                        className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        Brought forward from {source.invoiceNo}
+                      </th>
+                    </tr>
+                    {carriedRows(source).map((row) => (
+                      <tr key={row.key} data-cy="invoice-carried-row">
+                        <td className="px-3 py-2">{row.label}</td>
+                        <td className="px-3 py-2 text-right font-medium tabular-nums">
+                          {row.billed !== null
+                            ? formatCurrency(row.billed, currency, { showDecimals: false })
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {row.paid !== null && row.paid > 0
+                            ? formatCurrency(row.paid, currency, { showDecimals: false })
+                            : '—'}
+                        </td>
+                        <td
+                          className={cn(
+                            'px-3 py-2 text-right font-medium tabular-nums',
+                            row.balance > 0 ? 'text-danger' : 'text-success',
+                          )}
+                        >
+                          {formatCurrency(row.balance, currency, { showDecimals: false })}
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

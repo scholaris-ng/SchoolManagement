@@ -217,6 +217,28 @@ export interface InvoiceLineDTO {
 }
 
 /**
+ * One earlier invoice whose unpaid balance moved onto another — what was left,
+ * fee item by fee item, for the printed copy of the invoice that took it on.
+ * Mirrors `CarriedInvoice` in `client/src/types/finance.ts`.
+ */
+export interface CarriedInvoiceDTO {
+  invoiceId: string;
+  invoiceNo: string;
+  /** What moved across, as recorded when it was carried. This is the figure the total counts. */
+  amount: number;
+  /** Only the fee items with something still owing, as they stood on that invoice. */
+  items: { description: string; amount: number; paid: number; balance: number }[];
+  /**
+   * `amount` less what the items above add up to, so the breakdown always
+   * reconciles. Negative when payments on that invoice were never tied to a
+   * fee item (they reduced the balance without reducing any item); positive
+   * when it was itself carrying a balance from earlier that belongs to no
+   * item of its own.
+   */
+  unassigned: number;
+}
+
+/**
  * Mirrors `Invoice` in `client/src/types/finance.ts`.
  *
  * `amountPaid` and `balance` are computed from allocations on every read, and
@@ -238,6 +260,8 @@ export interface InvoiceDTO {
   dueDate: string;
   /** Empty in list projections — only the detail read pays for the join. */
   lines: InvoiceLineDTO[];
+  /** What `broughtForward` was made of, itemized. Empty in list projections, like `lines`. */
+  carriedFrom: CarriedInvoiceDTO[];
   subtotal: number;
   discountTotal: number;
   /** Which discounts made up `discountTotal`, so a reduced bill always says why. */

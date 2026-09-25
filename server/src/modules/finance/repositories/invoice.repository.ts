@@ -2,7 +2,7 @@ import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
-import { Invoice } from '../entities/invoice.entity';
+import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import { InvoiceLine } from '../entities/invoiceLine.entity';
 import type { InvoiceDTO } from '../dto/finance.dto';
 import type { AppliedDiscount } from '../services/discountCalculator';
@@ -214,7 +214,7 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
       params,
     );
     const rows: InvoiceDTO[] = await this.repo.query(
-      `SELECT ${PROJECTION}, '[]'::json AS lines
+      `SELECT ${PROJECTION}, '[]'::json AS lines, '[]'::json AS "carriedFrom"
        ${JOINS}
        WHERE ${whereSql}
        ORDER BY ${SORTABLE[sortKey]} ${direction}, i.id ASC
@@ -254,7 +254,8 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
              WHERE pla.invoice_line_id = il.id
           ) lpd ON TRUE
           WHERE il.invoice_id = i.id
-        ), '[]'::json) AS lines
+        ), '[]'::json) AS lines,
+        '[]'::json AS "carriedFrom"
        ${JOINS}
        WHERE i.school_id = $1 AND i.id = $2`,
       [schoolId, id],
@@ -532,7 +533,68 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     );
     if (ids.length === 0) return byStudent;
 
-    const rows: (CarryForwardCandidate & { studentId: string })[] = await manager.query(
+    const rows = await this.carryCandidates(
+      manager,
+      ids.map((row) => row.id),
+    );
+
+    // Grouped rather than filtered per pupil: a cohort's carry-forward is one
+    // read, and each bill then takes its own arrears out of it in O(1).
+    for (const { studentId, ...candidate } of rows) {
+      const group = byStudent.get(studentId);
+      if (group) group.push(candidate);
+      else byStudent.set(studentId, [candidate]);
+    }
+    return byStudent;
+  }
+
+  /**
+   * The named open invoices of one student *in one term*, locked — for a
+   * follow-up bill that has been asked to take them over.
+   *
+   * Only what is still genuinely open comes back: another invoice's id, a
+   * different term's, one already paid, cancelled or carried elsewhere, is
+   * simply absent, and the caller decides what a short result means. The
+   * student and term are part of the match rather than trusted from the
+   * request, so a follow-up can only ever absorb its own family's bills for the
+   * term it is billing.
+   */
+  async lockOpenInvoicesInTerm(
+    manager: EntityManager,
+    schoolId: string,
+    studentId: string,
+    termId: string,
+    invoiceIds: string[],
+  ): Promise<CarryForwardCandidate[]> {
+    if (invoiceIds.length === 0) return [];
+
+    const ids: { id: string }[] = await manager.query(
+      `SELECT i.id
+         FROM invoices i
+        WHERE i.school_id = $1
+          AND i.student_id = $2
+          AND i.term_id = $3
+          AND i.id = ANY($4::uuid[])
+          AND i.status IN ('ISSUED', 'PART_PAID')
+        ORDER BY i.id
+        FOR UPDATE OF i`,
+      [schoolId, studentId, termId, invoiceIds],
+    );
+    if (ids.length === 0) return [];
+
+    const rows = await this.carryCandidates(
+      manager,
+      ids.map((row) => row.id),
+    );
+    return rows.map(({ studentId: _studentId, ...candidate }) => candidate);
+  }
+
+  /** What is still owing on each of these invoices — the amount that would move to a new one. */
+  private async carryCandidates(
+    manager: EntityManager,
+    invoiceIds: string[],
+  ): Promise<(CarryForwardCandidate & { studentId: string })[]> {
+    return manager.query(
       `SELECT i.id, i.student_id AS "studentId", i.invoice_no AS "invoiceNo",
               (i.total - COALESCE(pd.paid, 0))::float AS balance
          FROM invoices i
@@ -546,17 +608,20 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
          ) pd ON TRUE
         WHERE i.id = ANY($1::uuid[])
         ORDER BY ses.start_date, t.sequence, i.id`,
-      [ids.map((row) => row.id)],
+      [invoiceIds],
     );
+  }
 
-    // Grouped rather than filtered per pupil: a cohort's carry-forward is one
-    // read, and each bill then takes its own arrears out of it in O(1).
-    for (const { studentId, ...candidate } of rows) {
-      const group = byStudent.get(studentId);
-      if (group) group.push(candidate);
-      else byStudent.set(studentId, [candidate]);
-    }
-    return byStudent;
+  /** The earlier invoices this one absorbed, as recorded when it was raised. */
+  async findBroughtForwardSources(
+    schoolId: string,
+    invoiceId: string,
+  ): Promise<BroughtForwardSource[]> {
+    const rows: { sources: BroughtForwardSource[] | null }[] = await this.repo.query(
+      `SELECT brought_forward_from AS sources FROM invoices WHERE school_id = $1 AND id = $2`,
+      [schoolId, invoiceId],
+    );
+    return rows[0]?.sources ?? [];
   }
 
   /**

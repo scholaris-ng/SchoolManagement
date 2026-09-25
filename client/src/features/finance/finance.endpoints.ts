@@ -111,8 +111,15 @@ export interface CreateInvoiceInput {
   studentId: string;
   termId: string;
   dueDate: string;
+  /** May be empty when `carryInvoiceIds` is not: a follow-up needs no charges of its own. */
   lines: InvoiceLineInput[];
   discounts?: InvoiceDiscountInput[];
+  /**
+   * Earlier open invoices of this same student and term whose unpaid balance
+   * moves onto this one, closing them. Same-term invoices are otherwise left
+   * alone, so the server only carries the ones named here.
+   */
+  carryInvoiceIds?: string[];
   note?: string;
 }
 

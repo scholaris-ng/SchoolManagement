@@ -105,17 +105,40 @@ const invoiceDiscounts = z
     'The same discount appears twice',
   );
 
+/**
+ * A follow-up bill: `carryInvoiceIds` names earlier invoices of this same
+ * student and term whose unpaid balance moves onto the new one, closing them
+ * (`InvoicesService.issueInvoices`). Same-term invoices are otherwise left
+ * alone — a school raising tuition and boarding as two bills has not created
+ * arrears — so this is an explicit choice, never inferred. A bill that carries
+ * something needs no charges of its own.
+ */
 export const createInvoiceSchema = z.object({
   body: z
     .object({
       studentId: z.string().uuid('Choose the student this is for'),
       termId: z.string().uuid('Choose the term this bill covers'),
       dueDate: isoDate,
-      lines: invoiceLines,
+      lines: z
+        .array(invoiceLine)
+        .max(50, 'That is more charges than one invoice should carry')
+        .refine(
+          (lines) => new Set(lines.map((line) => line.feeItemId)).size === lines.length,
+          'The same fee item appears twice — change the quantity instead',
+        ),
       discounts: invoiceDiscounts.default([]),
+      carryInvoiceIds: z
+        .array(z.string().uuid())
+        .max(20)
+        .refine((ids) => new Set(ids).size === ids.length, 'The same invoice appears twice')
+        .default([]),
       note: z.string().trim().max(2000).optional().or(z.literal('')),
     })
-    .strict(),
+    .strict()
+    .refine((body) => body.lines.length > 0 || body.carryInvoiceIds.length > 0, {
+      message: 'An invoice needs at least one charge',
+      path: ['lines'],
+    }),
 });
 
 /**

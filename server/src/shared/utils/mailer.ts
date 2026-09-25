@@ -384,6 +384,16 @@ export async function buildInvoicePdfAttachment(params: {
   }>;
   /** Discounts ticked by name — a discount keyed straight onto a line instead carries no name here, only its share of `discountTotal`. */
   appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
+  /**
+   * What `broughtForward` was made of, fee item by fee item — printed under the
+   * charges so a carried balance does not read as one unexplained lump.
+   */
+  carriedFrom?: Array<{
+    invoiceNo: string;
+    items: Array<{ description: string; amount: number; paid: number; balance: number }>;
+    /** Negative: payments never tied to a fee item. Positive: a balance the invoice itself carried. */
+    unassigned: number;
+  }>;
   accounts: Array<{ label: string; accountNumber: string; accountName: string }>;
 }): Promise<Buffer> {
   return renderPdf(async (doc) => {
@@ -516,6 +526,56 @@ export async function buildInvoicePdfAttachment(params: {
       y += rowHeight;
       doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
       y += 4;
+    }
+
+    // What the brought-forward balance was made of, fee item by fee item, so it
+    // does not print as one unexplained lump. Each item shows what is still
+    // owing on it; the last row, when there is one, squares the list with the
+    // amount actually carried (payments that were never tied to an item).
+    for (const source of params.carriedFrom ?? []) {
+      const rows = source.items.map((item) => ({
+        label: item.description,
+        note:
+          item.paid > 0
+            ? `${formatPdfCurrency(item.amount)} billed, ${formatPdfCurrency(item.paid)} already paid`
+            : `${formatPdfCurrency(item.amount)} billed`,
+        value: formatPdfCurrency(item.balance),
+      }));
+      if (Math.abs(source.unassigned) > 0.004) {
+        rows.push({
+          label: source.unassigned < 0 ? 'Payments not tied to a fee item' : 'Earlier balance brought forward',
+          note: '',
+          value:
+            source.unassigned < 0
+              ? `- ${formatPdfCurrency(-source.unassigned)}`
+              : formatPdfCurrency(source.unassigned),
+        });
+      }
+      if (rows.length === 0) continue;
+
+      if (y + 20 + 34 > pageBottom) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.fillColor(muted).fontSize(8).font('Helvetica-Bold').text(`BROUGHT FORWARD FROM ${source.invoiceNo}`, left + 8, y + 8, { width: 400 });
+      y += 22;
+
+      for (const row of rows) {
+        const labelHeight = doc.fontSize(10).font('Helvetica-Bold').heightOfString(row.label, { width: 320 });
+        const rowHeight = 6 + labelHeight + (row.note ? 12 : 0) + 6;
+        if (y + rowHeight > pageBottom) {
+          doc.addPage();
+          y = 50;
+        }
+        doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(row.label, left + 8, y + 6, { width: 320 });
+        if (row.note) {
+          doc.fillColor(muted).fontSize(8).font('Helvetica').text(row.note, left + 8, y + 6 + labelHeight + 2, { width: 320 });
+        }
+        doc.fillColor(dark).fontSize(10).font('Helvetica-Bold').text(row.value, left + 390, y + 6, { width: 90, align: 'right' });
+        y += rowHeight;
+        doc.moveTo(left, y).lineTo(width - left, y).strokeColor(border).lineWidth(0.5).stroke();
+        y += 4;
+      }
     }
 
     const accountTotals = summariseAccountsByTotal(params.lines);
@@ -1350,6 +1410,16 @@ export async function sendInvoiceEmail(params: {
     accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
   }>;
   appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
+  /**
+   * What `broughtForward` was made of, fee item by fee item — printed under the
+   * charges so a carried balance does not read as one unexplained lump.
+   */
+  carriedFrom?: Array<{
+    invoiceNo: string;
+    items: Array<{ description: string; amount: number; paid: number; balance: number }>;
+    /** Negative: payments never tied to a fee item. Positive: a balance the invoice itself carried. */
+    unassigned: number;
+  }>;
   accounts: { label: string; accountNumber: string; accountName: string }[];
   contactEmail: string;
 }): Promise<void> {
@@ -1378,6 +1448,7 @@ export async function sendInvoiceEmail(params: {
     note,
     lines,
     appliedDiscounts,
+    carriedFrom,
     accounts,
     contactEmail,
   } = params;
@@ -1419,6 +1490,7 @@ export async function sendInvoiceEmail(params: {
     note,
     lines,
     appliedDiscounts,
+    carriedFrom,
     accounts,
   });
 

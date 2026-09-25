@@ -191,6 +191,25 @@ export interface InvoiceLineAccount {
   accountName: string;
 }
 
+/**
+ * One earlier invoice whose unpaid balance moved onto another, itemized for the
+ * printed copy of the invoice that took it on. Mirrors `CarriedInvoiceDTO`.
+ */
+export interface CarriedInvoice {
+  invoiceId: string;
+  invoiceNo: string;
+  /** What moved across, as recorded when it was carried — the figure the total counts. */
+  amount: number;
+  /** Only the fee items with something still owing, as they stood on that invoice. */
+  items: { description: string; amount: number; paid: number; balance: number }[];
+  /**
+   * `amount` less what the items add up to, so the breakdown reconciles.
+   * Negative: payments on that invoice were never tied to a fee item.
+   * Positive: it was itself carrying a balance that belongs to no item.
+   */
+  unassigned: number;
+}
+
 export interface Invoice {
   id: string;
   schoolId: string;
@@ -206,6 +225,8 @@ export interface Invoice {
   issueDate: string;
   dueDate: string;
   lines: InvoiceLine[];
+  /** What `broughtForward` was made of, itemized. Empty in list reads, like `lines`. */
+  carriedFrom: CarriedInvoice[];
   subtotal: number;
   discountTotal: number;
   /** Which discounts made up `discountTotal` — the reason for a reduced bill. */

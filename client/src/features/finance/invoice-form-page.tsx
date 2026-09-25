@@ -10,6 +10,7 @@ import {
   useCreateInvoice,
   useDiscounts,
   useFeeItems,
+  useInvoices,
   useResolveFeeStructure,
   useStudentDiscounts,
 } from './api';
@@ -30,6 +31,7 @@ import { Input, NativeSelect, SearchInput, Textarea } from '@/components/ui/inpu
 import { Alert } from '@/components/ui/feedback';
 import { FormError } from '@/components/forms/form-actions';
 import { Row } from './invoice-form-page-parts';
+import { TermBilledCard } from './term-billed-card';
 
 interface LineDraft {
   feeItemId: string;
@@ -110,6 +112,34 @@ export function InvoiceFormPage() {
   const [structureAmounts, setStructureAmounts] = useState<Map<string, number>>(new Map());
 
   const effectiveTermId = termId || currentTerm.data?.id || '';
+
+  // A student who already has a live invoice this term has had the standard
+  // fees billed on it, so this one is a follow-up for whatever else came up —
+  // offering "Add all standard fees" again would only invite billing them
+  // twice. A cancelled invoice does not count: its charges were withdrawn.
+  // `checkingTerm` also covers the moment after picking a different student,
+  // when the list still holds the previous student's invoices.
+  const termInvoices = useInvoices(
+    { page: 1, pageSize: 50, studentId: student?.id, termId: effectiveTermId || undefined },
+    { enabled: Boolean(student && effectiveTermId) },
+  );
+  const checkingTerm = termInvoices.isLoading || termInvoices.isPlaceholderData;
+  const liveTermInvoices = checkingTerm
+    ? []
+    : (termInvoices.data?.items ?? []).filter((row) => row.status !== 'CANCELLED');
+  const termAlreadyBilled = liveTermInvoices.length > 0;
+
+  // What a follow-up takes over from those invoices: whatever is still owing,
+  // moved onto this bill so the family owes it once. On by default — that is
+  // what a second invoice for the same term is nearly always for — and only
+  // ever declined for one student and term at a time, so picking someone else
+  // starts from "carry" again.
+  const carryKey = `${student?.id ?? ''}:${effectiveTermId}`;
+  const [declinedCarryKey, setDeclinedCarryKey] = useState<string | null>(null);
+  const carryLeft = declinedCarryKey !== carryKey;
+  const carriable = liveTermInvoices.filter((row) => row.balance > 0);
+  const carryIds = carryLeft ? carriable.map((row) => row.id) : [];
+  const carryTotal = carryLeft ? carriable.reduce((sum, row) => sum + row.balance, 0) : 0;
 
   // The server applies whatever this student has been granted, plus any
   // discount ticked here, when the invoice is created. The figures below are a
@@ -325,7 +355,11 @@ export function InvoiceFormPage() {
       ),
     );
 
-  const valid = Boolean(student && effectiveTermId && dueDate && lines.length > 0);
+  // A follow-up that carries the balance owing on an earlier invoice needs no
+  // charges of its own: what it bills is that balance.
+  const valid = Boolean(
+    student && effectiveTermId && dueDate && (lines.length > 0 || carryIds.length > 0),
+  );
 
   // Reached from a student's own Fees tab, this should hand the bursar back
   // to that student rather than dropping them on the general invoices list
@@ -360,6 +394,7 @@ export function InvoiceFormPage() {
           discountAmount: manualDiscountFor(line),
         })),
         discounts: chosenDiscounts,
+        carryInvoiceIds: carryIds,
         note: note.trim() || undefined,
       });
       navigate(`/finance/invoices/${invoice.id}`);
@@ -471,25 +506,38 @@ export function InvoiceFormPage() {
         </CardContent>
       </Card>
 
+      {termAlreadyBilled && (
+        <TermBilledCard
+          invoices={liveTermInvoices}
+          carry={carryLeft}
+          onCarryChange={(carry) => setDeclinedCarryKey(carry ? null : carryKey)}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Charges</CardTitle>
               <CardDescription>
-                Add the fee items being billed. Optional items are only for families who take them.
+                {termAlreadyBilled
+                  ? 'This student already has an invoice for this term, so the standard fees are on it. Add only what this one is for.'
+                  : 'Add the fee items being billed. Optional items are only for families who take them.'}
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button
-                data-cy="finance-invoice-form-add-all-standard-fees"
-                variant="outline"
-                size="sm"
-                onClick={() => void addStandardItems()}
-                loading={resolveFeeStructure.isPending}
-              >
-                Add all standard fees
-              </Button>
+              {!termAlreadyBilled && (
+                <Button
+                  data-cy="finance-invoice-form-add-all-standard-fees"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void addStandardItems()}
+                  loading={resolveFeeStructure.isPending}
+                  disabled={checkingTerm}
+                >
+                  Add all standard fees
+                </Button>
+              )}
               <Button data-cy="finance-invoice-form-add-a-line" variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
                 <Plus />
                 Add a line
@@ -500,7 +548,11 @@ export function InvoiceFormPage() {
         <CardContent className="space-y-3">
           {lines.length === 0 ? (
             <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No charges yet. Add the standard fees, or pick items one at a time.
+              {carryIds.length > 0
+                ? 'No new charges. This invoice will bill just what is carried over from the earlier one — add a line only if something new is being billed.'
+                : termAlreadyBilled
+                  ? 'No charges yet. Pick the items this invoice is for.'
+                  : 'No charges yet. Add the standard fees, or pick items one at a time.'}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -753,8 +805,23 @@ export function InvoiceFormPage() {
               value={formatCurrency(subtotal - discountPreview.total, 'NGN', {
                 showDecimals: false,
               })}
-              emphasis
+              emphasis={carryTotal === 0}
             />
+            {carryTotal > 0 && (
+              <>
+                <Row
+                  label="Carried from the earlier invoice"
+                  value={formatCurrency(carryTotal, 'NGN', { showDecimals: false })}
+                />
+                <Row
+                  label="Total to pay"
+                  value={formatCurrency(subtotal - discountPreview.total + carryTotal, 'NGN', {
+                    showDecimals: false,
+                  })}
+                  emphasis
+                />
+              </>
+            )}
           </dl>
 
           <Alert tone="info">

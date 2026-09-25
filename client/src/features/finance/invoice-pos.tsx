@@ -3,6 +3,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import type { Invoice } from '@/types/finance';
 import type { AccountSummaryRow } from './account-summary';
 import { POS_WIDTH_MM } from './pos-print';
+import { carriedRows } from './carried-rows';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -98,6 +99,31 @@ export function InvoicePos({
           </div>
         ))}
       </div>
+
+      {record.carriedFrom.map((source) => (
+        <div key={source.invoiceId} className="mt-[1.5mm] space-y-[1.2mm]">
+          <p className="text-[10px] font-semibold uppercase tracking-wide">
+            Brought forward from {source.invoiceNo}
+          </p>
+          {carriedRows(source).map((row) => (
+            <div key={row.key}>
+              <div className="flex items-start justify-between gap-2">
+                <span>{row.label}</span>
+                <span className="tabular-nums">
+                  {row.balance < 0 ? '− ' : ''}
+                  {formatCurrency(Math.abs(row.balance), 'NGN', { showDecimals: false })}
+                </span>
+              </div>
+              {row.billed !== null && row.paid !== null && row.paid > 0 && (
+                <p className="text-[9px] italic">
+                  {formatCurrency(row.billed, 'NGN', { showDecimals: false })} billed ·{' '}
+                  {formatCurrency(row.paid, 'NGN', { showDecimals: false })} paid
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
 
       <Rule />
 

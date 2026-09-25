@@ -68,3 +68,45 @@ describe('invoice discounts', () => {
     expect(parsed.body.discounts).toBeUndefined();
   });
 });
+
+describe('a follow-up invoice that carries earlier ones', () => {
+  const uuid = '3f2b8c1e-5d4a-4e9b-8a7c-1d2e3f4a5b6c';
+  const other = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
+  const base = { studentId: uuid, termId: uuid, dueDate: '2026-10-01' };
+
+  it('carries nothing unless it is asked to', () => {
+    const parsed = createInvoiceSchema.parse({
+      body: { ...base, lines: [{ feeItemId: uuid, quantity: 1, discountAmount: 0 }] },
+    });
+    expect(parsed.body.carryInvoiceIds).toEqual([]);
+  });
+
+  it('needs no charges of its own once it carries an invoice', () => {
+    const parsed = createInvoiceSchema.parse({
+      body: { ...base, lines: [], carryInvoiceIds: [other] },
+    });
+    expect(parsed.body.carryInvoiceIds).toEqual([other]);
+  });
+
+  it('still refuses an invoice with neither charges nor anything carried', () => {
+    expect(createInvoiceSchema.safeParse({ body: { ...base, lines: [] } }).success).toBe(false);
+  });
+
+  it('refuses the same invoice named twice, and ids that are not uuids', () => {
+    expect(
+      createInvoiceSchema.safeParse({
+        body: { ...base, lines: [], carryInvoiceIds: [other, other] },
+      }).success,
+    ).toBe(false);
+    expect(
+      createInvoiceSchema.safeParse({ body: { ...base, lines: [], carryInvoiceIds: ['INV-1'] } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('keeps an edit to an issued invoice at one charge minimum', () => {
+    expect(
+      updateInvoiceSchema.safeParse({ params: { id: uuid }, body: { lines: [] } }).success,
+    ).toBe(false);
+  });
+});

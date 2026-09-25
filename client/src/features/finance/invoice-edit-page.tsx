@@ -358,7 +358,10 @@ export function InvoiceEditPage() {
 
   const record = invoice.data;
   const amountLocked = record.amountPaid > 0;
-  const valid = Boolean(dueDate && lines.length > 0);
+  // A follow-up that only carries an earlier invoice's balance was born with no
+  // charges; its due date and note can still change without inventing one.
+  const hadNoCharges = record.lines.length === 0;
+  const valid = Boolean(dueDate && (lines.length > 0 || hadNoCharges));
 
   // Same student-centric trail as the invoice detail page this is reached
   // from — an invoice always belongs to exactly one student.
@@ -393,7 +396,7 @@ export function InvoiceEditPage() {
         input: {
           dueDate,
           note,
-          ...(amountLocked
+          ...(amountLocked || lines.length === 0
             ? {}
             : {
                 lines: lines.map((line) => ({
