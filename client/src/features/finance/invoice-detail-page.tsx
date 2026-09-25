@@ -1,6 +1,11 @@
 import { Fragment, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Ban, CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
+import { CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
+// "Cancel invoice" is switched off for now. To bring it back, uncomment this icon,
+// the import of `CancelInvoiceDialog`/`isCancellable` below, `cancelOpen`, the button
+// among the page actions and the dialog at the foot of the page. The dialog, its
+// hook and the server endpoint are all still in place.
+// import { Ban } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
@@ -9,7 +14,7 @@ import { summarizeByAccount } from './account-summary';
 import { carriedRows } from './carried-rows';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
-import { CancelInvoiceDialog, isCancellable } from './cancel-invoice-dialog';
+// import { CancelInvoiceDialog, isCancellable } from './cancel-invoice-dialog';
 import { ShareInvoiceButton } from './whatsapp-share-buttons';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { useDocumentDeliveries, useLogDocumentPrint } from './use-document-deliveries';
@@ -39,7 +44,7 @@ export function InvoiceDetailPage() {
   const { membership, can } = useAuth();
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  // const [cancelOpen, setCancelOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printInvoice = usePrintMode();
@@ -181,7 +186,7 @@ export function InvoiceDetailPage() {
                   </Button>
                 </PermissionGate>
               )}
-              {record.status !== 'CANCELLED' && (
+              {/* {record.status !== 'CANCELLED' && (
                 <PermissionGate require="invoice.manage">
                   {(() => {
                     const cancelButton = (
@@ -210,7 +215,7 @@ export function InvoiceDetailPage() {
                     );
                   })()}
                 </PermissionGate>
-              )}
+              )} */}
               <PermissionGate require="invoice.manage">
                 {(() => {
                   const deleteButton = (
@@ -508,7 +513,7 @@ export function InvoiceDetailPage() {
         </PermissionGate>
       )} */}
 
-      <CancelInvoiceDialog invoice={cancelOpen ? record : null} onOpenChange={setCancelOpen} />
+      {/* <CancelInvoiceDialog invoice={cancelOpen ? record : null} onOpenChange={setCancelOpen} /> */}
 
       <ConfirmDialog
         data-cy="finance-invoice-detail-delete-confirm"
