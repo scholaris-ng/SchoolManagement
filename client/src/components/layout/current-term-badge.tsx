@@ -17,7 +17,7 @@ export function CurrentTermBadge() {
 
   return (
     <span
-      className="hidden items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex"
+      className="hidden h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs text-muted-foreground sm:inline-flex"
       title={`Current term: ${term.name}, ${term.sessionName}`}
     >
       <CalendarRange className="size-3.5 shrink-0" aria-hidden="true" />

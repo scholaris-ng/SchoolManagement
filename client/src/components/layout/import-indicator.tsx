@@ -51,7 +51,7 @@ export function ImportIndicator({ className }: { className?: string }) {
           type="button"
           data-cy="import-indicator"
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent',
+            'flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors hover:bg-accent',
             className,
           )}
           aria-label={

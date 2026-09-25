@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { formatRelative } from '@/lib/format';
 import { useOutbox } from '@/hooks/use-outbox';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/feedback';
 import { Badge } from '@/components/ui/primitives';
 
 /**
@@ -38,13 +39,22 @@ export function SyncIndicator({ className }: { className?: string }) {
     synced: { icon: CheckCircle2, label: 'All saved', tone: 'success' as const },
   }[state];
 
-  // Nothing to say when everything is saved and the connection is fine.
+  // Nothing to say when everything is saved and the connection is fine, so it
+  // stays a quiet tick rather than a sentence competing with the things that
+  // need attention. The words remain for screen readers and on hover; every
+  // other state below keeps its label.
   if (state === 'synced' && entries.length === 0) {
     return (
-      <span className={cn('hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex', className)}>
-        <CheckCircle2 className="size-3.5 text-success" aria-hidden="true" />
-        <span>All changes saved</span>
-      </span>
+      <Tooltip content="All changes saved">
+        <span
+          role="status"
+          data-cy="sync-saved"
+          className={cn('hidden size-8 place-items-center rounded-md sm:grid', className)}
+        >
+          <CheckCircle2 className="size-4 text-success" aria-hidden="true" />
+          <span className="sr-only">All changes saved</span>
+        </span>
+      </Tooltip>
     );
   }
 
@@ -55,7 +65,7 @@ export function SyncIndicator({ className }: { className?: string }) {
           type="button"
           data-cy="sync-indicator"
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent',
+            'flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors hover:bg-accent',
             className,
           )}
           aria-label={`Synchronisation status: ${config.label}`}

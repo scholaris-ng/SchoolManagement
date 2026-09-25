@@ -25,8 +25,7 @@ import { SyncIndicator } from './sync-indicator';
 import { ImportIndicator } from './import-indicator';
 import { NotificationBell } from '@/features/notifications/notification-bell';
 import { CommandPalette } from './command-palette';
-import { SchoolPlanBadge } from '@/features/subscription/school-plan-badge';
-import { PLAN_LABEL } from '@/features/subscription/school-access';
+import { SchoolPlanBadge, SchoolPlanSummary } from '@/features/subscription/school-plan-badge';
 
 export interface TopbarProps {
   onOpenMobileNav: () => void;
@@ -34,7 +33,7 @@ export interface TopbarProps {
 
 export function Topbar({ onOpenMobileNav }: TopbarProps) {
   const navigate = useNavigate();
-  const { user, membership, signOut, can } = useAuth();
+  const { user, signOut, can } = useAuth();
   const { mode, setMode } = useTheme();
   const { data: currentTerm } = useCurrentTerm();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -68,15 +67,19 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
           </kbd>
         </button>
 
+        {/* Three groups, read left to right: where you are and whether your work
+            is safe (status), the one thing you might want to do (New), and you
+            (bell, account). The account menu is last, as it is everywhere else. */}
         <div className="ml-auto flex items-center gap-1">
           <CurrentTermBadge />
+          <SchoolPlanBadge />
           <ImportIndicator />
           <SyncIndicator />
 
           {quickActions.length > 0 && (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <Button size="sm" data-cy="quick-actions-trigger" className="hidden sm:inline-flex">
+                <Button size="sm" data-cy="quick-actions-trigger" className="ml-1 hidden sm:inline-flex">
                   <Plus />
                   New
                 </Button>
@@ -103,6 +106,8 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
             </DropdownMenu.Root>
           )}
 
+          <span className="mx-1.5 hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+
           <NotificationBell />
 
           <DropdownMenu.Root>
@@ -110,7 +115,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
               <button
                 type="button"
                 data-cy="account-menu-trigger"
-                className="ml-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Account menu"
               >
                 <Avatar name={user?.displayName ?? 'User'} src={user?.photoUrl} size="sm" />
@@ -125,25 +130,15 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 <div className="border-b border-border px-2 py-2">
                   <p className="truncate text-sm font-medium">{user?.displayName}</p>
                   <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-                  {membership && (
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {membership.schoolName}
-                    </p>
-                  )}
-                  {/* The header badge needs a wide screen; this is where a
-                      narrower one finds the same answer. */}
-                  {membership?.access && (
-                    <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">
-                      {PLAN_LABEL[membership.access.plan]} ·{' '}
-                      {membership.access.expired
-                        ? 'ended'
-                        : `${membership.access.daysLeft} day${membership.access.daysLeft === 1 ? '' : 's'} left`}
-                    </p>
-                  )}
+                </div>
+                {/* The school and its plan live here rather than in the header,
+                    so they read the same on every screen size. */}
+                <div className="border-b border-border px-2 py-2.5">
+                  <SchoolPlanSummary />
                   {/* The top-bar badge is hidden on a phone; this is where a
                       mobile user finds the same answer. */}
                   {currentTerm && (
-                    <p className="mt-1 truncate text-xs text-muted-foreground sm:hidden">
+                    <p className="mt-2 truncate text-xs text-muted-foreground sm:hidden">
                       {currentTerm.name} · {currentTerm.sessionName}
                     </p>
                   )}
@@ -227,8 +222,6 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
-
-          <SchoolPlanBadge />
         </div>
       </header>
 
