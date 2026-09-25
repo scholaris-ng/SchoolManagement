@@ -207,10 +207,22 @@ export interface InvoiceLineDTO {
   /** Where to pay this charge, snapshotted from the selected accounts when it was billed. */
   accounts: InvoiceLineAccountDTO[];
   /**
+   * Set when this is not new billing but an earlier invoice's outstanding
+   * charge, carried here when this invoice took over that invoice's balance. It
+   * sits inside `broughtForward`, never in `subtotal`, and a printed copy shows
+   * it under that heading rather than among the invoice's own charges.
+   */
+  carriedFromInvoiceId: string | null;
+  carriedFromInvoiceNo: string | null;
+  /**
    * What has actually been paid toward this one charge, not the invoice as a
    * whole — the sum of whatever `payment_line_allocations` name it, for
    * `SUCCESSFUL` payments only. Zero for most lines: itemizing a payment down
    * to a specific charge is something the office opts into, not the default.
+   *
+   * A charge ticked as paid on a receipt, with no amount typed against it by
+   * that payment, is the whole charge (a tick means the payment covered all of
+   * it) and reads as fully paid with nothing left in `balance`.
    */
   amountPaid: number;
   balance: number;

@@ -333,6 +333,10 @@ export const FinanceEndpoints = {
   deleteInvoices: (ids: string[]) =>
     http.post<DeleteInvoicesResult>('/invoices/bulk-delete', { ids }),
 
+  /** Withdraws an invoice, keeping it on file with the reason. Refused once money has been received. */
+  cancelInvoice: (id: string, reason: string) =>
+    http.post<Invoice>(`/invoices/${id}/cancel`, { reason }),
+
   /** Emails one invoice to a guardian already linked to its student. */
   sendInvoiceEmail: (id: string, guardianId: string) =>
     http.post<{ sent: boolean; email: string }>(`/invoices/${id}/email`, { guardianId }),

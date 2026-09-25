@@ -125,6 +125,25 @@ describe('PaymentFormPage fee-item tally', () => {
     expect(total()).toHaveTextContent('206,000');
   });
 
+  it('lists the fee items a follow-up invoice carried in, and where they came from', async () => {
+    // A follow-up with nothing of its own: the whole balance is carried lines.
+    const carriedLines = [
+      { id: 'c1', description: 'Tuition', balance: 40000, carriedFromInvoiceNo: 'INV/2026-2027/00020' },
+      { id: 'c2', description: 'Exam', balance: 50000, carriedFromInvoiceNo: 'INV/2026-2027/00020' },
+    ];
+    const followUp = { ...invoice, balance: 90000 };
+    seedInvoice(followUp);
+    fixtures.detail = { ...followUp, lines: carriedLines };
+    renderForm();
+    await userEvent.type(screen.getByLabelText(/^Amount/), '90000');
+
+    await userEvent.click(screen.getByText('Name which fee item this pays for'));
+
+    expect(screen.getByText('Tuition')).toBeInTheDocument();
+    expect(screen.getByText('Exam')).toBeInTheDocument();
+    expect(screen.getAllByText(/brought forward from INV\/2026-2027\/00020/)).toHaveLength(2);
+  });
+
   it('lets a payment that clears the whole invoice through without opening the fee items', async () => {
     renderForm();
 

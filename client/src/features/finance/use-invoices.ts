@@ -85,6 +85,27 @@ export function useUpdateInvoice() {
   });
 }
 
+/**
+ * Cancelling reopens any invoice this one had taken over, so the lists and the
+ * student's figures are all stale, not just this invoice.
+ */
+export function useCancelInvoice() {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      FinanceEndpoints.cancelInvoice(id, reason),
+    onSuccess: (invoice) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoice(schoolId, invoice.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.bursar(schoolId) });
+      toast.success('Invoice cancelled', { description: invoice.invoiceNo });
+    },
+  });
+}
+
 /** Emails one invoice to a guardian already linked to its student. */
 export function useSendInvoiceEmail(invoiceId: string) {
   const schoolId = useSchoolId();

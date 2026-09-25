@@ -1,6 +1,15 @@
 import type { EntityManager } from 'typeorm';
-import { InvoicesService, type IssueInvoiceParams, type IssueLine } from '../services/invoices.service';
-import { InvoiceRepository, type CarryForwardCandidate } from '../repositories/invoice.repository';
+import {
+  InvoicesService,
+  itemiseCarried,
+  type IssueInvoiceParams,
+  type IssueLine,
+} from '../services/invoices.service';
+import {
+  InvoiceRepository,
+  type CarryForwardCandidate,
+  type CarryableLine,
+} from '../repositories/invoice.repository';
 
 /**
  * A whole cohort is billed in one batch rather than a pupil at a time, so the
@@ -148,13 +157,154 @@ describe('InvoicesService.issueInvoices', () => {
   });
 
   describe('a follow-up bill that takes over same-term invoices', () => {
-    const arrangeFollowUp = (taken: CarryForwardCandidate[]) => {
+    const arrangeFollowUp = (taken: CarryForwardCandidate[], owing: CarryableLine[] = []) => {
       const base = arrange(new Map(), ['new-a']);
       const lockInTerm = jest
         .spyOn(InvoiceRepository.Instance, 'lockOpenInvoicesInTerm')
         .mockResolvedValue(taken);
-      return { ...base, lockInTerm };
+      const linesToCarry = jest
+        .spyOn(InvoiceRepository.Instance, 'findLinesToCarry')
+        .mockResolvedValue(owing);
+      return { ...base, lockInTerm, linesToCarry };
     };
+
+    const owingLine = (over: Partial<CarryableLine>): CarryableLine => ({
+      id: 'old-line',
+      invoiceId: 'same-1',
+      feeItemId: 'item-1',
+      description: 'Tuition',
+      category: 'TUITION' as never,
+      isOptional: false,
+      accounts: [],
+      sortOrder: 0,
+      balance: 0,
+      ...over,
+    });
+
+    it('carries what is left as fee-item lines, without counting them as new billing', async () => {
+      const { createMany, createLines } = arrangeFollowUp(
+        [{ id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 90_000 }],
+        [
+          owingLine({ id: 'l1', feeItemId: 'tuition', description: 'Tuition', balance: 40_000 }),
+          owingLine({ id: 'l2', feeItemId: 'exam', description: 'Exam', balance: 50_000, sortOrder: 1 }),
+        ],
+      );
+
+      await InvoicesService.Instance.issueInvoices(manager, [
+        { ...params('stu-a', 9, []), carryInvoiceIds: ['same-1'] },
+      ]);
+
+      // The figures on the invoice itself are unchanged: nothing new was billed,
+      // and the whole ₦90,000 is brought forward.
+      expect(createMany.mock.calls[0][0][0]).toMatchObject({
+        subtotal: '0.00',
+        broughtForward: '90000.00',
+        total: '90000.00',
+      });
+
+      const [lineRows] = createLines.mock.calls[0];
+      expect(
+        lineRows.map((row) => [row.invoiceId, row.feeItemId, row.lineTotal, row.carriedFromInvoiceId]),
+      ).toEqual([
+        ['new-a', 'tuition', '40000.00', 'same-1'],
+        ['new-a', 'exam', '50000.00', 'same-1'],
+      ]);
+      // Never a discount, and always after any charge of the invoice's own.
+      expect(lineRows[0]).toMatchObject({ quantity: 1, unitAmount: '40000.00', discountAmount: '0.00' });
+      expect(lineRows[0].sortOrder).toBeGreaterThanOrEqual(1000);
+    });
+
+    it('keeps the invoice\'s own charges as billing beside the carried ones', async () => {
+      const { createMany, createLines } = arrangeFollowUp(
+        [{ id: 'same-1', invoiceNo: 'INV/2025-2026/00003', balance: 40_000 }],
+        [owingLine({ id: 'l1', feeItemId: 'tuition', balance: 40_000 })],
+      );
+
+      await InvoicesService.Instance.issueInvoices(manager, [
+        { ...params('stu-a', 9, [line('uniform', 5_000)]), carryInvoiceIds: ['same-1'] },
+      ]);
+
+      expect(createMany.mock.calls[0][0][0]).toMatchObject({
+        subtotal: '5000.00',
+        broughtForward: '40000.00',
+        total: '45000.00',
+      });
+      const [lineRows] = createLines.mock.calls[0];
+      expect(lineRows.map((row) => [row.feeItemId, row.carriedFromInvoiceId ?? null])).toEqual([
+        ['uniform', null],
+        ['tuition', 'same-1'],
+      ]);
+    });
+
+    describe('itemiseCarried', () => {
+      const source = (balance: number): CarryForwardCandidate => ({
+        id: 'same-1',
+        invoiceNo: 'INV/2025-2026/00003',
+        balance,
+      });
+
+      it('carries each item at what is left on it when the items add up to the balance', () => {
+        const drafts = itemiseCarried(source(90_000), [
+          owingLine({ feeItemId: 'tuition', balance: 40_000 }),
+          owingLine({ feeItemId: 'exam', balance: 50_000, sortOrder: 1 }),
+        ]);
+
+        expect(drafts.map((draft) => [draft.feeItemId, draft.total])).toEqual([
+          ['tuition', 40_000],
+          ['exam', 50_000],
+        ]);
+      });
+
+      it('leaves out an item with nothing owing on it', () => {
+        const drafts = itemiseCarried(source(50_000), [
+          owingLine({ feeItemId: 'tuition', balance: 0 }),
+          owingLine({ feeItemId: 'exam', balance: 50_000, sortOrder: 1 }),
+        ]);
+
+        expect(drafts.map((draft) => draft.feeItemId)).toEqual(['exam']);
+      });
+
+      it('takes off money that never named an item, from the first item down, so the lines never add up to more than was carried', () => {
+        // Items owe 171,000 but only 106,000 is being carried: ₦65,000 was paid
+        // without naming an item.
+        const drafts = itemiseCarried(source(106_000), [
+          owingLine({ feeItemId: 'tuition', balance: 25_000 }),
+          owingLine({ feeItemId: 'exam', balance: 40_000, sortOrder: 1 }),
+          owingLine({ feeItemId: 'development', balance: 25_000, sortOrder: 2 }),
+          owingLine({ feeItemId: 'boarding', balance: 21_000, sortOrder: 3 }),
+          owingLine({ feeItemId: 'test', balance: 60_000, sortOrder: 4 }),
+        ]);
+
+        // 25,000 off Tuition, then 40,000 off Exam, leaving 0 and 0.
+        expect(drafts.map((draft) => [draft.feeItemId, draft.total])).toEqual([
+          ['development', 25_000],
+          ['boarding', 21_000],
+          ['test', 60_000],
+        ]);
+        expect(drafts.reduce((sum, draft) => sum + draft.total, 0)).toBe(106_000);
+      });
+
+      it('takes only part off an item when the excess ends part way through it', () => {
+        const drafts = itemiseCarried(source(70_000), [
+          owingLine({ feeItemId: 'tuition', balance: 40_000 }),
+          owingLine({ feeItemId: 'exam', balance: 50_000, sortOrder: 1 }),
+        ]);
+
+        // 90,000 owing on items, 70,000 carried: 20,000 off Tuition.
+        expect(drafts.map((draft) => [draft.feeItemId, draft.total])).toEqual([
+          ['tuition', 20_000],
+          ['exam', 50_000],
+        ]);
+      });
+
+      it('leaves the rest in the lump when the items add up to less than was carried', () => {
+        const drafts = itemiseCarried(source(80_000), [
+          owingLine({ feeItemId: 'tuition', balance: 50_000 }),
+        ]);
+
+        expect(drafts.map((draft) => draft.total)).toEqual([50_000]);
+      });
+    });
 
     it('moves their balance onto the new bill and closes them against it', async () => {
       const { createMany, close, lockInTerm } = arrangeFollowUp([

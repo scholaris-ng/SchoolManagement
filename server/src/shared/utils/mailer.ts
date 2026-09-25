@@ -381,6 +381,8 @@ export async function buildInvoicePdfAttachment(params: {
     lineTotal: number;
     isOptional: boolean;
     accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+    /** Set on a charge carried in from an earlier invoice — printed under "brought forward", not among the invoice's own. */
+    carriedFromInvoiceId?: string | null;
   }>;
   /** Discounts ticked by name — a discount keyed straight onto a line instead carries no name here, only its share of `discountTotal`. */
   appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
@@ -471,7 +473,7 @@ export async function buildInvoicePdfAttachment(params: {
     const pageBottom = 780;
 
     let y = tableY + 22;
-    for (const line of params.lines) {
+    for (const line of params.lines.filter((entry) => !entry.carriedFromInvoiceId)) {
       const accountText =
         line.accounts.length > 0
           ? line.accounts
@@ -1408,6 +1410,8 @@ export async function sendInvoiceEmail(params: {
     lineTotal: number;
     isOptional: boolean;
     accounts: Array<{ label: string | null; bankName: string; accountNumber: string; accountName: string }>;
+    /** Set on a charge carried in from an earlier invoice — printed under "brought forward", not among the invoice's own. */
+    carriedFromInvoiceId?: string | null;
   }>;
   appliedDiscounts: Array<{ discountId: string; name: string; amount: number }>;
   /**

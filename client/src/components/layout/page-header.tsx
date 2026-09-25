@@ -76,7 +76,12 @@ export function PageHeader({
             ))}
           {meta && <div className="flex flex-wrap items-center gap-2 pt-1">{meta}</div>}
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 no-print">{actions}</div>}
+        {/* `max-w-full` is what lets `flex-wrap` work: a `shrink-0` box is as wide as
+            all its buttons side by side, so without a ceiling it never wraps and a page
+            with many actions scrolls sideways instead. */}
+        {actions && (
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2 no-print">{actions}</div>
+        )}
       </div>
       {tabs}
     </header>

@@ -106,6 +106,22 @@ describe('InvoicePos with a balance brought forward', () => {
     expect(screen.getByText('Brought forward')).toBeInTheDocument();
   });
 
+  it('prints a charge carried in as a real line only once, under its heading', () => {
+    // The follow-up's lines include the carried ones, so the slip's own
+    // "Charges" list has to leave them out or each item would print twice.
+    const followUp = {
+      ...record,
+      lines: [
+        { id: 'own', description: 'Uniform', lineTotal: 5_000, discountAmount: 0, amountPaid: 0, balance: 5_000, carriedFromInvoiceId: null },
+        { id: 'tuition', description: 'Tuition', lineTotal: 25_000, discountAmount: 0, amountPaid: 0, balance: 25_000, carriedFromInvoiceId: 'inv-18' },
+      ],
+    } as unknown as Invoice;
+    render(<InvoicePos record={followUp} accountSummary={[]} />);
+
+    expect(screen.getByText('Uniform')).toBeInTheDocument();
+    expect(screen.getAllByText('Tuition')).toHaveLength(1);
+  });
+
   it('prints nothing extra for an invoice that carries nothing', () => {
     render(<InvoicePos record={{ ...record, carriedFrom: [], broughtForward: 0 }} accountSummary={[]} />);
 

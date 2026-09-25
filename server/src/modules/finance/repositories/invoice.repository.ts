@@ -1,9 +1,10 @@
-import type { DeepPartial, EntityManager } from 'typeorm';
+import { IsNull, type DeepPartial, type EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import { InvoiceLine } from '../entities/invoiceLine.entity';
+import type { FeeCategory } from '../entities/feeItem.entity';
 import type { InvoiceDTO } from '../dto/finance.dto';
 import type { AppliedDiscount } from '../services/discountCalculator';
 
@@ -142,6 +143,47 @@ export interface ReceiptLineRow {
   discountAmount: number;
 }
 
+/**
+ * A charge the office has ticked on a receipt as paid for, without naming an
+ * amount against it.
+ *
+ * The receipt says a tick means "this payment covered the whole charge", and a
+ * "Part payment" amount is the exception typed over it — so a tick alone is a
+ * charge settled, and one with an amount of its own is only settled for that
+ * amount. The tick is only an annotation in the ledger (see
+ * `PaymentAllocation.paidLineIds`), which is why a charge's balance, worked out
+ * from typed amounts alone, would otherwise go on reading as owing.
+ *
+ * `il` is the invoice line being looked at. Only a successful payment counts.
+ */
+const LINE_SETTLED_BY_TICK = `EXISTS (
+  SELECT 1
+    FROM payment_allocations tick_pa
+    JOIN payments tick_p ON tick_p.id = tick_pa.payment_id AND tick_p.status = 'SUCCESSFUL'
+   WHERE tick_pa.invoice_id = il.invoice_id
+     AND tick_pa.paid_line_ids @> to_jsonb(il.id::text)
+     AND NOT EXISTS (
+       SELECT 1
+         FROM payment_line_allocations tick_pla
+        WHERE tick_pla.payment_allocation_id = tick_pa.id
+          AND tick_pla.invoice_line_id = il.id
+     )
+)`;
+
+/** One outstanding charge of an earlier invoice, about to be carried onto a follow-up. */
+export interface CarryableLine {
+  id: string;
+  invoiceId: string;
+  feeItemId: string;
+  description: string;
+  category: FeeCategory;
+  isOptional: boolean;
+  accounts: InvoiceLine['accounts'];
+  sortOrder: number;
+  /** What is still owing on it — a fee item ticked as paid on a receipt counts as settled. */
+  balance: number;
+}
+
 /** An earlier bill about to be absorbed into a new one. */
 export interface CarryForwardCandidate {
   id: string;
@@ -241,8 +283,10 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
               'lineTotal', il.line_total::float,
               'isOptional', il.is_optional,
               'accounts', il.accounts,
-              'amountPaid', COALESCE(lpd.paid, 0)::float,
-              'balance', (il.line_total - COALESCE(lpd.paid, 0))::float
+              'carriedFromInvoiceId', il.carried_from_invoice_id,
+              'carriedFromInvoiceNo', (SELECT src.invoice_no FROM invoices src WHERE src.id = il.carried_from_invoice_id),
+              'amountPaid', (CASE WHEN ${LINE_SETTLED_BY_TICK} THEN il.line_total ELSE COALESCE(lpd.paid, 0) END)::float,
+              'balance', (CASE WHEN ${LINE_SETTLED_BY_TICK} THEN 0 ELSE il.line_total - COALESCE(lpd.paid, 0) END)::float
             ) ORDER BY il.sort_order, il.description
           )
           FROM invoice_lines il
@@ -331,13 +375,25 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
    * bill. `discountAmount` is the one exception — without it, a discounted
    * charge's already-reduced total looks on the receipt like it was never
    * discounted at all.
+   *
+   * `balance` is worked out from typed amounts alone, which is what the
+   * receipt's own "Part payment" box needs to know how much room a charge has
+   * left. `countTicks` is for a document that says what is still owed: it also
+   * treats a charge ticked as paid, with no amount of its own, as settled.
    */
-  async findLinesForInvoices(schoolId: string, ids: string[]): Promise<ReceiptLineRow[]> {
+  async findLinesForInvoices(
+    schoolId: string,
+    ids: string[],
+    { countTicks = false }: { countTicks?: boolean } = {},
+  ): Promise<ReceiptLineRow[]> {
     if (ids.length === 0) return [];
+    const balance = countTicks
+      ? `CASE WHEN ${LINE_SETTLED_BY_TICK} THEN 0 ELSE il.line_total - COALESCE(lpd.paid, 0) END`
+      : `il.line_total - COALESCE(lpd.paid, 0)`;
     return this.repo.query(
       `SELECT il.id, il.invoice_id AS "invoiceId", il.description, il.is_optional AS "isOptional",
               il.line_total::float AS amount,
-              (il.line_total - COALESCE(lpd.paid, 0))::float AS balance,
+              (${balance})::float AS balance,
               il.discount_amount::float AS "discountAmount"
          FROM invoice_lines il
          JOIN invoices i ON i.id = il.invoice_id
@@ -589,6 +645,36 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     return rows.map(({ studentId: _studentId, ...candidate }) => candidate);
   }
 
+  /**
+   * The charges of the invoices being carried, with what is still owing on
+   * each — read inside the same transaction that has just locked those
+   * invoices, so a payment cannot land between this and the closing of them.
+   */
+  async findLinesToCarry(
+    manager: EntityManager,
+    schoolId: string,
+    invoiceIds: string[],
+  ): Promise<CarryableLine[]> {
+    if (invoiceIds.length === 0) return [];
+    return manager.query(
+      `SELECT il.id, il.invoice_id AS "invoiceId", il.fee_item_id AS "feeItemId",
+              il.description, il.category, il.is_optional AS "isOptional",
+              il.accounts, il.sort_order AS "sortOrder",
+              (CASE WHEN ${LINE_SETTLED_BY_TICK} THEN 0 ELSE il.line_total - COALESCE(lpd.paid, 0) END)::float AS balance
+         FROM invoice_lines il
+         LEFT JOIN LATERAL (
+           SELECT SUM(pla.amount) AS paid
+             FROM payment_line_allocations pla
+             JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+             JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+            WHERE pla.invoice_line_id = il.id
+         ) lpd ON TRUE
+        WHERE il.school_id = $1 AND il.invoice_id = ANY($2::uuid[])
+        ORDER BY il.invoice_id, il.sort_order, il.description`,
+      [schoolId, invoiceIds],
+    );
+  }
+
   /** What is still owing on each of these invoices — the amount that would move to a new one. */
   private async carryCandidates(
     manager: EntityManager,
@@ -745,9 +831,14 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     await this.repoFor(manager).delete(ids);
   }
 
+  /**
+   * Removes an invoice's own charges. Lines carried in from an earlier invoice
+   * stay: they are the balance it took over, not something the person editing
+   * the bill chose, and `brought_forward` still counts them.
+   */
   async deleteLines(invoiceId: string, manager?: EntityManager): Promise<void> {
     const repo = manager ? manager.getRepository(InvoiceLine) : this.lines;
-    await repo.delete({ invoiceId });
+    await repo.delete({ invoiceId, carriedFromInvoiceId: IsNull() });
   }
 
   async updateFields(

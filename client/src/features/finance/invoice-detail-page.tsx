@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
+import { Ban, CreditCard, Mail, Pencil, Phone, Printer, Trash2, User } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { cn, contrastingTextColor } from '@/lib/utils';
 import { useAuth } from '@/app/providers/auth-provider';
@@ -9,6 +9,7 @@ import { summarizeByAccount } from './account-summary';
 import { carriedRows } from './carried-rows';
 import { PaymentSummary } from './payment-summary';
 import { EmailInvoiceDialog } from './email-invoice-dialog';
+import { CancelInvoiceDialog, isCancellable } from './cancel-invoice-dialog';
 import { ShareInvoiceButton } from './whatsapp-share-buttons';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { useDocumentDeliveries, useLogDocumentPrint } from './use-document-deliveries';
@@ -38,6 +39,7 @@ export function InvoiceDetailPage() {
   const { membership, can } = useAuth();
   const deleteInvoices = useDeleteInvoices();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const printInvoice = usePrintMode();
@@ -179,6 +181,36 @@ export function InvoiceDetailPage() {
                   </Button>
                 </PermissionGate>
               )}
+              {record.status !== 'CANCELLED' && (
+                <PermissionGate require="invoice.manage">
+                  {(() => {
+                    const cancelButton = (
+                      <Button
+                        data-cy="finance-invoice-detail-cancel"
+                        variant="outline"
+                        disabled={!isCancellable(record)}
+                        onClick={() => setCancelOpen(true)}
+                      >
+                        <Ban />
+                        Cancel invoice
+                      </Button>
+                    );
+                    // Wrapped in a span either way, so the tip also shows on the
+                    // disabled button, which swallows the hover itself.
+                    return (
+                      <Tooltip
+                        content={
+                          isCancellable(record)
+                            ? "Withdraws this invoice but keeps it on file, with your reason. Any earlier invoice it took over reopens and is owed again on its own. It can't be undone — to fix a mistake instead, use Edit."
+                            : 'Refused: money has already been received against this invoice. Reverse the payment first.'
+                        }
+                      >
+                        <span className="inline-flex">{cancelButton}</span>
+                      </Tooltip>
+                    );
+                  })()}
+                </PermissionGate>
+              )}
               <PermissionGate require="invoice.manage">
                 {(() => {
                   const deleteButton = (
@@ -271,7 +303,11 @@ export function InvoiceDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {record.lines.map((line) => (
+                {/* Charges carried in from an earlier invoice are printed further
+                    down, under the heading that says where they came from. */}
+                {record.lines
+                  .filter((line) => !line.carriedFromInvoiceId)
+                  .map((line) => (
                   <tr key={line.id}>
                     <td className="px-3 py-2">
                       {line.description}
@@ -471,6 +507,8 @@ export function InvoiceDetailPage() {
           </div>
         </PermissionGate>
       )} */}
+
+      <CancelInvoiceDialog invoice={cancelOpen ? record : null} onOpenChange={setCancelOpen} />
 
       <ConfirmDialog
         data-cy="finance-invoice-detail-delete-confirm"

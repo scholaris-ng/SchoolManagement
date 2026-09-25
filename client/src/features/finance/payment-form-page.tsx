@@ -537,6 +537,9 @@ export function PaymentFormPage() {
                                         <p className="text-muted-foreground">
                                           balance{' '}
                                           {formatCurrency(line.balance, 'NGN', { showDecimals: false })}
+                                          {line.carriedFromInvoiceNo
+                                            ? ` · brought forward from ${line.carriedFromInvoiceNo}`
+                                            : ''}
                                         </p>
                                       </div>
                                       {lineEditing ? (

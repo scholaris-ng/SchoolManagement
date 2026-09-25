@@ -18,7 +18,11 @@ import {
 } from '../../../shared/services/whatsappShare.service';
 import { FeeItemRepository } from '../repositories/feeItem.repository';
 import { FeeStructureRepository } from '../repositories/feeStructure.repository';
-import { InvoiceRepository, type CarryForwardCandidate } from '../repositories/invoice.repository';
+import {
+  InvoiceRepository,
+  type CarryForwardCandidate,
+  type CarryableLine,
+} from '../repositories/invoice.repository';
 import { LedgerRepository } from '../repositories/ledger.repository';
 import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { DiscountRepository } from '../repositories/discount.repository';
@@ -197,9 +201,12 @@ export class InvoicesService {
    * printed invoice can say more than a single lump figure.
    *
    * The amount that moved is the one recorded when it was carried — that is
-   * what the total counts — and the items are read from the closed invoice as
-   * they stand. Money paid on it without naming a fee item lowers its balance
-   * but no item's, so the two can differ; `unassigned` is exactly that
+   * what the total counts. Where this invoice carried it as real lines (a
+   * follow-up for the same term) the items are those lines, so whatever has
+   * been paid against them since shows; where it was carried as a lump — an
+   * earlier term's arrears — they are read off the closed invoice as they
+   * stand. Money paid on that invoice without naming a fee item lowers its
+   * balance but no item's, so the two can differ; `unassigned` is exactly that
    * difference, which keeps the breakdown adding up to the amount carried.
    */
   private async carriedFromFor(schoolId: string, invoice: InvoiceDTO): Promise<CarriedInvoiceDTO[]> {
@@ -207,14 +214,45 @@ export class InvoicesService {
     const sources = await this.invoices.findBroughtForwardSources(schoolId, invoice.id);
     if (sources.length === 0) return [];
 
-    const lines = await this.invoices.findLinesForInvoices(
-      schoolId,
-      sources.map((source) => source.invoiceId),
+    const carriedLines = groupBy(
+      invoice.lines.filter((line) => line.carriedFromInvoiceId),
+      (line) => line.carriedFromInvoiceId as string,
     );
-    const linesByInvoice = groupBy(lines, (line) => line.invoiceId);
+
+    // A fee item ticked as paid on a receipt counts as settled here: this
+    // document says what is still owed, and the receipt says a tick means the
+    // whole charge was covered.
+    const lumpIds = sources
+      .filter((source) => !carriedLines.has(source.invoiceId))
+      .map((source) => source.invoiceId);
+    const lumpLines = groupBy(
+      lumpIds.length > 0
+        ? await this.invoices.findLinesForInvoices(schoolId, lumpIds, { countTicks: true })
+        : [],
+      (line) => line.invoiceId,
+    );
 
     return sources.map((source) => {
-      const items = (linesByInvoice.get(source.invoiceId) ?? [])
+      const real = carriedLines.get(source.invoiceId);
+      if (real) {
+        const carriedKobo = real.reduce((sum, line) => sum + Math.round(line.lineTotal * MONEY_SCALE), 0);
+        return {
+          invoiceId: source.invoiceId,
+          invoiceNo: source.invoiceNo,
+          amount: source.amount,
+          items: real
+            .filter((line) => Math.round(line.balance * MONEY_SCALE) > 0)
+            .map((line) => ({
+              description: line.description,
+              amount: line.lineTotal,
+              paid: line.amountPaid,
+              balance: line.balance,
+            })),
+          unassigned: (Math.round(source.amount * MONEY_SCALE) - carriedKobo) / MONEY_SCALE,
+        };
+      }
+
+      const items = (lumpLines.get(source.invoiceId) ?? [])
         .filter((line) => Math.round(line.balance * MONEY_SCALE) > 0)
         .map((line) => ({
           description: line.description,
@@ -582,6 +620,7 @@ export class InvoicesService {
     // named on a screen that may since have gone stale — paid off, cancelled or
     // carried elsewhere — so a short result is refused rather than quietly
     // billing for less than the person saw.
+    const carriedLinesByStudent = new Map<string, CarriedLineDraft[]>();
     for (const params of batch) {
       const wanted = params.carryInvoiceIds ?? [];
       if (wanted.length === 0) continue;
@@ -608,10 +647,32 @@ export class InvoicesService {
         ...(carriedByStudent.get(params.studentId) ?? []),
         ...taken,
       ]);
+
+      // What is still owing goes across as the fee items it is owing on, so a
+      // payment on this bill can say which one it was for. The lump figure
+      // stays the source of truth for the total; these are its breakdown.
+      const owing = await this.invoices.findLinesToCarry(
+        manager,
+        params.schoolId,
+        taken.map((row) => row.id),
+      );
+      carriedLinesByStudent.set(
+        params.studentId,
+        taken.flatMap((source) =>
+          itemiseCarried(
+            source,
+            owing.filter((line) => line.invoiceId === source.id),
+          ),
+        ),
+      );
     }
 
     const computed = batch.map((params) =>
-      computeInvoice(params, carriedByStudent.get(params.studentId) ?? []),
+      computeInvoice(
+        params,
+        carriedByStudent.get(params.studentId) ?? [],
+        carriedLinesByStudent.get(params.studentId) ?? [],
+      ),
     );
 
     const ids = await this.invoices.createMany(
@@ -1023,6 +1084,7 @@ interface ComputedInvoice {
 function computeInvoice(
   params: IssueInvoiceParams,
   carried: CarryForwardCandidate[],
+  carriedLines: CarriedLineDraft[] = [],
 ): ComputedInvoice {
   const { lineDiscounts, applied } = applyDiscounts(params.lines, params.discounts ?? []);
   const lines = params.lines.map((line, index) => ({
@@ -1093,8 +1155,86 @@ function computeInvoice(
       isOptional: line.isOptional,
       sortOrder: index,
       accounts: line.accounts,
-    })),
+    })).concat(
+      // Not billing: these are inside `broughtForward`, and `subtotal` above was
+      // worked out from the invoice's own lines alone.
+      carriedLines.map((line, index) => ({
+        schoolId: params.schoolId,
+        feeItemId: line.feeItemId,
+        description: line.description,
+        category: line.category,
+        quantity: 1,
+        unitAmount: line.total.toFixed(2),
+        discountAmount: '0.00',
+        lineTotal: line.total.toFixed(2),
+        isOptional: line.isOptional,
+        // After every charge of its own, however the bill is edited later.
+        sortOrder: CARRIED_SORT_OFFSET + index,
+        accounts: line.accounts,
+        carriedFromInvoiceId: line.sourceInvoiceId,
+      })),
+    ),
   };
+}
+
+/** Carried lines sort after the invoice's own charges, whatever their number. */
+const CARRIED_SORT_OFFSET = 1000;
+
+/** An earlier invoice's outstanding charge, as it goes onto a follow-up. */
+export interface CarriedLineDraft {
+  sourceInvoiceId: string;
+  feeItemId: string;
+  description: string;
+  category: FeeCategory;
+  isOptional: boolean;
+  accounts: CarryableLine['accounts'];
+  /** What is being carried for this fee item. */
+  total: number;
+}
+
+/**
+ * The fee items still owing on one invoice being carried, at the amount that is
+ * actually moving across.
+ *
+ * Normally each item goes at what is left on it. But money paid on the invoice
+ * without naming a fee item lowers its balance while leaving every item's
+ * alone, so the items can add up to more than the balance being carried. That
+ * excess is taken off from the first item down — the same order a payment
+ * settles an invoice's charges when nobody says otherwise — so the lines always
+ * add up to no more than what was carried, and no item is ever asked for more
+ * than is really owed.
+ *
+ * Where the items add up to less (the invoice was itself carrying a balance no
+ * item accounts for), what is left stays as part of the lump.
+ */
+export function itemiseCarried(
+  source: CarryForwardCandidate,
+  lines: CarryableLine[],
+): CarriedLineDraft[] {
+  const owing = lines.filter((line) => Math.round(line.balance * MONEY_SCALE) > 0);
+  const owingKobo = owing.reduce((sum, line) => sum + Math.round(line.balance * MONEY_SCALE), 0);
+  let excess = owingKobo - Math.max(0, Math.round(source.balance * MONEY_SCALE));
+
+  const drafts: CarriedLineDraft[] = [];
+  for (const line of owing) {
+    let kobo = Math.round(line.balance * MONEY_SCALE);
+    if (excess > 0) {
+      const taken = Math.min(kobo, excess);
+      kobo -= taken;
+      excess -= taken;
+    }
+    if (kobo <= 0) continue;
+    drafts.push({
+      sourceInvoiceId: source.id,
+      feeItemId: line.feeItemId,
+      description: line.description,
+      category: line.category,
+      isOptional: line.isOptional,
+      accounts: line.accounts,
+      total: kobo / MONEY_SCALE,
+    });
+  }
+  return drafts;
 }
 
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {

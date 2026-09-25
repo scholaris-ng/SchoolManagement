@@ -89,7 +89,9 @@ export function InvoiceEditPage() {
       invoice.data.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
     );
     setLines(
-      invoice.data.lines.map((line) => {
+      // A carried charge is the balance this invoice took over, not one of its
+      // own — sending it back as a line would bill it a second time.
+      invoice.data.lines.filter((line) => !line.carriedFromInvoiceId).map((line) => {
         const item = feeItems.data.items.find((entry) => entry.id === line.feeItemId);
         // The line's snapshot has no id of its own to match by — only the
         // bank and account number, the same key the duplicate-accounts
@@ -360,7 +362,7 @@ export function InvoiceEditPage() {
   const amountLocked = record.amountPaid > 0;
   // A follow-up that only carries an earlier invoice's balance was born with no
   // charges; its due date and note can still change without inventing one.
-  const hadNoCharges = record.lines.length === 0;
+  const hadNoCharges = record.lines.every((line) => line.carriedFromInvoiceId);
   const valid = Boolean(dueDate && (lines.length > 0 || hadNoCharges));
 
   // Same student-centric trail as the invoice detail page this is reached

@@ -496,6 +496,7 @@ export class LedgerRepository {
             WHERE pa.invoice_id = i.id
          ) alloc ON TRUE
         WHERE i.school_id = $1 AND ${REAL_INVOICE}${termClause}
+          AND il.carried_from_invoice_id IS NULL
         GROUP BY il.category
         ORDER BY billed DESC`,
       params,
@@ -545,6 +546,7 @@ export class LedgerRepository {
             WHERE pa.invoice_id = i.id
          ) alloc ON TRUE
         WHERE i.school_id = $1 AND ${REAL_INVOICE}${termClause}
+          AND il.carried_from_invoice_id IS NULL
         GROUP BY il.fee_item_id, fi.name
         ORDER BY billed DESC
         LIMIT $${params.length}`,

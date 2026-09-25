@@ -178,6 +178,13 @@ export interface InvoiceLine {
   isOptional: boolean;
   /** Where to pay this charge, as it stood when the invoice was raised. */
   accounts: InvoiceLineAccount[];
+  /**
+   * Set when this is an earlier invoice's outstanding charge, carried here when
+   * this invoice took over that invoice's balance — not new billing. It sits
+   * inside `broughtForward`, and a printed copy shows it under that heading.
+   */
+  carriedFromInvoiceId: string | null;
+  carriedFromInvoiceNo: string | null;
   /** What has actually been paid toward this one charge, not the invoice as a whole. */
   amountPaid: number;
   balance: number;

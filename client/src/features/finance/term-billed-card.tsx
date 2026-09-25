@@ -120,7 +120,7 @@ export function TermBilledCard({
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {carry
-                  ? `${owing.map((invoice) => invoice.invoiceNo).join(', ')} will be closed and its balance billed here instead, so it is owed once. Cancelling this invoice reopens it.`
+                  ? `${owing.map((invoice) => invoice.invoiceNo).join(', ')} will be closed and its fee items still owing carried onto this invoice instead, so it is owed once. Payments here can name which fee item they are for. Cancelling this invoice reopens it.`
                   : 'Left unticked, this is a separate bill and the earlier invoice stays open beside it.'}
               </span>
             </span>

@@ -69,6 +69,20 @@ export class InvoiceLine extends BaseEntity {
   sortOrder: number;
 
   /**
+   * Set on a line that is not new billing but an earlier invoice's outstanding
+   * charge, carried onto this one when it took over that invoice's balance
+   * (`InvoicesService.issueInvoices`). The earlier invoice's own lines already
+   * count as billed, so a report that adds up billing skips these, and the
+   * invoice's `subtotal` never includes them — they are inside `brought_forward`.
+   */
+  @Column({ name: 'carried_from_invoice_id', type: 'uuid', nullable: true })
+  carriedFromInvoiceId: string | null;
+
+  @ManyToOne(() => Invoice, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'carried_from_invoice_id' })
+  carriedFrom?: Invoice | null;
+
+  /**
    * Where to pay this particular charge — copied from whichever of the fee
    * item's accounts the structure selected (`FeeStructureLine.accountIds`),
    * at the moment this line is raised, for the same reason `description` and

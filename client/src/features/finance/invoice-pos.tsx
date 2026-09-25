@@ -73,7 +73,9 @@ export function InvoicePos({
 
       <p className="mb-[1mm] text-[10px] font-semibold uppercase tracking-wide">Charges</p>
       <div className="space-y-[1.2mm]">
-        {record.lines.map((line) => (
+        {record.lines
+          .filter((line) => !line.carriedFromInvoiceId)
+          .map((line) => (
           <div key={line.id}>
             <div className="flex items-start justify-between gap-2">
               <span>
