@@ -109,9 +109,9 @@ export const applicantSchema = z.object({
  * rather than a tidy record. The public form has no other way to name one, so
  * it is required there. The office may instead attach an existing `Guardian`
  * record once one is known (a sibling's parent, say) — see
- * `linkApplicationGuardianSchema` — so typed-in contacts are optional there;
- * `AdmissionsService.convert` is what actually enforces that at least one
- * adult, of either kind, is on record before enrolling.
+ * `linkApplicationGuardianSchema` — so typed-in contacts are optional there,
+ * and enrolment does not require any: a guardian can be added to the student
+ * afterwards.
  */
 const contacts = z
   .array(applicationContactSchema)

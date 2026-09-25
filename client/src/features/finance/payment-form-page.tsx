@@ -229,7 +229,13 @@ export function PaymentFormPage() {
       note: note.trim() || undefined,
       allocations: allocationsPayload,
     });
-    navigate(`/finance/receipts/${payment.id}`);
+    // Carries the student across so the receipt can offer the way back to
+    // their Fees tab, when that is where this was started from.
+    navigate(
+      `/finance/receipts/${payment.id}${
+        preselectedStudentId ? `?studentId=${encodeURIComponent(preselectedStudentId)}` : ''
+      }`,
+    );
   };
 
   const balance = ledger.data?.summary.balance ?? 0;

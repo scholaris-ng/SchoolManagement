@@ -108,12 +108,18 @@ export function ConvertApplicantDialog({
                   A student record is created — with an admission number the school assigns
                   automatically — and added to the class register.
                 </li>
-                <li>
-                  The {application.contacts.length} contact
-                  {application.contacts.length === 1 ? '' : 's'} on this application become guardian
-                  records now, matched by email where the school already knows them. This is the
-                  first point at which they do.
-                </li>
+                {application.contacts.length + application.linkedGuardians.length > 0 ? (
+                  <li>
+                    The people named on this application become guardian records now, matched by
+                    email where the school already knows them. This is the first point at which
+                    they do.
+                  </li>
+                ) : (
+                  <li>
+                    No parent or guardian is on this application. You can add one to the student's
+                    record afterwards.
+                  </li>
+                )}
                 <li>An enrolment record is opened for the session applied for.</li>
                 <li>
                   Each guardian with an email address and no portal access yet is emailed an

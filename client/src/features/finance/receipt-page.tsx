@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Check, Mail, Printer, X } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Check, Mail, Printer, X } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { cn, humanizeEnum } from '@/lib/utils';
 import { env } from '@/lib/env';
@@ -31,6 +31,10 @@ import type { DocumentDelivery, Receipt } from '@/types/finance';
  */
 export function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
+  // Set by the payment form when it was opened from a student's own Fees tab,
+  // so this page can hand the bursar back to that student instead of leaving
+  // them on the general payments list they never came from.
+  const fromStudentId = useSearchParams()[0].get('studentId');
   const receipt = useReceipt(paymentId);
   const [showItems, setShowItems] = useState(true);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -60,10 +64,12 @@ export function ReceiptPage() {
     printReceipt(mode);
   };
 
-  const breadcrumbs = [
-    { label: 'Finance', to: '/finance' },
-    { label: 'Payments', to: '/finance/payments' },
-  ];
+  const breadcrumbs = fromStudentId
+    ? [{ label: 'Students', to: '/students' }]
+    : [
+        { label: 'Finance', to: '/finance' },
+        { label: 'Payments', to: '/finance/payments' },
+      ];
 
   if (receipt.isPending) {
     return (
@@ -92,6 +98,16 @@ export function ReceiptPage() {
   // Still readable — the family may hold a copy — but no longer proof of
   // payment, so nothing here offers to print it or send it on.
   const reversed = record.status === 'REVERSED';
+  const studentPath = `/students/${record.studentId}?tab=finance`;
+  const cameFromStudent = fromStudentId === record.studentId;
+  const backToStudent = cameFromStudent ? (
+    <Button data-cy="finance-receipt-back-to-student" variant="outline" asChild>
+      <Link to={studentPath}>
+        <ArrowLeft />
+        Back to student
+      </Link>
+    </Button>
+  ) : null;
 
   return (
     <>
@@ -100,7 +116,15 @@ export function ReceiptPage() {
           <PageHeader
             title={`Receipt ${record.receiptNo}`}
             description={`${record.studentName} · ${formatDateTime(record.paidAt)}`}
-            breadcrumbs={[...breadcrumbs, { label: record.receiptNo }]}
+            breadcrumbs={
+              cameFromStudent
+                ? [
+                    ...breadcrumbs,
+                    { label: record.studentName, to: studentPath },
+                    { label: record.receiptNo },
+                  ]
+                : [...breadcrumbs, { label: record.receiptNo }]
+            }
             meta={
               // Answered before anyone has to ask: does the family actually
               // hold this receipt? Only shown once the register has loaded, so
@@ -108,8 +132,11 @@ export function ReceiptPage() {
               canManageReceipt && deliveries.data ? <DeliveryBadge deliveries={deliveries.data} /> : null
             }
             actions={
-              reversed ? undefined : (
+              reversed ? (
+                backToStudent
+              ) : (
                 <>
+                  {backToStudent}
                   <ShareReceiptButton
                     paymentId={record.paymentId}
                     includeCharges={showItems}

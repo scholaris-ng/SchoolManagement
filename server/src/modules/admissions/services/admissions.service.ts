@@ -934,16 +934,6 @@ export class AdmissionsService {
       context.schoolId,
       application.id,
     );
-    // Contacts are optional up front so an application can be opened before a
-    // family is fully known, but a school with nobody to call about a child
-    // about to be enrolled is a safeguarding gap, not a tidy record — so it is
-    // caught here, at the point that gap would otherwise become permanent.
-    if (application.contacts.length === 0 && linkedGuardians.length === 0) {
-      throw AppError.conflict(
-        'Add a parent, guardian or next of kin to this application before enrolling the applicant.',
-      );
-    }
-
     const schoolClass = await AppDataSource.getRepository(SchoolClass).findOne({
       where: { id: input.classId, schoolId: context.schoolId },
     });
