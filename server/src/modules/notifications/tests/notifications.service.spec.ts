@@ -1,10 +1,13 @@
 import { NotificationsService } from '../services/notifications.service';
+import { NotificationRepository } from '../repositories/notification.repository';
 import { NotificationPreferenceRepository } from '../repositories/notificationPreference.repository';
 import { UserRepository } from '../../auth/repositories/user.repository';
 import { sendNotificationEmail } from '../../../shared/utils/mailer';
 
 jest.mock('../repositories/notification.repository', () => ({
-  NotificationRepository: { Instance: { createMany: jest.fn().mockResolvedValue(undefined) } },
+  NotificationRepository: {
+    Instance: { createMany: jest.fn().mockResolvedValue(undefined), fetchPaginated: jest.fn() },
+  },
 }));
 jest.mock('../repositories/notificationPreference.repository', () => ({
   NotificationPreferenceRepository: { Instance: { findFlagsForUsers: jest.fn() } },
@@ -95,5 +98,28 @@ describe('NotificationsService.notifyUsers — email fan-out', () => {
     await flush();
 
     expect(email).not.toHaveBeenCalled();
+  });
+});
+
+describe('NotificationsService.fetchAll', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  const context = { schoolId: 'school-1', user: { id: 'user-1' } } as never;
+  const inbox = NotificationRepository.Instance as jest.Mocked<typeof NotificationRepository.Instance>;
+
+  it('hands the unread/read filter to the inbox query, scoped to the caller', async () => {
+    await NotificationsService.Instance.fetchAll(context, {
+      page: 2,
+      pageSize: 20,
+      status: 'unread',
+      sortDir: 'desc',
+    });
+
+    expect(inbox.fetchPaginated).toHaveBeenCalledWith('school-1', 'user-1', {
+      page: 2,
+      pageSize: 20,
+      search: undefined,
+      status: 'unread',
+    });
   });
 });

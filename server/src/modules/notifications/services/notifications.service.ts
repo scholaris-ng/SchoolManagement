@@ -86,6 +86,7 @@ export class NotificationsService {
       page: query.page,
       pageSize: query.pageSize,
       search: query.search,
+      status: query.status,
     });
   }
 

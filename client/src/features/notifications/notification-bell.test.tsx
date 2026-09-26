@@ -135,8 +135,12 @@ describe('NotificationBell', () => {
     };
     openBell();
 
+    // The panel opens on "Unread", where the unread one is marked as such...
     expect(screen.getAllByText(/Unread:/)).toHaveLength(1);
     expect(screen.getByRole('button', { name: /^unread:\s*fresh one/i })).toBeInTheDocument();
+
+    // ...and the read one, over on "Read", is left plain.
+    fireEvent.click(screen.getByRole('tab', { name: 'Read' }));
     expect(screen.getByRole('button', { name: /old one/i })).not.toHaveTextContent('Unread');
   });
 
@@ -194,7 +198,7 @@ describe('NotificationBell', () => {
     openBell();
 
     expect(screen.getByText('Couldn’t load notifications')).toBeInTheDocument();
-    expect(screen.queryByText('Nothing new')).not.toBeInTheDocument();
+    expect(screen.queryByText('All caught up')).not.toBeInTheDocument();
 
     inbox.refetch.mockClear();
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
@@ -209,9 +213,12 @@ describe('NotificationBell', () => {
     expect(screen.queryByText('Couldn’t load notifications')).not.toBeInTheDocument();
   });
 
-  it('says there is nothing new when there is nothing', () => {
+  it('says so when there is nothing unread, and when nothing has been read', () => {
     openBell();
 
-    expect(screen.getByText('Nothing new')).toBeInTheDocument();
+    expect(screen.getByText('All caught up')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Read' }));
+    expect(screen.getByText('Nothing read yet')).toBeInTheDocument();
   });
 });
