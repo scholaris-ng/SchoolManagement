@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Popover from '@radix-ui/react-popover';
 import {
@@ -67,15 +67,26 @@ function iconTone(notification: AppNotification, unread: boolean): string {
   return unread ? tone : cn(tone, 'opacity-70');
 }
 
+type InboxTab = 'read' | 'unread';
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<InboxTab>('unread');
   const navigate = useNavigate();
   const counts = useUnreadCounts();
+  // Fetched once; "Read" vs "Unread" is a client-side filter over this same
+  // page rather than a second network call — the popover only ever shows a
+  // handful of items, so there's nothing to gain from asking the server twice.
   const notifications = useNotifications({ page: 1, pageSize: 8 });
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
   const unread = counts.data?.notifications ?? 0;
+
+  const allItems = notifications.data?.items ?? [];
+  const unreadItems = useMemo(() => allItems.filter((item) => !item.readAt), [allItems]);
+  const readItems = useMemo(() => allItems.filter((item) => Boolean(item.readAt)), [allItems]);
+  const visibleItems = tab === 'unread' ? unreadItems : readItems;
 
   // Held in a ref so the effect below runs when the panel opens, and only then.
   const refetchInbox = useRef(notifications.refetch);
@@ -86,6 +97,12 @@ export function NotificationBell() {
   // again on the way in; what is already showing stays put while it does.
   useEffect(() => {
     if (open) void refetchInbox.current();
+  }, [open]);
+
+  // Reopening always starts on "Unread" — that's the thing a user came here
+  // to check.
+  useEffect(() => {
+    if (open) setTab('unread');
   }, [open]);
 
   const openNotification = (notification: AppNotification) => {
@@ -145,6 +162,25 @@ export function NotificationBell() {
             )}
           </div>
 
+          <div className="flex items-center gap-1 border-b border-border px-2 pt-2" role="tablist" aria-label="Filter notifications">
+            <TabButton active={tab === 'unread'} onClick={() => setTab('unread')} dataCy="notifications-tab-unread">
+              Unread
+              {unreadItems.length > 0 && (
+                <span
+                  className={cn(
+                    'ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                    tab === 'unread' ? 'bg-primary-subtle text-primary dark:text-white' : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {unreadItems.length > 99 ? '99+' : unreadItems.length}
+                </span>
+              )}
+            </TabButton>
+            <TabButton active={tab === 'read'} onClick={() => setTab('read')} dataCy="notifications-tab-read">
+              Read
+            </TabButton>
+          </div>
+
           <div className="scrollbar-thin max-h-[26rem] overflow-y-auto">
             {notifications.isPending ? (
               <div className="space-y-4 p-4" aria-hidden="true">
@@ -168,16 +204,20 @@ export function NotificationBell() {
                 error={notifications.error}
                 onRetry={() => void notifications.refetch()}
               />
-            ) : (notifications.data?.items.length ?? 0) === 0 ? (
+            ) : visibleItems.length === 0 ? (
               <EmptyState
                 compact
                 icon={<Bell />}
-                title="Nothing new"
-                description="Alerts about attendance, results and fees will appear here."
+                title={tab === 'unread' ? 'All caught up' : 'Nothing read yet'}
+                description={
+                  tab === 'unread'
+                    ? 'You have no unread notifications.'
+                    : 'Notifications you\u2019ve opened or marked as read will appear here.'
+                }
               />
             ) : (
               <ul className="divide-y divide-border">
-                {notifications.data?.items.map((notification) => (
+                {visibleItems.map((notification) => (
                   <NotificationRow
                     key={notification.id}
                     notification={notification}
@@ -204,6 +244,36 @@ export function NotificationBell() {
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  dataCy,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  dataCy: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      data-cy={dataCy}
+      onClick={onClick}
+      className={cn(
+        'flex items-center rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active
+          ? 'border-b-2 border-primary text-foreground'
+          : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
