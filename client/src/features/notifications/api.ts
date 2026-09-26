@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
@@ -29,6 +29,9 @@ export function useNotifications(query: ListQuery) {
     queryKey: queryKeys.notifications.inbox(schoolId, query),
     queryFn: () => NotificationEndpoints.fetchAll(query),
     enabled: Boolean(schoolId),
+    // The inbox page pages and filters through this; without it every click on
+    // "next" would blank the list to a skeleton before the new page arrives.
+    placeholderData: keepPreviousData,
   });
 }
 

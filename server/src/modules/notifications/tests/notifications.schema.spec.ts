@@ -26,6 +26,15 @@ describe('fetchNotificationsSchema', () => {
       fetchNotificationsSchema.safeParse(wrap({ query: { pageSize: '5000' } })).success,
     ).toBe(false);
   });
+
+  it('accepts unread and read as the status filter, and nothing else', () => {
+    for (const status of ['unread', 'read']) {
+      expect(fetchNotificationsSchema.safeParse(wrap({ query: { status } })).success).toBe(true);
+    }
+    expect(fetchNotificationsSchema.safeParse(wrap({ query: { status: 'archived' } })).success).toBe(
+      false,
+    );
+  });
 });
 
 describe('updatePreferenceSchema', () => {

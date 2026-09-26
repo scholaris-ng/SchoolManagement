@@ -19,6 +19,11 @@ const FamilyFinancePage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('@/features/profile/profile-page').then((m) => ({ default: m.ProfilePage })),
 );
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/notifications-page').then((m) => ({
+    default: m.NotificationsPage,
+  })),
+);
 const NotificationSettingsPage = lazy(() =>
   import('@/features/profile/notification-settings-page').then((m) => ({
     default: m.NotificationSettingsPage,
@@ -29,6 +34,9 @@ export const portalRoutes: RouteObject[] = [
   { path: 'family', element: <FamilyPage /> },
   { path: 'family/finance', element: <FamilyFinancePage /> },
   { path: 'family/:studentId', element: <FamilyPage /> },
+  // Where the bell's "View all notifications" lands. Open to everyone signed
+  // in: an inbox is self-scoped, so there is no permission to gate it behind.
+  { path: 'notifications', element: <NotificationsPage /> },
   { path: 'profile', element: <ProfilePage /> },
   { path: 'profile/notifications', element: <NotificationSettingsPage /> },
 ];

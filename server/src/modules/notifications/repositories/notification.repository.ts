@@ -15,6 +15,7 @@ export interface NotificationFilter {
   page: number;
   pageSize: number;
   search?: string;
+  status?: 'unread' | 'read';
 }
 
 /**
@@ -44,6 +45,9 @@ export class NotificationRepository extends TenantRepository<Notification> {
       const i = params.length;
       where.push(`(n.title ILIKE $${i} OR n.body ILIKE $${i})`);
     }
+
+    if (filter.status === 'unread') where.push('n.read_at IS NULL');
+    if (filter.status === 'read') where.push('n.read_at IS NOT NULL');
 
     const whereSql = where.join(' AND ');
 

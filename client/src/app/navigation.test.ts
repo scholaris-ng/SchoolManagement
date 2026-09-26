@@ -85,6 +85,7 @@ describe('navigation', () => {
       '/discipline/inc_1',
       '/family/stu_1',
       '/family/finance',
+      '/notifications',
       '/profile/notifications',
       '/settings/roles',
       '/settings/website',

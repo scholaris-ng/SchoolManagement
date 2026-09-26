@@ -8,6 +8,9 @@ export const fetchNotificationsSchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
     search: z.string().trim().max(120).optional(),
+    // Narrowed in SQL, not on the client: a client-side filter only sees the
+    // page it was handed, so "unread" would miss anything on page two.
+    status: z.enum(['unread', 'read']).optional(),
     sortBy: z.string().trim().max(40).optional(),
     sortDir: z.enum(['asc', 'desc']).default('desc'),
   }),
