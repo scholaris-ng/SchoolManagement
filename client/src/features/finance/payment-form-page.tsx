@@ -74,20 +74,26 @@ export function PaymentFormPage() {
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [allocations, setAllocations] = useState<Record<string, string>>({});
-  // Which invoice's charges are broken out for itemizing — one at a time,
-  // since naming which fee item a payment was for is the exception, not the
-  // rule. `lineAllocations[invoiceId]` survives collapsing that invoice back
-  // up, so expanding it again does not lose what was typed.
+  // Which invoice's fee-item panel is open — one at a time, so opening a
+  // second one does not lose your place in the first. Every applied invoice's
+  // payment is always split across its fee items one way or another; this
+  // only controls whether that breakdown is currently on screen, not whether
+  // it exists (see `autoSplitByInvoice` below).
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  // A manual breakdown, once the bursar has taken an invoice's split over by
+  // hand (`manualInvoiceIds`) — survives collapsing the panel back up, so
+  // reopening it does not lose what was typed.
   const [lineAllocations, setLineAllocations] = useState<Record<string, Record<string, string>>>({});
   // Which single line, if any, currently has its amount box open — one at a
   // time, so naming an amount stays a quick aside rather than turning the
   // whole list into boxes to fill in.
   const [editingLine, setEditingLine] = useState<{ invoiceId: string; lineId: string } | null>(null);
-  // "Edit amount" only shows once someone has asked to name fee items for
-  // this particular invoice — otherwise the panel just reads as a plain list
-  // of what the invoice is made of.
-  const [editingItemsInvoiceId, setEditingItemsInvoiceId] = useState<string | null>(null);
+  // Which invoices the bursar has taken manual control of. By default every
+  // invoice's payment is split across its fee items automatically — the same
+  // way it already falls across whole invoices when nobody says otherwise, one
+  // level down (`autoSplitByInvoice`) — so naming amounts by hand here is the
+  // opt-out, not the starting point.
+  const [manualInvoiceIds, setManualInvoiceIds] = useState<Set<string>>(new Set());
   const expandedInvoice = useInvoice(expandedInvoiceId ?? undefined);
 
   const invoices = useMemo(
@@ -164,18 +170,56 @@ export function PaymentFormPage() {
   const appliedInvoices = invoices.filter((invoice) => (Number(allocations[invoice.id]) || 0) > 0);
   const appliedDetails = useInvoiceDetails(appliedInvoices.map((invoice) => invoice.id));
 
+  // What each invoice's fee items are treated as covering. By default (an
+  // invoice not in `manualInvoiceIds`) that is worked out here, the same rule
+  // that already falls a payment across whole invoices when nobody says
+  // otherwise: down the list in order, each charge taking as much as it still
+  // needs. A bursar who has clicked "Edit" for an invoice has said otherwise
+  // for that one, and what its fee items cover comes from what they typed
+  // (`lineAllocations`) instead.
   const feeItemTotals = new Map<string, { visibleTotal: number; expectedTotal: number }>();
+  const autoSplitByInvoice = new Map<string, Record<string, string>>();
   appliedInvoices.forEach((invoice, index) => {
     const lines = (appliedDetails[index]?.data?.lines ?? []).filter((line) => line.balance > 0);
     if (lines.length === 0) return;
-    const visibleTotal = lines.reduce((sum, line) => {
-      const named = namedLineValue(invoice.id, line.id);
-      return sum + (named !== null ? named : line.balance);
-    }, 0);
     const capacity = lines.reduce((sum, line) => sum + line.balance, 0);
     const expectedTotal = Math.min(Number(allocations[invoice.id]) || 0, capacity);
-    feeItemTotals.set(invoice.id, { visibleTotal, expectedTotal });
+
+    if (manualInvoiceIds.has(invoice.id)) {
+      const visibleTotal = lines.reduce((sum, line) => {
+        const named = namedLineValue(invoice.id, line.id);
+        return sum + (named !== null ? named : line.balance);
+      }, 0);
+      feeItemTotals.set(invoice.id, { visibleTotal, expectedTotal });
+    } else {
+      // Named explicitly, "0" included, for every line — a charge the split
+      // never reaches has to read as "not this one", not fall back to showing
+      // its balance and reading as if nothing here had been split at all.
+      const split = splitAcrossLines(lines, (line) => line.balance, expectedTotal);
+      const full: Record<string, string> = {};
+      for (const line of lines) full[line.id] = split[line.id] ?? '0';
+      autoSplitByInvoice.set(invoice.id, full);
+      // The split always lands exactly on what it was asked to cover, so
+      // there is nothing left here to ever come out mismatched.
+      feeItemTotals.set(invoice.id, { visibleTotal: expectedTotal, expectedTotal });
+    }
   });
+
+  // The amount a fee item is actually being credited with right now — the
+  // automatic split for an invoice left on its default, or what the bursar
+  // typed for one they have taken over by hand.
+  const effectiveLineValue = (invoiceId: string, lineId: string): number | null => {
+    if (!manualInvoiceIds.has(invoiceId)) {
+      const value = autoSplitByInvoice.get(invoiceId)?.[lineId];
+      return value !== undefined ? Number(value) || 0 : null;
+    }
+    return namedLineValue(invoiceId, lineId);
+  };
+
+  // What actually gets sent for one invoice's fee-item breakdown — the same
+  // rule `effectiveLineValue` reads a single line by.
+  const effectiveLinesFor = (invoiceId: string): Record<string, string> =>
+    manualInvoiceIds.has(invoiceId) ? (lineAllocations[invoiceId] ?? {}) : (autoSplitByInvoice.get(invoiceId) ?? {});
 
   const mismatchedInvoices = appliedInvoices.filter((invoice) => {
     const totals = feeItemTotals.get(invoice.id);
@@ -216,7 +260,7 @@ export function PaymentFormPage() {
     if (autoOpenedInvoiceId.current !== null && expandedInvoiceId === autoOpenedInvoiceId.current) {
       if (
         !stillMismatched.has(autoOpenedInvoiceId.current) &&
-        editingItemsInvoiceId !== autoOpenedInvoiceId.current
+        !manualInvoiceIds.has(autoOpenedInvoiceId.current)
       ) {
         autoOpenedInvoiceId.current = null;
         setExpandedInvoiceId(null);
@@ -229,7 +273,7 @@ export function PaymentFormPage() {
     if (!next) return;
     autoOpenedInvoiceId.current = next;
     setExpandedInvoiceId(next);
-  }, [mismatchedIdsKey, expandedInvoiceId, editingItemsInvoiceId]);
+  }, [mismatchedIdsKey, expandedInvoiceId, manualInvoiceIds]);
 
   const valid =
     Boolean(studentId) &&
@@ -245,7 +289,7 @@ export function PaymentFormPage() {
     const allocationsPayload = Object.entries(allocations)
       .filter(([, value]) => Number(value) > 0)
       .map(([invoiceId, value]) => {
-        const lines = Object.entries(lineAllocations[invoiceId] ?? {})
+        const lines = Object.entries(effectiveLinesFor(invoiceId))
           .filter(([, lineValue]) => Number(lineValue) > 0)
           .map(([lineId, lineValue]) => ({ lineId, amount: Number(lineValue) }));
         return {
@@ -344,6 +388,7 @@ export function PaymentFormPage() {
                   setAllocations({});
                   setLineAllocations({});
                   setExpandedInvoiceId(null);
+                  setManualInvoiceIds(new Set());
                   dismissedMismatchIds.current.clear();
                   autoOpenedInvoiceId.current = null;
                 }}
@@ -478,8 +523,9 @@ export function PaymentFormPage() {
           <CardHeader>
             <CardTitle>Apply to invoices</CardTitle>
             <CardDescription>
-              Defaulted to the oldest invoices first. Anything left over is held on the family
-              account and applied to the next invoice.
+              Defaulted to the oldest invoices first, and each invoice's own fee items in the same
+              order — anything left over is held on the family account and applied to the next
+              invoice. Open "Name which fee item this pays for" to see or change how one is split.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -495,7 +541,7 @@ export function PaymentFormPage() {
                   const overNamed = overNamedInvoiceIds.has(invoice.id);
                   const totals = feeItemTotals.get(invoice.id);
                   const mismatched = mismatchedInvoices.some((row) => row.id === invoice.id);
-                  const itemsEditable = editingItemsInvoiceId === invoice.id;
+                  const itemsEditable = manualInvoiceIds.has(invoice.id);
                   // What the panel is listing, and what it currently adds up to — the
                   // same per-line figure each row shows, so the total moves with every
                   // keystroke in a line's amount box.
@@ -503,24 +549,21 @@ export function PaymentFormPage() {
                     ? (expandedInvoice.data?.lines ?? []).filter((line) => line.balance > 0)
                     : [];
                   const panelTotal = panelLines.reduce((sum, line) => {
-                    const named = namedLineValue(invoice.id, line.id);
+                    const named = effectiveLineValue(invoice.id, line.id);
                     return sum + (named !== null ? named : line.balance);
                   }, 0);
-                  // What most people actually want once these don't add up: not to
-                  // type each charge by hand, but to have the amount applied fall
-                  // across them the same way it would across whole invoices — the
-                  // earliest charges in full, the last one part-paid if there's a
-                  // remainder. Named explicitly, "0" included, for every line: a
-                  // charge this leaves untouched must read as "not this one", not
-                  // fall back to showing its balance and quietly re-breaking the tally.
+                  // A rescue for a manual breakdown that has been typed into a
+                  // mismatch — starts that invoice's split over from the fee items
+                  // in order, the same rule the automatic default already uses.
+                  // Named explicitly, "0" included, for every line: a charge this
+                  // leaves untouched must read as "not this one", not fall back to
+                  // showing its balance and quietly re-breaking the tally.
                   const autoSplitLines = () => {
                     if (!totals) return;
                     const split = splitAcrossLines(panelLines, (line) => line.balance, totals.expectedTotal);
                     const next: Record<string, string> = {};
                     for (const line of panelLines) next[line.id] = split[line.id] ?? '0';
                     setLineAllocations((current) => ({ ...current, [invoice.id]: next }));
-                    // Surfaces what it just filled in, in case one needs a tweak.
-                    setEditingItemsInvoiceId(invoice.id);
                   };
                   return (
                     <li key={invoice.id} className="space-y-2 rounded-md border border-border p-3">
@@ -587,24 +630,59 @@ export function PaymentFormPage() {
                             <p className="text-xs text-muted-foreground">Loading charges…</p>
                           ) : (
                             <>
-                              {!itemsEditable && (
-                                <div className="flex justify-end">
+                              <div className="flex justify-end">
+                                {itemsEditable ? (
+                                  <button
+                                    type="button"
+                                    data-cy={`finance-payment-form-lines-auto-${invoice.id}`}
+                                    className="text-xs text-primary hover:underline"
+                                    onClick={() => {
+                                      // Back to the default: nothing typed here is kept,
+                                      // since the automatic split is a fresh start, not a
+                                      // baseline these edits sat on top of.
+                                      setManualInvoiceIds((current) => {
+                                        const next = new Set(current);
+                                        next.delete(invoice.id);
+                                        return next;
+                                      });
+                                      setLineAllocations((current) => {
+                                        const next = { ...current };
+                                        delete next[invoice.id];
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    Use the automatic split
+                                  </button>
+                                ) : (
                                   <button
                                     type="button"
                                     data-cy={`finance-payment-form-lines-edit-${invoice.id}`}
                                     className="text-xs text-primary hover:underline"
-                                    onClick={() => setEditingItemsInvoiceId(invoice.id)}
+                                    onClick={() => {
+                                      // Starts from what's already showing — the automatic
+                                      // split — so taking over by hand means adjusting it,
+                                      // not filling every line in again from scratch.
+                                      const auto = autoSplitByInvoice.get(invoice.id);
+                                      setManualInvoiceIds((current) => new Set(current).add(invoice.id));
+                                      if (auto) {
+                                        setLineAllocations((current) => ({
+                                          ...current,
+                                          [invoice.id]: current[invoice.id] ?? auto,
+                                        }));
+                                      }
+                                    }}
                                   >
                                     Edit
                                   </button>
-                                </div>
-                              )}
+                                )}
+                              </div>
                               <ul className="space-y-2">
                                 {panelLines.map((line) => {
                                   const lineEditing =
                                     editingLine?.invoiceId === invoice.id &&
                                     editingLine.lineId === line.id;
-                                  const namedValue = namedLineValue(invoice.id, line.id);
+                                  const namedValue = effectiveLineValue(invoice.id, line.id);
                                   return (
                                     <li key={line.id} className="flex items-center gap-3">
                                       <div className="min-w-0 flex-1 text-xs">
@@ -753,7 +831,7 @@ export function PaymentFormPage() {
                                   </>
                                 )}
                               </p>
-                              {(mismatched || overNamed) && totals && (
+                              {itemsEditable && (mismatched || overNamed) && totals && (
                                 <button
                                   type="button"
                                   data-cy={`finance-payment-form-lines-auto-split-${invoice.id}`}

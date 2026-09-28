@@ -27,6 +27,10 @@ const fixtures = vi.hoisted(() => ({
   list: { items: [] as unknown[] },
   detail: null as unknown,
   detailPending: false,
+  // One stable mock across renders, so calls made to it accumulate instead of
+  // being lost the moment a fresh `useRecordPayment()` call would otherwise
+  // hand back a brand new `vi.fn()`.
+  recordPayment: { mutateAsync: vi.fn(), isPending: false, error: null as unknown },
 }));
 
 vi.mock('./api', () => ({
@@ -37,7 +41,7 @@ vi.mock('./api', () => ({
       data: fixtures.detailPending ? undefined : fixtures.detail,
       isError: false,
     })),
-  useRecordPayment: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
+  useRecordPayment: () => fixtures.recordPayment,
 }));
 
 vi.mock('@/features/students/api', () => ({
@@ -63,159 +67,181 @@ describe('PaymentFormPage fee-item tally', () => {
   beforeEach(() => {
     seedInvoice(invoice);
     fixtures.detailPending = false;
+    fixtures.recordPayment.mutateAsync.mockReset().mockResolvedValue({ id: 'pay-1' });
+    fixtures.recordPayment.error = null;
   });
   afterEach(cleanup);
 
-  it("opens the invoice's fee-item panel by itself once a part-payment leaves them mismatched", async () => {
-    renderForm();
+  describe('the default: split automatically, no click needed', () => {
+    it("splits a part-payment across the invoice's fee items on its own", async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
 
-    await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      // Nothing to flag, so nothing opens on its own — but the split has
+      // already happened underneath, visible the moment the panel is opened.
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+      expect(recordButton()).toBeEnabled();
 
-    // 100,000 applied, but the invoice's charges still stand at 256,000 — the
-    // panel opens on its own, no click needed to see why.
-    expect(await screen.findByText('Tuition')).toBeInTheDocument();
-    expect(screen.getByText('Bus')).toBeInTheDocument();
-    expect(recordButton()).toBeDisabled();
-    expect(
-      screen.getByText(/Fee items don't add up to what's applied/),
-    ).toBeInTheDocument();
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+
+      // Tuition (150,000 balance) takes the first 100,000; nothing is left
+      // for Bus — named "0", not left blank, so it reads as settled, not unset.
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+        '100,000',
+      );
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+        '₦0',
+      );
+      // Still the default — nobody has asked to name amounts by hand.
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit amount' })).not.toBeInTheDocument();
+    });
+
+    it('spreads a larger amount across more than one fee item, in order', async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '200000');
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+        '150,000',
+      );
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+        '50,000',
+      );
+      expect(recordButton()).toBeEnabled();
+    });
+
+    it('sends the automatic split with the payment, whether or not the panel was ever opened', async () => {
+      renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+
+      await userEvent.click(recordButton());
+
+      expect(fixtures.recordPayment.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allocations: [
+            expect.objectContaining({
+              invoiceId: 'inv-1',
+              amount: 100000,
+              // Bus's explicit "0" is left out — no fee item is named for
+              // nothing, same rule a manual breakdown already followed.
+              lines: [{ lineId: 'line-a', amount: 100000 }],
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('stays enabled at every step while an amount is typed digit by digit', async () => {
+      const { container } = renderForm();
+      const amountInput = screen.getByLabelText(/^Amount/);
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      const total = () => container.querySelector('[data-cy="finance-payment-form-lines-total-inv-1"]')!;
+
+      // Each keystroke re-splits the running amount — never a moment where
+      // the fee items disagree with what has been applied so far.
+      await userEvent.type(amountInput, '1');
+      expect(total()).toHaveTextContent('1');
+      expect(recordButton()).toBeEnabled();
+      await userEvent.type(amountInput, '00000');
+      expect(total()).toHaveTextContent('100,000');
+      expect(recordButton()).toBeEnabled();
+    });
   });
 
-  it('does not reopen a mismatched panel once the bursar has closed it again', async () => {
-    renderForm();
-    const amountInput = screen.getByLabelText(/^Amount/);
+  describe('opting out: naming amounts by hand', () => {
+    it("starts from what the automatic split already showed, once 'Edit' is clicked", async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
 
-    await userEvent.type(amountInput, '100000');
-    await screen.findByText('Tuition');
+      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
-    // Closes the panel the auto-open just opened.
-    await userEvent.click(screen.getByText('Name which fee item this pays for'));
-    expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+      // Unchanged by switching modes — a starting point to adjust, not a blank slate.
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+        '100,000',
+      );
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+        '₦0',
+      );
+      expect(screen.getByRole('button', { name: 'Use the automatic split' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Edit amount' })).toHaveLength(2);
+    });
 
-    // Still mismatched after a different amount is tried, but the closed
-    // panel is a choice, not something to fight back open.
-    await userEvent.clear(amountInput);
-    await userEvent.type(amountInput, '50000');
-    expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
-    expect(recordButton()).toBeDisabled();
-  });
+    it('blocks the payment once a hand-typed amount leaves the fee items mismatched', async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
-  it('splits the amount across the fee items automatically, oldest first', async () => {
-    const { container } = renderForm();
-    await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-    await screen.findByText('Tuition');
+      // Pulls Tuition down from its seeded 100,000, leaving 50,000 of the
+      // 100,000 applied unaccounted for.
+      await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
+      const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
+      await userEvent.clear(box);
+      await userEvent.type(box, '50000');
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /Split .* across these fee items automatically/ }),
-    );
+      expect(recordButton()).toBeDisabled();
+      expect(screen.getByText(/Fee items don't add up to what's applied/)).toBeInTheDocument();
 
-    // Tuition (150,000 balance) takes the first 100,000; nothing is left for
-    // Bus — named "0", not left blank, so the total still reads 100,000.
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
-      '100,000',
-    );
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
-      '₦0',
-    );
-    expect(recordButton()).toBeEnabled();
-    // Surfaces what it just filled in, in case one needs a tweak.
-    expect(screen.getAllByRole('button', { name: 'Edit amount' })).toHaveLength(2);
-  });
+      // Closing it while still mismatched is a choice — not fought back open.
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+      expect(recordButton()).toBeDisabled();
+    });
 
-  it('spreads a larger amount across more than one fee item, in order, when needed', async () => {
-    const { container } = renderForm();
-    await userEvent.type(screen.getByLabelText(/^Amount/), '200000');
-    await screen.findByText('Tuition');
+    it("the rescue button fixes a hand-typed mismatch without leaving manual mode", async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
+      const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
+      await userEvent.clear(box);
+      await userEvent.type(box, '50000');
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(recordButton()).toBeDisabled();
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /Split .* across these fee items automatically/ }),
-    );
+      await userEvent.click(
+        screen.getByRole('button', { name: /Split .* across these fee items automatically/ }),
+      );
 
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
-      '150,000',
-    );
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
-      '50,000',
-    );
-    expect(recordButton()).toBeEnabled();
-  });
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+        '100,000',
+      );
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+        '₦0',
+      );
+      expect(recordButton()).toBeEnabled();
+      // Still a manual breakdown — this only recomputed it, it did not exit.
+      expect(screen.getByRole('button', { name: 'Use the automatic split' })).toBeInTheDocument();
+    });
 
-  it('replaces whatever was named before when split automatically again', async () => {
-    const { container } = renderForm();
-    await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-    await screen.findByText('Tuition');
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[1]!);
-    await userEvent.type(
-      container.querySelector('[data-cy="finance-payment-form-line-line-b"]')!,
-      '100000',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
-    // Named against Bus by hand — still mismatched, since Tuition is untouched.
-    expect(recordButton()).toBeDisabled();
+    it("'Use the automatic split' discards the hand-typed amounts and returns to the default", async () => {
+      const { container } = renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
+      const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
+      await userEvent.clear(box);
+      await userEvent.type(box, '50000');
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(recordButton()).toBeDisabled();
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /Split .* across these fee items automatically/ }),
-    );
+      await userEvent.click(screen.getByRole('button', { name: 'Use the automatic split' }));
 
-    // The automatic split starts over from the fee items in order, not from
-    // whatever had already been typed.
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
-      '100,000',
-    );
-    expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
-      '₦0',
-    );
-    expect(recordButton()).toBeEnabled();
-  });
-
-  it('lets a payment through once the fee items add up to what is applied', async () => {
-    const { container } = renderForm();
-    await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-    expect(recordButton()).toBeDisabled();
-
-    // Already open by itself, since the fee items don't tally yet.
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-
-    const editAmount = () => screen.getAllByRole('button', { name: 'Edit amount' });
-    await userEvent.click(editAmount()[0]!);
-    await userEvent.type(
-      container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!,
-      '100000',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
-    // Bus is still standing at its full 106,000.
-    expect(recordButton()).toBeDisabled();
-
-    await userEvent.click(editAmount()[1]!);
-    await userEvent.type(
-      container.querySelector('[data-cy="finance-payment-form-line-line-b"]')!,
-      '0',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
-
-    expect(recordButton()).toBeEnabled();
-    // Now resolved, but the panel stays open — naming fee items is what the
-    // bursar was in the middle of, not something to pull out from under them.
-    expect(screen.getByText('Bus')).toBeInTheDocument();
-  });
-
-  it('keeps a running total of the fee items while an amount is being typed', async () => {
-    const { container } = renderForm();
-    await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-
-    const total = () => container.querySelector('[data-cy="finance-payment-form-lines-total-inv-1"]')!;
-    // Nothing named yet: each charge stands at its full balance.
-    expect(total()).toHaveTextContent('256,000');
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
-    const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
-    await userEvent.type(box, '1');
-    expect(total()).toHaveTextContent('106,001');
-    await userEvent.type(box, '00000');
-    // Still typing — the box has not been confirmed — and the total has followed.
-    expect(total()).toHaveTextContent('206,000');
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+        '100,000',
+      );
+      expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+        '₦0',
+      );
+      expect(recordButton()).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit amount' })).not.toBeInTheDocument();
+    });
   });
 
   it('lists the fee items a follow-up invoice carried in, and where they came from', async () => {
