@@ -73,16 +73,14 @@ describe('PaymentFormPage fee-item tally', () => {
   afterEach(cleanup);
 
   describe('the default: split automatically, no click needed', () => {
-    it("splits a part-payment across the invoice's fee items on its own", async () => {
+    it("splits a part-payment across the invoice's fee items, panel open on its own", async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
 
-      // Nothing to flag, so nothing opens on its own — but the split has
-      // already happened underneath, visible the moment the panel is opened.
-      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+      // No click needed — the panel is open by default the moment money is
+      // applied, showing the split that already happened underneath.
+      expect(await screen.findByText('Tuition')).toBeInTheDocument();
       expect(recordButton()).toBeEnabled();
-
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
 
       // Tuition (150,000 balance) takes the first 100,000; nothing is left
       // for Bus — named "0", not left blank, so it reads as settled, not unset.
@@ -97,10 +95,10 @@ describe('PaymentFormPage fee-item tally', () => {
       expect(screen.queryByRole('button', { name: 'Edit amount' })).not.toBeInTheDocument();
     });
 
-    it('spreads a larger amount across more than one fee item, in order', async () => {
+    it('spreads a larger amount across more than one fee item, in order, with no click needed', async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '200000');
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await screen.findByText('Tuition');
 
       expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
         '150,000',
@@ -108,6 +106,60 @@ describe('PaymentFormPage fee-item tally', () => {
       expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
         '50,000',
       );
+      expect(recordButton()).toBeEnabled();
+    });
+
+    it("opens every applied invoice's panel at once, independently of the others", async () => {
+      const second = {
+        id: 'inv-2',
+        invoiceNo: 'INV/2026-2027/00019',
+        termName: 'Second Term',
+        dueDate: '2026-11-25',
+        balance: 50000,
+      };
+      seedInvoice(invoice);
+      fixtures.list = { items: [invoice, second] };
+      renderForm();
+
+      // 256,000 clears the first invoice (the older due date) in full; the
+      // remaining 50,000 of the 306,000 paid is what's left for the second.
+      await userEvent.type(screen.getByLabelText(/^Amount/), '306000');
+
+      await screen.findAllByText('Tuition');
+      expect(screen.getAllByText('Tuition')).toHaveLength(2);
+      expect(recordButton()).toBeEnabled();
+
+      // Collapsing one leaves the other exactly as it was.
+      await userEvent.click(screen.getAllByText('Name which fee item this pays for')[0]!);
+      expect(screen.getAllByText('Tuition')).toHaveLength(1);
+    });
+
+    it('previews an invoice with nothing applied to it yet, on request, closed by default', async () => {
+      renderForm();
+
+      // Nothing typed into "Amount" — there is no split yet to show by default.
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      expect(await screen.findByText('Tuition')).toBeInTheDocument();
+      // Full balances, not a split — there is nothing applied to split yet.
+      expect(screen.getByText('Bus').closest('li')).toHaveTextContent('106,000');
+
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+    });
+
+    it('can still be collapsed, and stays collapsed, for whoever would rather not see it', async () => {
+      renderForm();
+      await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
+      await screen.findByText('Tuition');
+
+      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+
+      // Still collapsed after the amount changes — closing it is a choice.
+      await userEvent.type(screen.getByLabelText(/^Amount/), '1');
+      expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
       expect(recordButton()).toBeEnabled();
     });
 
@@ -153,7 +205,7 @@ describe('PaymentFormPage fee-item tally', () => {
     it("starts from what the automatic split already showed, once 'Edit' is clicked", async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await screen.findByText('Tuition');
 
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
@@ -171,7 +223,7 @@ describe('PaymentFormPage fee-item tally', () => {
     it('blocks the payment once a hand-typed amount leaves the fee items mismatched', async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await screen.findByText('Tuition');
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
       // Pulls Tuition down from its seeded 100,000, leaving 50,000 of the
@@ -194,7 +246,7 @@ describe('PaymentFormPage fee-item tally', () => {
     it("the rescue button fixes a hand-typed mismatch without leaving manual mode", async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await screen.findByText('Tuition');
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
       const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
@@ -221,7 +273,7 @@ describe('PaymentFormPage fee-item tally', () => {
     it("'Use the automatic split' discards the hand-typed amounts and returns to the default", async () => {
       const { container } = renderForm();
       await userEvent.type(screen.getByLabelText(/^Amount/), '100000');
-      await userEvent.click(screen.getByText('Name which fee item this pays for'));
+      await screen.findByText('Tuition');
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       await userEvent.click(screen.getAllByRole('button', { name: 'Edit amount' })[0]!);
       const box = container.querySelector('[data-cy="finance-payment-form-line-line-a"]')!;
@@ -256,21 +308,24 @@ describe('PaymentFormPage fee-item tally', () => {
     renderForm();
     await userEvent.type(screen.getByLabelText(/^Amount/), '90000');
 
-    await userEvent.click(screen.getByText('Name which fee item this pays for'));
-
-    expect(screen.getByText('Tuition')).toBeInTheDocument();
+    expect(await screen.findByText('Tuition')).toBeInTheDocument();
     expect(screen.getByText('Exam')).toBeInTheDocument();
     expect(screen.getAllByText(/brought forward from INV\/2026-2027\/00020/)).toHaveLength(2);
   });
 
-  it('lets a payment that clears the whole invoice through without opening the fee items', async () => {
-    renderForm();
+  it('lets a payment that clears the whole invoice through, split across every fee item in full', async () => {
+    const { container } = renderForm();
 
     await userEvent.type(screen.getByLabelText(/^Amount/), '256000');
 
     expect(recordButton()).toBeEnabled();
-    // Nothing to flag, so nothing is opened on its own either.
-    expect(screen.queryByText('Tuition')).not.toBeInTheDocument();
+    expect(await screen.findByText('Tuition')).toBeInTheDocument();
+    expect(container.querySelector('[data-cy="finance-payment-form-line-line-a"]')).toHaveTextContent(
+      '150,000',
+    );
+    expect(container.querySelector('[data-cy="finance-payment-form-line-line-b"]')).toHaveTextContent(
+      '106,000',
+    );
   });
 
   it('does not ask for more than the charges can absorb when a balance is brought forward', async () => {

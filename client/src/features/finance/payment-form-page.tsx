@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { formatCurrency, formatDate, toDateInputValue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useStudent, useStudentLedger, useStudentSearch } from '@/features/students/api';
-import { useInvoice, useInvoiceDetails, useInvoices, useRecordPayment } from './api';
+import { useInvoiceDetails, useInvoices, useRecordPayment } from './api';
 import { splitAcrossLines, sumAmounts } from './split-across-lines';
 import type { PaymentMethod } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -74,12 +74,15 @@ export function PaymentFormPage() {
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [allocations, setAllocations] = useState<Record<string, string>>({});
-  // Which invoice's fee-item panel is open — one at a time, so opening a
-  // second one does not lose your place in the first. Every applied invoice's
-  // payment is always split across its fee items one way or another; this
-  // only controls whether that breakdown is currently on screen, not whether
-  // it exists (see `autoSplitByInvoice` below).
-  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  // Every invoice with money applied to it shows its fee-item breakdown open
+  // by default — there is nothing to hide, since the split happens on its own
+  // (see `autoSplitByInvoice` below). `manuallyClosedInvoiceIds` is the
+  // opt-out from that, per invoice, for whoever would rather not see it.
+  const [manuallyClosedInvoiceIds, setManuallyClosedInvoiceIds] = useState<Set<string>>(new Set());
+  // The opposite case: an invoice with *nothing* applied to it yet has no
+  // split to show, so its panel defaults to closed — this is the opt-in, for
+  // previewing what it's made of before deciding how much to pay it.
+  const [manuallyOpenedInvoiceIds, setManuallyOpenedInvoiceIds] = useState<Set<string>>(new Set());
   // A manual breakdown, once the bursar has taken an invoice's split over by
   // hand (`manualInvoiceIds`) — survives collapsing the panel back up, so
   // reopening it does not lose what was typed.
@@ -94,7 +97,6 @@ export function PaymentFormPage() {
   // level down (`autoSplitByInvoice`) — so naming amounts by hand here is the
   // opt-out, not the starting point.
   const [manualInvoiceIds, setManualInvoiceIds] = useState<Set<string>>(new Set());
-  const expandedInvoice = useInvoice(expandedInvoiceId ?? undefined);
 
   const invoices = useMemo(
     () => (openInvoices.data?.items ?? []).filter((invoice) => invoice.balance > 0),
@@ -169,6 +171,21 @@ export function PaymentFormPage() {
   // typed against a charge could ever make up that difference.
   const appliedInvoices = invoices.filter((invoice) => (Number(allocations[invoice.id]) || 0) > 0);
   const appliedDetails = useInvoiceDetails(appliedInvoices.map((invoice) => invoice.id));
+  const appliedDetailsById = new Map(appliedInvoices.map((invoice, index) => [invoice.id, appliedDetails[index]]));
+
+  // An invoice with nothing applied to it yet has no default split to show,
+  // but can still be opened by hand to preview what it's made of before
+  // deciding how much to pay — fetched separately, since it plays no part in
+  // what the payment actually covers and a failure to load it must never hold
+  // the payment back the way a failure among `appliedDetails` does.
+  const previewIds = invoices
+    .filter(
+      (invoice) =>
+        (Number(allocations[invoice.id]) || 0) <= 0 && manuallyOpenedInvoiceIds.has(invoice.id),
+    )
+    .map((invoice) => invoice.id);
+  const previewDetails = useInvoiceDetails(previewIds);
+  const previewDetailsById = new Map(previewIds.map((id, index) => [id, previewDetails[index]]));
 
   // What each invoice's fee items are treated as covering. By default (an
   // invoice not in `manualInvoiceIds`) that is worked out here, the same rule
@@ -230,50 +247,6 @@ export function PaymentFormPage() {
   // arrive, it can't go through at all rather than skipping the check.
   const feeItemsUnchecked = appliedDetails.some((query) => !query.data);
   const feeItemsLoadFailed = appliedDetails.some((query) => query.isError);
-
-  // Opens a mismatched invoice's own fee-item panel by itself, so the reason
-  // "Record payment" is disabled is visible without an extra click to find it
-  // — a bursar should not have to guess which invoice, let alone open it.
-  //
-  // Only while nothing else is already expanded, so this never yanks away a
-  // panel open for another reason. `autoOpenedInvoiceId` is which invoice, if
-  // any, is open *because of this* rather than a click on the toggle — that is
-  // what lets the panel collapse itself again once there is nothing left to
-  // flag, which matters because every amount typed digit by digit passes
-  // through mismatched intermediate values on the way to a matching one (a
-  // bursar typing "100000" is, for a moment, applying "1"). It never closes a
-  // panel someone has actually started naming fee items in, mismatched or not.
-  //
-  // Closing it by hand is a separate, real choice: an invoice just dismissed
-  // this way is not reopened on the next render just because it is still
-  // mismatched, though it is forgotten once it stops being mismatched, so a
-  // fresh mismatch later still gets its own nudge.
-  const mismatchedIdsKey = mismatchedInvoices.map((invoice) => invoice.id).join(',');
-  const dismissedMismatchIds = useRef<Set<string>>(new Set());
-  const autoOpenedInvoiceId = useRef<string | null>(null);
-  useEffect(() => {
-    const stillMismatched = new Set(mismatchedIdsKey ? mismatchedIdsKey.split(',') : []);
-    for (const id of dismissedMismatchIds.current) {
-      if (!stillMismatched.has(id)) dismissedMismatchIds.current.delete(id);
-    }
-
-    if (autoOpenedInvoiceId.current !== null && expandedInvoiceId === autoOpenedInvoiceId.current) {
-      if (
-        !stillMismatched.has(autoOpenedInvoiceId.current) &&
-        !manualInvoiceIds.has(autoOpenedInvoiceId.current)
-      ) {
-        autoOpenedInvoiceId.current = null;
-        setExpandedInvoiceId(null);
-      }
-      return;
-    }
-
-    if (expandedInvoiceId !== null) return;
-    const next = [...stillMismatched].find((id) => !dismissedMismatchIds.current.has(id));
-    if (!next) return;
-    autoOpenedInvoiceId.current = next;
-    setExpandedInvoiceId(next);
-  }, [mismatchedIdsKey, expandedInvoiceId, manualInvoiceIds]);
 
   const valid =
     Boolean(studentId) &&
@@ -387,10 +360,9 @@ export function PaymentFormPage() {
                   setStudentLabel('');
                   setAllocations({});
                   setLineAllocations({});
-                  setExpandedInvoiceId(null);
+                  setManuallyClosedInvoiceIds(new Set());
+                  setManuallyOpenedInvoiceIds(new Set());
                   setManualInvoiceIds(new Set());
-                  dismissedMismatchIds.current.clear();
-                  autoOpenedInvoiceId.current = null;
                 }}
               >
                 Change
@@ -524,8 +496,8 @@ export function PaymentFormPage() {
             <CardTitle>Apply to invoices</CardTitle>
             <CardDescription>
               Defaulted to the oldest invoices first, and each invoice's own fee items in the same
-              order — anything left over is held on the family account and applied to the next
-              invoice. Open "Name which fee item this pays for" to see or change how one is split.
+              order, shown open below — anything left over is held on the family account and
+              applied to the next invoice.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -536,8 +508,17 @@ export function PaymentFormPage() {
             ) : (
               <ul className="space-y-2">
                 {invoices.map((invoice) => {
-                  const expanded = expandedInvoiceId === invoice.id;
                   const applyTotal = Number(allocations[invoice.id]) || 0;
+                  // Open by default once money is applied — nothing to click
+                  // through to see it — unless the bursar has said otherwise for
+                  // this one; closed by default otherwise, since there is no
+                  // split yet to show, unless the bursar has opened it to preview.
+                  const expanded =
+                    applyTotal > 0
+                      ? !manuallyClosedInvoiceIds.has(invoice.id)
+                      : manuallyOpenedInvoiceIds.has(invoice.id);
+                  const detailQuery =
+                    applyTotal > 0 ? appliedDetailsById.get(invoice.id) : previewDetailsById.get(invoice.id);
                   const overNamed = overNamedInvoiceIds.has(invoice.id);
                   const totals = feeItemTotals.get(invoice.id);
                   const mismatched = mismatchedInvoices.some((row) => row.id === invoice.id);
@@ -546,7 +527,7 @@ export function PaymentFormPage() {
                   // same per-line figure each row shows, so the total moves with every
                   // keystroke in a line's amount box.
                   const panelLines = expanded
-                    ? (expandedInvoice.data?.lines ?? []).filter((line) => line.balance > 0)
+                    ? (detailQuery?.data?.lines ?? []).filter((line) => line.balance > 0)
                     : [];
                   const panelTotal = panelLines.reduce((sum, line) => {
                     const named = effectiveLineValue(invoice.id, line.id);
@@ -602,17 +583,26 @@ export function PaymentFormPage() {
                         data-cy={`finance-payment-form-toggle-lines-${invoice.id}`}
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() => {
-                          if (expanded) {
-                            // Closing it by hand, while still mismatched, is a real
-                            // choice — not reopened on the next render for that reason.
-                            if (mismatched) dismissedMismatchIds.current.add(invoice.id);
-                            if (autoOpenedInvoiceId.current === invoice.id) autoOpenedInvoiceId.current = null;
-                            setExpandedInvoiceId(null);
+                          if (applyTotal > 0) {
+                            // Opting out of (or back into) the default-open view for
+                            // an invoice with money applied — a real choice either
+                            // way, not something later renders second-guess.
+                            setManuallyClosedInvoiceIds((current) => {
+                              const next = new Set(current);
+                              if (expanded) next.add(invoice.id);
+                              else next.delete(invoice.id);
+                              return next;
+                            });
                           } else {
-                            // Opened by hand, not by the mismatch check — never
-                            // collapsed out from under whoever just opened it.
-                            autoOpenedInvoiceId.current = null;
-                            setExpandedInvoiceId(invoice.id);
+                            // Previewing (or hiding) an invoice with nothing applied
+                            // to it yet — it has no default state of its own to opt
+                            // out of.
+                            setManuallyOpenedInvoiceIds((current) => {
+                              const next = new Set(current);
+                              if (expanded) next.delete(invoice.id);
+                              else next.add(invoice.id);
+                              return next;
+                            });
                           }
                         }}
                       >
@@ -626,7 +616,7 @@ export function PaymentFormPage() {
 
                       {expanded && (
                         <div className="space-y-2 rounded-md bg-muted/40 p-3">
-                          {expandedInvoice.isPending ? (
+                          {!detailQuery?.data && !detailQuery?.isError ? (
                             <p className="text-xs text-muted-foreground">Loading charges…</p>
                           ) : (
                             <>
