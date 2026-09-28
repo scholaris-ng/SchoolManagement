@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { formatCurrency, formatDate, toDateInputValue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useStudent, useStudentLedger, useStudentSearch } from '@/features/students/api';
 import { useInvoice, useInvoiceDetails, useInvoices, useRecordPayment } from './api';
-import { sumAmounts } from './split-across-lines';
+import { splitAcrossLines, sumAmounts } from './split-across-lines';
 import type { PaymentMethod } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
@@ -187,6 +187,50 @@ export function PaymentFormPage() {
   const feeItemsUnchecked = appliedDetails.some((query) => !query.data);
   const feeItemsLoadFailed = appliedDetails.some((query) => query.isError);
 
+  // Opens a mismatched invoice's own fee-item panel by itself, so the reason
+  // "Record payment" is disabled is visible without an extra click to find it
+  // — a bursar should not have to guess which invoice, let alone open it.
+  //
+  // Only while nothing else is already expanded, so this never yanks away a
+  // panel open for another reason. `autoOpenedInvoiceId` is which invoice, if
+  // any, is open *because of this* rather than a click on the toggle — that is
+  // what lets the panel collapse itself again once there is nothing left to
+  // flag, which matters because every amount typed digit by digit passes
+  // through mismatched intermediate values on the way to a matching one (a
+  // bursar typing "100000" is, for a moment, applying "1"). It never closes a
+  // panel someone has actually started naming fee items in, mismatched or not.
+  //
+  // Closing it by hand is a separate, real choice: an invoice just dismissed
+  // this way is not reopened on the next render just because it is still
+  // mismatched, though it is forgotten once it stops being mismatched, so a
+  // fresh mismatch later still gets its own nudge.
+  const mismatchedIdsKey = mismatchedInvoices.map((invoice) => invoice.id).join(',');
+  const dismissedMismatchIds = useRef<Set<string>>(new Set());
+  const autoOpenedInvoiceId = useRef<string | null>(null);
+  useEffect(() => {
+    const stillMismatched = new Set(mismatchedIdsKey ? mismatchedIdsKey.split(',') : []);
+    for (const id of dismissedMismatchIds.current) {
+      if (!stillMismatched.has(id)) dismissedMismatchIds.current.delete(id);
+    }
+
+    if (autoOpenedInvoiceId.current !== null && expandedInvoiceId === autoOpenedInvoiceId.current) {
+      if (
+        !stillMismatched.has(autoOpenedInvoiceId.current) &&
+        editingItemsInvoiceId !== autoOpenedInvoiceId.current
+      ) {
+        autoOpenedInvoiceId.current = null;
+        setExpandedInvoiceId(null);
+      }
+      return;
+    }
+
+    if (expandedInvoiceId !== null) return;
+    const next = [...stillMismatched].find((id) => !dismissedMismatchIds.current.has(id));
+    if (!next) return;
+    autoOpenedInvoiceId.current = next;
+    setExpandedInvoiceId(next);
+  }, [mismatchedIdsKey, expandedInvoiceId, editingItemsInvoiceId]);
+
   const valid =
     Boolean(studentId) &&
     Number(amount) > 0 &&
@@ -300,6 +344,8 @@ export function PaymentFormPage() {
                   setAllocations({});
                   setLineAllocations({});
                   setExpandedInvoiceId(null);
+                  dismissedMismatchIds.current.clear();
+                  autoOpenedInvoiceId.current = null;
                 }}
               >
                 Change
@@ -460,6 +506,22 @@ export function PaymentFormPage() {
                     const named = namedLineValue(invoice.id, line.id);
                     return sum + (named !== null ? named : line.balance);
                   }, 0);
+                  // What most people actually want once these don't add up: not to
+                  // type each charge by hand, but to have the amount applied fall
+                  // across them the same way it would across whole invoices — the
+                  // earliest charges in full, the last one part-paid if there's a
+                  // remainder. Named explicitly, "0" included, for every line: a
+                  // charge this leaves untouched must read as "not this one", not
+                  // fall back to showing its balance and quietly re-breaking the tally.
+                  const autoSplitLines = () => {
+                    if (!totals) return;
+                    const split = splitAcrossLines(panelLines, (line) => line.balance, totals.expectedTotal);
+                    const next: Record<string, string> = {};
+                    for (const line of panelLines) next[line.id] = split[line.id] ?? '0';
+                    setLineAllocations((current) => ({ ...current, [invoice.id]: next }));
+                    // Surfaces what it just filled in, in case one needs a tweak.
+                    setEditingItemsInvoiceId(invoice.id);
+                  };
                   return (
                     <li key={invoice.id} className="space-y-2 rounded-md border border-border p-3">
                       <div className="flex flex-wrap items-center gap-3">
@@ -496,7 +558,20 @@ export function PaymentFormPage() {
                         type="button"
                         data-cy={`finance-payment-form-toggle-lines-${invoice.id}`}
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setExpandedInvoiceId(expanded ? null : invoice.id)}
+                        onClick={() => {
+                          if (expanded) {
+                            // Closing it by hand, while still mismatched, is a real
+                            // choice — not reopened on the next render for that reason.
+                            if (mismatched) dismissedMismatchIds.current.add(invoice.id);
+                            if (autoOpenedInvoiceId.current === invoice.id) autoOpenedInvoiceId.current = null;
+                            setExpandedInvoiceId(null);
+                          } else {
+                            // Opened by hand, not by the mismatch check — never
+                            // collapsed out from under whoever just opened it.
+                            autoOpenedInvoiceId.current = null;
+                            setExpandedInvoiceId(invoice.id);
+                          }
+                        }}
                       >
                         {expanded ? (
                           <ChevronDown className="size-3.5" aria-hidden="true" />
@@ -678,6 +753,18 @@ export function PaymentFormPage() {
                                   </>
                                 )}
                               </p>
+                              {(mismatched || overNamed) && totals && (
+                                <button
+                                  type="button"
+                                  data-cy={`finance-payment-form-lines-auto-split-${invoice.id}`}
+                                  className="text-[11px] font-medium text-primary hover:underline"
+                                  onClick={autoSplitLines}
+                                >
+                                  Split{' '}
+                                  {formatCurrency(totals.expectedTotal, 'NGN', { showDecimals: false })}{' '}
+                                  across these fee items automatically
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
