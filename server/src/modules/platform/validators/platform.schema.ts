@@ -60,3 +60,20 @@ export type TopUpSmsCreditsInput = z.infer<typeof topUpSmsCreditsSchema>['body']
 export const schoolIdParamSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
 });
+
+/**
+ * International format, with or without the leading `+` — the same shape
+ * `wa.me` expects the number to already be in.
+ */
+export const updateSupportSettingsSchema = z.object({
+  body: z
+    .object({
+      whatsappNumber: z
+        .string()
+        .trim()
+        .regex(/^\+?[1-9]\d{7,14}$/, 'Enter a WhatsApp number in international format, e.g. +2348012345678'),
+    })
+    .strict(),
+});
+
+export type UpdateSupportSettingsInput = z.infer<typeof updateSupportSettingsSchema>['body'];

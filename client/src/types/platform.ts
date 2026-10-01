@@ -61,3 +61,8 @@ export interface SchoolSmsCredits {
   remainderNgn: number;
   entries: SmsCreditEntry[];
 }
+
+/** The WhatsApp number the in-app support widget sends to. Null until a platform administrator sets one. */
+export interface PlatformSupportSettings {
+  whatsappNumber: string | null;
+}

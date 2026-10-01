@@ -3,10 +3,12 @@ import { authMiddleware } from '../../../shared/middleware/auth.middleware';
 import { subscriptionAdminMiddleware } from '../../../shared/middleware/subscriptionAdmin.middleware';
 import { validate } from '../../../shared/middleware/validate.middleware';
 import { PlatformSchoolsController } from '../controllers/platformSchools.controller';
+import { PlatformSupportSettingsController } from '../controllers/platformSupportSettings.controller';
 import {
   activateSchoolSchema,
   schoolIdParamSchema,
   topUpSmsCreditsSchema,
+  updateSupportSettingsSchema,
 } from '../validators/platform.schema';
 
 /**
@@ -50,6 +52,19 @@ router.post(
   subscriptionAdminMiddleware,
   validate(topUpSmsCreditsSchema),
   PlatformSchoolsController.topUpSmsCredits,
+);
+
+// The WhatsApp number the in-app support widget sends to — read by every
+// signed-in user (the widget is visible to every persona), set only by a
+// platform administrator.
+router.get('/platform/support-settings', authMiddleware, PlatformSupportSettingsController.get);
+
+router.put(
+  '/platform/support-settings',
+  authMiddleware,
+  subscriptionAdminMiddleware,
+  validate(updateSupportSettingsSchema),
+  PlatformSupportSettingsController.update,
 );
 
 export default router;

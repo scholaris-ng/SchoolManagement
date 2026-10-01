@@ -74,6 +74,7 @@ import { NotificationPreference } from '../../modules/notifications/entities/not
 import { PushToken } from '../../modules/notifications/entities/pushToken.entity';
 import { SmsMessage } from '../../modules/messaging/entities/smsMessage.entity';
 import { SmsCreditEntry } from '../../modules/messaging/entities/smsCreditEntry.entity';
+import { PlatformSupportSettings } from '../../modules/platform/entities/platformSupportSettings.entity';
 
 /**
  * Entities are listed explicitly rather than glob-loaded: a glob resolves
@@ -157,6 +158,7 @@ export const entities = [
   PushToken,
   SmsMessage,
   SmsCreditEntry,
+  PlatformSupportSettings,
 ];
 
 /**

@@ -65,3 +65,16 @@ export function useTopUpSmsCredits() {
     },
   });
 }
+
+/** Changes the number the support widget sends to, for every signed-in user. */
+export function useUpdateSupportSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (whatsappNumber: string) => PlatformEndpoints.updateSupportSettings(whatsappNumber),
+    onSuccess: async () => {
+      toast.success('WhatsApp number updated');
+      await queryClient.invalidateQueries({ queryKey: queryKeys.platform.supportSettings() });
+    },
+  });
+}

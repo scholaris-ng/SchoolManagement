@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Building2, CalendarPlus, MessageSquare, MessageSquarePlus, Search } from 'lucide-react';
+import { Building2, CalendarPlus, LifeBuoy, MessageSquare, MessageSquarePlus, Search } from 'lucide-react';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import type { PlatformSchool, PlatformSmsStatus } from '@/types/platform';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable, type Column } from '@/components/data/data-table';
 import { WARN_WITHIN_DAYS } from '@/features/subscription/school-access';
+import { useSupportSettings } from '@/features/support/api';
 import { ActivateSchoolDialog } from './activate-school-dialog';
 import { SmsCreditsDialog } from './sms-credits-dialog';
 import {
@@ -15,6 +16,7 @@ import {
   usePlatformSchools,
   usePlatformSmsStatus,
   useTopUpSmsCredits,
+  useUpdateSupportSettings,
 } from './use-platform-schools';
 
 const plural = (n: number) => `${n} day${n === 1 ? '' : 's'}`;
@@ -75,6 +77,79 @@ function SmsGatewayStrip({
               Gateway holds less than schools have been given — top up KudiSMS.
             </span>
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The number the in-app support widget sends to — editable here, read by
+ * every signed-in user wherever the widget is mounted. The widget itself
+ * stays hidden until this has a value.
+ */
+function SupportContactStrip() {
+  const settings = useSupportSettings();
+  const update = useUpdateSupportSettings();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+
+  if (settings.isPending) return null;
+
+  const current = settings.data?.whatsappNumber ?? null;
+
+  const startEditing = () => {
+    setValue(current ?? '');
+    setEditing(true);
+  };
+
+  return (
+    <div
+      data-cy="platform-support-contact"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm"
+    >
+      <span className="flex items-center gap-2 font-medium">
+        <LifeBuoy className="size-4 text-muted-foreground" aria-hidden="true" />
+        Support WhatsApp number
+      </span>
+      {editing ? (
+        <>
+          <Input
+            data-cy="platform-support-contact-input"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="+2348012345678"
+            className="h-8 w-48"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            data-cy="platform-support-contact-save"
+            loading={update.isPending}
+            onClick={async () => {
+              await update.mutateAsync(value.trim());
+              setEditing(false);
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setEditing(false)}
+            disabled={update.isPending}
+          >
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className={current ? 'font-semibold tabular-nums' : 'text-muted-foreground'}>
+            {current ?? 'Not set — the support widget stays hidden until one is.'}
+          </span>
+          <Button size="sm" variant="outline" data-cy="platform-support-contact-edit" onClick={startEditing}>
+            {current ? 'Change' : 'Set number'}
+          </Button>
         </>
       )}
     </div>
@@ -259,6 +334,7 @@ export function PlatformSchoolsPage() {
       />
 
       <SmsGatewayStrip status={smsStatus.data} loading={smsStatus.isPending} />
+      <SupportContactStrip />
 
       <DataTable
         data-cy="platform-schools"

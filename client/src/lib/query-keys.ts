@@ -23,6 +23,8 @@ export const queryKeys = {
     schools: () => ['platform', 'schools'] as const,
     smsCredits: (schoolId: string) => ['platform', 'schools', schoolId, 'sms-credits'] as const,
     smsStatus: () => ['platform', 'sms-status'] as const,
+    /** Shared with the support widget, mounted for every persona — not just platform administrators. */
+    supportSettings: () => ['platform', 'support-settings'] as const,
   },
 
   /**

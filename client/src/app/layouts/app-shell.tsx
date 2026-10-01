@@ -14,6 +14,7 @@ import { OfflineBanner } from '@/components/layout/offline-banner';
 import { useAuth } from '@/app/providers/auth-provider';
 import { isLocked } from '@/features/subscription/school-access';
 import { SubscriptionLockedFrame } from '@/features/subscription/subscription-locked-frame';
+import { SupportWidget } from '@/features/support/support-widget';
 
 /**
  * The authenticated application frame — or, for a school whose trial or
@@ -117,6 +118,8 @@ function UnlockedShell() {
           </Suspense>
         </main>
       </div>
+
+      <SupportWidget />
     </div>
   );
 }

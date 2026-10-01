@@ -1,5 +1,10 @@
 import { http } from '@/lib/http';
-import type { PlatformSchool, PlatformSmsStatus, SchoolSmsCredits } from '@/types/platform';
+import type {
+  PlatformSchool,
+  PlatformSmsStatus,
+  PlatformSupportSettings,
+  SchoolSmsCredits,
+} from '@/types/platform';
 
 export const PlatformEndpoints = {
   /** Every school, soonest to lapse first. */
@@ -18,4 +23,8 @@ export const PlatformEndpoints = {
   /** Adds SMS credit worth `amountNgn` at the platform's per-page price, with a note of how it was paid. */
   topUpSmsCredits: (id: string, values: { amountNgn: number; note?: string }) =>
     http.post<SchoolSmsCredits & { unitsAdded: number }>(`/platform/schools/${id}/sms-credits`, values),
+
+  /** The WhatsApp number the support widget sends to, for every signed-in user. */
+  updateSupportSettings: (whatsappNumber: string) =>
+    http.put<PlatformSupportSettings>('/platform/support-settings', { whatsappNumber }),
 };

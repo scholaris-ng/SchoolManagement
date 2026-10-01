@@ -48,3 +48,8 @@ export interface SchoolSmsCreditsDTO {
   remainderNgn: number;
   entries: SmsCreditEntryDTO[];
 }
+
+/** The WhatsApp number the in-app support widget sends to. Null until a platform administrator sets one. */
+export interface PlatformSupportSettingsDTO {
+  whatsappNumber: string | null;
+}
