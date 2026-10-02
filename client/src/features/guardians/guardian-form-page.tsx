@@ -7,6 +7,7 @@ import { useCreateGuardian, useGuardian, useGuardians, useUpdateGuardian } from 
 import { guardianFormSchema, type GuardianFormValues } from './schema';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
+import { Button } from '@/components/ui/button';
 import { FormActions, FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import {
   FormSection,
@@ -183,12 +184,16 @@ export function GuardianFormPage() {
                     : 'Already a guardian with this phone number'
                 }
                 action={
-                  <Link
-                    to={`/guardians/${possibleDuplicate.guardian.id}`}
-                    className="text-sm font-medium text-primary hover:underline"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    data-cy="guardian-form-duplicate-link"
                   >
-                    Open {possibleDuplicate.guardian.fullName} to link a student
-                  </Link>
+                    <Link to={`/guardians/${possibleDuplicate.guardian.id}`}>
+                      Open {possibleDuplicate.guardian.fullName}
+                    </Link>
+                  </Button>
                 }
               >
                 {possibleDuplicate.guardian.fullName} is already on record
