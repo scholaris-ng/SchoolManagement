@@ -197,6 +197,24 @@ export class AdmissionRepository extends TenantRepository<AdmissionApplication> 
     return application;
   }
 
+  async update(id: string, patch: DeepPartial<AdmissionApplication>): Promise<void> {
+    await this.repo.update(id, patch as never);
+  }
+
+  async updateIfVersionMatches(
+    id: string,
+    expectedVersion: number,
+    patch: DeepPartial<AdmissionApplication>,
+  ): Promise<boolean> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .update(AdmissionApplication)
+      .set({ ...patch, version: () => 'version + 1' } as never)
+      .where('id = :id AND version = :expectedVersion', { id, expectedVersion })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
   /**
    * The one lookup the public "respond to this offer" link uses. Unscoped by
    * school on purpose — a token this specific is the tenant boundary, the

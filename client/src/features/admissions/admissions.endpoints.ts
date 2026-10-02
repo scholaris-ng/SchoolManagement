@@ -8,7 +8,7 @@ import type {
   InterviewOutcome,
 } from '@/types/admissions';
 import type { Student } from '@/types/people';
-import type { AdmissionFormValues, ConversionValues } from './schema';
+import type { AdmissionFormValues, ApplicantValues, ConversionValues } from './schema';
 
 export interface TransitionInput {
   status: ApplicationStatus;
@@ -60,6 +60,10 @@ export const AdmissionEndpoints = {
 
   create: (values: AdmissionFormValues) =>
     http.post<AdmissionApplication>('/admissions', values),
+
+  /** Corrects a mistake on the application itself — a typo, a wrong date of birth. */
+  update: (id: string, applicant: Partial<ApplicantValues>, version: number) =>
+    http.patch<AdmissionApplication>(`/admissions/${id}`, { applicant }, { version }),
 
   transition: (id: string, input: TransitionInput) =>
     http.post<AdmissionApplication>(`/admissions/${id}/transition`, input),

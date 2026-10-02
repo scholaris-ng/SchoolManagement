@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -26,6 +26,13 @@ import {
   toDateTimeInputValue,
 } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
+import {
+  BLOOD_GROUP_OPTIONS,
+  NATIONALITY_OPTIONS,
+  NIGERIA_STATE_OPTIONS,
+  citiesOfNigeriaState,
+  statesOfNationality,
+} from '@/lib/demographics';
 import { useAuth } from '@/app/providers/auth-provider';
 import { useClassOptions } from '@/features/academics/api';
 import { useGuardianOptions } from '@/features/guardians/api';
@@ -35,15 +42,19 @@ import {
   useScheduleInterview,
   useTransitionAdmission,
   useUnlinkApplicationGuardian,
+  useUpdateApplication,
   useUpdateScreeningScore,
 } from './api';
 import { ConvertApplicantDialog } from './convert-applicant-dialog';
 import {
   admissionGuardianLinkSchema,
+  applicantSchema,
+  GENDER_OPTIONS,
   RELATIONSHIP_OPTIONS,
   type AdmissionGuardianLinkValues,
+  type ApplicantValues,
 } from './schema';
-import type { ApplicationStatus, InterviewOutcome } from '@/types/admissions';
+import type { AdmissionApplication, ApplicationStatus, InterviewOutcome } from '@/types/admissions';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Avatar,
@@ -70,7 +81,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
-import { CheckboxField, SelectField } from '@/components/forms/form-field';
+import { CheckboxField, DateField, SelectField, TextField, TextareaField } from '@/components/forms/form-field';
 import { FormError } from '@/components/forms/form-actions';
 import { Field } from './admission-detail-page-parts';
 
@@ -153,6 +164,7 @@ export function AdmissionDetailPage() {
   const [offeredClassId, setOfferedClassId] = useState('');
   const [offerExpiresOn, setOfferExpiresOn] = useState('');
   const [convertOpen, setConvertOpen] = useState(false);
+  const [editApplicantOpen, setEditApplicantOpen] = useState(false);
   const [linkGuardianOpen, setLinkGuardianOpen] = useState(false);
   const [pendingUnlinkGuardian, setPendingUnlinkGuardian] = useState<string | null>(null);
   const [scoreEditOpen, setScoreEditOpen] = useState(false);
@@ -369,7 +381,20 @@ export function AdmissionDetailPage() {
         <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Applicant</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Applicant</CardTitle>
+                {canManage && !record.convertedStudentId && (
+                  <Button
+                    data-cy="admissions-admission-detail-edit-applicant"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditApplicantOpen(true)}
+                  >
+                    <Pencil />
+                    Edit
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -908,6 +933,12 @@ export function AdmissionDetailPage() {
         onOpenChange={setConvertOpen}
       />
 
+      <EditApplicantSheet
+        application={record}
+        open={editApplicantOpen}
+        onOpenChange={setEditApplicantOpen}
+      />
+
       <LinkApplicationGuardianSheet
         applicationId={record.id}
         open={linkGuardianOpen}
@@ -929,6 +960,202 @@ export function AdmissionDetailPage() {
         }}
       />
     </PageContainer>
+  );
+}
+
+/** What the sheet starts from — the application's current values, mapped onto the flat applicant shape. */
+function applicantDefaults(application: AdmissionApplication): ApplicantValues {
+  const { applicant } = application;
+  return {
+    firstName: applicant.firstName,
+    middleName: applicant.middleName ?? '',
+    lastName: applicant.lastName,
+    gender: applicant.gender,
+    dateOfBirth: applicant.dateOfBirth,
+    photoUrl: applicant.photoUrl ?? null,
+    nationality: applicant.nationality ?? '',
+    stateOfOrigin: applicant.stateOfOrigin ?? '',
+    address: applicant.address ?? '',
+    city: applicant.city ?? '',
+    state: applicant.state ?? '',
+    previousSchool: applicant.previousSchool ?? '',
+    previousClass: applicant.previousClass ?? '',
+    bloodGroup: applicant.bloodGroup ?? '',
+    medicalNotes: applicant.medicalNotes ?? '',
+    email: applicant.email ?? '',
+    phone: applicant.phone ?? '',
+  };
+}
+
+/**
+ * Fixing a mistake caught after submission — a typo in a name, the wrong
+ * date of birth. Deliberately not offered once the applicant is enrolled:
+ * `convert()` has already copied these fields onto a real `Student` row, so
+ * correcting them here afterward would reach nothing anyone still reads from
+ * this record — the student's own profile is edited from their own page.
+ */
+function EditApplicantSheet({
+  application,
+  open,
+  onOpenChange,
+}: {
+  application: AdmissionApplication;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const update = useUpdateApplication(application.id);
+
+  const form = useForm<ApplicantValues>({
+    resolver: zodResolver(applicantSchema),
+    defaultValues: applicantDefaults(application),
+  });
+
+  // The sheet stays mounted between opens, so without this an edit made and
+  // cancelled — or saved and then reopened — would show stale values instead
+  // of the record's own current ones.
+  useEffect(() => {
+    if (open) form.reset(applicantDefaults(application));
+  }, [open, application, form]);
+
+  const nationality = useWatch({ control: form.control, name: 'nationality' });
+  const stateOfOriginOptions = statesOfNationality(nationality);
+  const state = useWatch({ control: form.control, name: 'state' });
+  const cityOptions = citiesOfNigeriaState(state);
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    await update.mutateAsync({ applicant: values, version: application.version });
+    onOpenChange(false);
+  });
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit applicant"
+      description="Corrects a mistake on the application itself. It does not touch the people to contact, which are edited separately."
+      width="lg"
+      footer={
+        <>
+          <Button
+            data-cy="admissions-edit-applicant-cancel"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button data-cy="admissions-edit-applicant-submit" onClick={onSubmit} loading={update.isPending}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <FormError error={update.error} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField control={form.control} name="firstName" label="First name" required />
+          <TextField control={form.control} name="middleName" label="Middle name" />
+          <TextField control={form.control} name="lastName" label="Surname" required />
+          <SelectField
+            control={form.control}
+            name="gender"
+            label="Gender"
+            required
+            options={[...GENDER_OPTIONS]}
+            native
+          />
+          <DateField
+            control={form.control}
+            name="dateOfBirth"
+            label="Date of birth"
+            required
+            max={toDateInputValue(new Date())}
+          />
+          <TextField control={form.control} name="previousSchool" label="Previous school" />
+          <TextField control={form.control} name="previousClass" label="Previous class" />
+          <SelectField
+            control={form.control}
+            name="nationality"
+            label="Nationality"
+            options={NATIONALITY_OPTIONS}
+            placeholder="Select a nationality"
+            native
+            onValueChange={() => form.setValue('stateOfOrigin', '', { shouldDirty: true })}
+          />
+          {stateOfOriginOptions.length > 0 ? (
+            <SelectField
+              control={form.control}
+              name="stateOfOrigin"
+              label="State of origin"
+              options={stateOfOriginOptions}
+              placeholder="Select a state"
+              native
+            />
+          ) : (
+            <TextField
+              control={form.control}
+              name="stateOfOrigin"
+              label="State of origin"
+              hint={!nationality ? 'Pick a nationality to choose from a list.' : undefined}
+            />
+          )}
+          <TextareaField
+            control={form.control}
+            name="address"
+            label="Home address"
+            rows={2}
+            className="sm:col-span-2"
+          />
+          <SelectField
+            control={form.control}
+            name="state"
+            label="State"
+            options={NIGERIA_STATE_OPTIONS}
+            placeholder="Select a state"
+            native
+            onValueChange={() => form.setValue('city', '', { shouldDirty: true })}
+          />
+          {cityOptions.length > 0 ? (
+            <SelectField
+              control={form.control}
+              name="city"
+              label="City"
+              options={cityOptions}
+              placeholder="Select a city"
+              native
+            />
+          ) : (
+            <TextField
+              control={form.control}
+              name="city"
+              label="City"
+              hint={!state ? 'Pick a state to choose from a list.' : undefined}
+            />
+          )}
+          <SelectField
+            control={form.control}
+            name="bloodGroup"
+            label="Blood group"
+            options={BLOOD_GROUP_OPTIONS}
+            placeholder="Select a blood group"
+            native
+          />
+          {application.applicantType === 'SELF' && (
+            <>
+              <TextField control={form.control} name="email" label="Their email" type="email" />
+              <TextField control={form.control} name="phone" label="Their phone" />
+            </>
+          )}
+          <TextareaField
+            control={form.control}
+            name="medicalNotes"
+            label="Medical notes"
+            rows={2}
+            className="sm:col-span-2"
+          />
+        </div>
+      </form>
+    </Sheet>
   );
 }
 

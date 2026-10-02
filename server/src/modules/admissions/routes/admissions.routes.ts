@@ -10,6 +10,7 @@ import {
   scheduleInterviewSchema,
   transitionAdmissionSchema,
   unlinkApplicationGuardianSchema,
+  updateAdmissionApplicationSchema,
   updateScreeningScoreSchema,
 } from '../validators/admissions.schema';
 import { AdmissionsController } from '../controllers/admissions.controller';
@@ -45,6 +46,20 @@ router.post(
   authorise('admission.manage'),
   validate(createAdmissionSchema),
   AdmissionsController.create,
+);
+
+/**
+ * Correcting a mistake on the application itself — a typo in a name, the
+ * wrong date of birth — kept separate from `transition` for the same reason
+ * the interview and score edits are: it never moves `status` by itself, so a
+ * typo doesn't need to re-run a decision the office isn't actually making
+ * again. `admission.manage` alone is enough, same as those two.
+ */
+router.patch(
+  '/admissions/:id',
+  authorise('admission.manage'),
+  validate(updateAdmissionApplicationSchema),
+  AdmissionsController.update,
 );
 
 /**

@@ -3,7 +3,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
-import type { AdmissionFormValues, ConversionValues } from './schema';
+import type { AdmissionFormValues, ApplicantValues, ConversionValues } from './schema';
 import { AdmissionEndpoints } from './admissions.endpoints';
 import type {
   TransitionInput,
@@ -74,6 +74,27 @@ export function useTransitionAdmission(id: string) {
       queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
       void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.list(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.funnel(schoolId) });
+      toast.success('Application updated');
+    },
+  });
+}
+
+/**
+ * Corrects a mistake on the application itself — a typo in a name, the wrong
+ * date of birth — never touches `status`. Sends the version it was loaded
+ * with as `If-Match`, so an edit that lost a race with somebody else's shows
+ * up as a conflict instead of silently overwriting it.
+ */
+export function useUpdateApplication(id: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ applicant, version }: { applicant: Partial<ApplicantValues>; version: number }) =>
+      AdmissionEndpoints.update(id, applicant, version),
+    onSuccess: (application) => {
+      queryClient.setQueryData(queryKeys.admissions.detail(schoolId, id), application);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.list(schoolId) });
       toast.success('Application updated');
     },
   });

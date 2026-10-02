@@ -49,6 +49,7 @@ import type {
   RespondToOfferInput,
   ScheduleInterviewInput,
   TransitionAdmissionInput,
+  UpdateAdmissionApplicationInput,
   UpdateScreeningScoreInput,
 } from '../validators/admissions.schema';
 
@@ -753,6 +754,68 @@ export class AdmissionsService {
     }
 
     return dto;
+  }
+
+  /**
+   * Correcting a mistake on the application itself — a typo in a name, the
+   * wrong date of birth — kept apart from `transition` for the same reason
+   * `updateScreeningScore` is: it never moves `status` by itself. Available
+   * right up until enrolment, the same boundary every other mutator here
+   * shares — once `convert()` has run, these fields have already been copied
+   * onto a real `Student` row, and correcting them here afterward would
+   * reach nothing anyone still reads from this record.
+   */
+  async updateApplication(
+    context: RequestContext,
+    id: string,
+    input: UpdateAdmissionApplicationInput,
+    expectedVersion: number | undefined,
+  ): Promise<AdmissionApplicationDTO> {
+    const application = await this.applications.findByIdScoped(context.schoolId, id);
+    if (!application) throw AppError.notFound('Application');
+
+    if (application.convertedStudentId) {
+      throw AppError.conflict(
+        'This applicant has already been enrolled, so the application can no longer be changed.',
+      );
+    }
+
+    // `firstName`, `lastName`, `dateOfBirth`, `gender` and `photoUrl` are kept
+    // as typed; every other field follows `insertApplication`'s own rule that
+    // blank means "not provided", not "set to blank".
+    const rawFields = new Set(['firstName', 'lastName', 'dateOfBirth', 'gender', 'photoUrl']);
+    const columns: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input.applicant ?? {})) {
+      if (value === undefined) continue;
+      const column = key === 'email' ? 'applicantEmail' : key === 'phone' ? 'applicantPhone' : key;
+      columns[column] = typeof value === 'string' && !rawFields.has(key) ? nullIfBlank(value) : value;
+    }
+
+    if (Object.keys(columns).length > 0) {
+      if (expectedVersion !== undefined) {
+        const applied = await this.applications.updateIfVersionMatches(id, expectedVersion, columns);
+        if (!applied) throw AppError.versionConflict();
+      } else {
+        await this.applications.update(id, columns);
+      }
+
+      await this.appendStageEvent(AppDataSource.manager, application, {
+        status: application.status,
+        actorUserId: context.user.id,
+        actorName: context.user.displayName,
+        note: 'Applicant details corrected.',
+      });
+
+      await this.audit.record(context, {
+        action: 'admission.updated',
+        entityType: 'AdmissionApplication',
+        entityId: application.id,
+        entityLabel: application.applicationNo,
+        after: columns,
+      });
+    }
+
+    return this.requireDTO(context.schoolId, id);
   }
 
   /**

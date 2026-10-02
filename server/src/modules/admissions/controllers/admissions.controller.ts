@@ -11,10 +11,19 @@ import type {
   RespondToOfferInput,
   ScheduleInterviewInput,
   TransitionAdmissionInput,
+  UpdateAdmissionApplicationInput,
   UpdateScreeningScoreInput,
 } from '../validators/admissions.schema';
 
 const service = () => AdmissionsService.Instance;
+
+/** The version the client loaded, sent as `If-Match` (spec section 34). */
+function readIfMatch(req: Request): number | undefined {
+  const raw = req.get('if-match');
+  if (!raw) return undefined;
+  const parsed = Number(raw.replace(/"/g, ''));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 export class AdmissionsController {
   static async fetchAll(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -45,6 +54,21 @@ export class AdmissionsController {
         req.validated!.body as CreateAdmissionInput,
       );
       res.status(201).json(ApiResponse.created(application, 'Application created'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      const application = await service().updateApplication(
+        contextOf(req),
+        id,
+        req.validated!.body as UpdateAdmissionApplicationInput,
+        readIfMatch(req),
+      );
+      res.status(200).json(ApiResponse.ok(application, 'Application updated'));
     } catch (error) {
       next(error);
     }

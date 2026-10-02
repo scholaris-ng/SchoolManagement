@@ -150,6 +150,20 @@ export const createAdmissionSchema = z.object({
   }),
 });
 
+/**
+ * Correcting a mistake on the application itself — a typo in a name, the
+ * wrong date of birth — rather than moving it forward, so every field here is
+ * optional: the office may be fixing only one of them.
+ */
+export const updateAdmissionApplicationSchema = z.object({
+  params: admissionIdParamSchema.shape.params,
+  body: z
+    .object({
+      applicant: applicantSchema.partial(),
+    })
+    .strict(),
+});
+
 export const transitionAdmissionSchema = z.object({
   params: admissionIdParamSchema.shape.params,
   body: z.object({
@@ -290,6 +304,7 @@ export const respondToOfferSchema = z.object({
 
 export type FetchAdmissionsQuery = z.infer<typeof fetchAdmissionsSchema>['query'];
 export type CreateAdmissionInput = z.infer<typeof createAdmissionSchema>['body'];
+export type UpdateAdmissionApplicationInput = z.infer<typeof updateAdmissionApplicationSchema>['body'];
 export type TransitionAdmissionInput = z.infer<typeof transitionAdmissionSchema>['body'];
 export type ScheduleInterviewInput = z.infer<typeof scheduleInterviewSchema>['body'];
 export type UpdateScreeningScoreInput = z.infer<typeof updateScreeningScoreSchema>['body'];
