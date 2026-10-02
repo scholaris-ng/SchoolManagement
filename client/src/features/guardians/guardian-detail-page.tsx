@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Truck,
   UserPlus,
+  Users,
 } from 'lucide-react';
 import { formatRelative } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
@@ -39,6 +40,7 @@ import { FormError } from '@/components/forms/form-actions';
 import { SearchInput } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/dialog';
 import { Detail } from './guardian-detail-page-parts';
+import { AddCoGuardianSheet } from './add-co-guardian-sheet';
 
 const RELATIONSHIP_OPTIONS = [
   { value: 'FATHER', label: 'Father' },
@@ -62,6 +64,7 @@ export function GuardianDetailPage() {
   const children = useGuardianChildren(id);
   const invite = useInviteGuardian();
   const [linkStudentOpen, setLinkStudentOpen] = useState(false);
+  const [addGuardianOpen, setAddGuardianOpen] = useState(false);
 
   if (guardian.isPending) {
     return (
@@ -143,6 +146,14 @@ export function GuardianDetailPage() {
                 </Button>
               </span>
             </Tooltip>
+            <Button
+              variant="outline"
+              data-cy="guardian-detail-add-co-guardian"
+              onClick={() => setAddGuardianOpen(true)}
+            >
+              <Users />
+              Add another guardian
+            </Button>
             <Button data-cy="guardians-guardian-detail-edit" onClick={() => navigate(`/guardians/${record.id}/edit`)}>
               <Pencil />
               Edit
@@ -271,6 +282,13 @@ export function GuardianDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AddCoGuardianSheet
+        guardianName={record.fullName}
+        links={children.data ?? []}
+        open={addGuardianOpen}
+        onOpenChange={setAddGuardianOpen}
+      />
 
       <LinkStudentSheet
         guardianId={record.id}
