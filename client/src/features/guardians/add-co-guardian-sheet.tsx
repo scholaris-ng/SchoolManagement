@@ -6,6 +6,7 @@ import { toast } from '@/lib/toast-bus';
 import type { GuardianRelationship, StudentGuardianLink } from '@/types/people';
 import { useAddCoGuardian } from './use-add-co-guardian';
 import { coGuardianSchema, type CoGuardianValues } from './schema';
+import { TITLE_OPTIONS } from './titles';
 import { Checkbox, Label } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { Sheet } from '@/components/ui/dialog';
@@ -143,7 +144,14 @@ export function AddCoGuardianSheet({
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextField control={form.control} name="title" label="Title" placeholder="Mr, Mrs, Dr…" />
+          <SelectField
+            control={form.control}
+            name="title"
+            label="Title"
+            options={TITLE_OPTIONS}
+            placeholder="No title"
+            native
+          />
           <span className="hidden sm:block" aria-hidden="true" />
           <TextField control={form.control} name="firstName" label="First name" required />
           <TextField control={form.control} name="lastName" label="Surname" required />

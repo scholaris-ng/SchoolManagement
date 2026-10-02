@@ -94,6 +94,24 @@ describe('AddCoGuardianSheet', () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
+  it('takes the title from a fixed list rather than free text', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    const title = (await screen.findByLabelText(/^Title/)) as HTMLSelectElement;
+    expect(title.tagName).toBe('SELECT');
+    expect(title.value).toBe('');
+
+    await user.selectOptions(title, 'Mrs');
+    await user.type(screen.getByLabelText(/^First name/), 'Ngozi');
+    await user.type(screen.getByLabelText(/^Surname/), 'Eze');
+    await user.type(screen.getByLabelText(/^Phone number/), '08031234567');
+    await user.click(screen.getByRole('button', { name: 'Add guardian' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ title: 'Mrs' });
+  });
+
   it('refuses to submit when every child is unticked', async () => {
     const user = userEvent.setup();
     renderSheet();

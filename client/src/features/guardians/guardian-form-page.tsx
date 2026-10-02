@@ -9,8 +9,10 @@ import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { FormActions, FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
+import { titleOptionsFor } from './titles';
 import {
   FormSection,
+  SelectField,
   SwitchField,
   TextField,
   TextareaField,
@@ -135,11 +137,13 @@ export function GuardianFormPage() {
             <FormError error={mutation.error} />
 
             <FormSection title="Name" columns={2}>
-              <TextField
+              <SelectField
                 control={form.control}
                 name="title"
                 label="Title"
-                placeholder="Mr, Mrs, Dr…"
+                options={titleOptionsFor(existing.data?.title)}
+                placeholder="No title"
+                native
               />
               <TextField control={form.control} name="occupation" label="Occupation" />
               <TextField control={form.control} name="firstName" label="First name" required />
