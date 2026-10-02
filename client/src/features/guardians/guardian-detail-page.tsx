@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   BadgeCheck,
   Briefcase,
@@ -10,10 +13,13 @@ import {
   Send,
   ShieldCheck,
   Truck,
+  UserPlus,
 } from 'lucide-react';
 import { formatRelative } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
-import { useGuardian, useGuardianChildren, useInviteGuardian } from './api';
+import { useStudentSearch } from '@/features/students/api';
+import { useGuardian, useGuardianChildren, useInviteGuardian, useLinkStudentToGuardian } from './api';
+import { linkStudentSchema, type LinkStudentValues } from './schema';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import {
   Avatar,
@@ -23,11 +29,24 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Label,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { PermissionGate } from '@/components/guards/permission-gate';
+import { CheckboxField, SelectField } from '@/components/forms/form-field';
+import { FormError } from '@/components/forms/form-actions';
+import { SearchInput } from '@/components/ui/input';
+import { Sheet } from '@/components/ui/dialog';
 import { Detail } from './guardian-detail-page-parts';
+
+const RELATIONSHIP_OPTIONS = [
+  { value: 'FATHER', label: 'Father' },
+  { value: 'MOTHER', label: 'Mother' },
+  { value: 'GUARDIAN', label: 'Guardian' },
+  { value: 'SPONSOR', label: 'Sponsor' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 /**
  * One guardian, and every child they are responsible for.
@@ -42,6 +61,7 @@ export function GuardianDetailPage() {
   const guardian = useGuardian(id);
   const children = useGuardianChildren(id);
   const invite = useInviteGuardian();
+  const [linkStudentOpen, setLinkStudentOpen] = useState(false);
 
   if (guardian.isPending) {
     return (
@@ -179,11 +199,26 @@ export function GuardianDetailPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Children</CardTitle>
-            <CardDescription>
-              What this guardian is responsible for, per child. These flags decide who is called
-              first, who is billed, and who may collect a child from the gate.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Children</CardTitle>
+                <CardDescription>
+                  What this guardian is responsible for, per child. These flags decide who is
+                  called first, who is billed, and who may collect a child from the gate.
+                </CardDescription>
+              </div>
+              <PermissionGate require="guardian.manage">
+                <Button
+                  data-cy="guardian-detail-link-student"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLinkStudentOpen(true)}
+                >
+                  <UserPlus />
+                  Link a student
+                </Button>
+              </PermissionGate>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {children.isPending ? (
@@ -195,7 +230,7 @@ export function GuardianDetailPage() {
                 compact
                 icon={<Heart />}
                 title="No children linked yet"
-                description="Link this guardian from a student's Guardians tab."
+                description="Link a student above, or from that child's own Guardians tab."
               />
             ) : (
               <ul className="divide-y divide-border">
@@ -236,6 +271,173 @@ export function GuardianDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <LinkStudentSheet
+        guardianId={record.id}
+        open={linkStudentOpen}
+        onOpenChange={setLinkStudentOpen}
+        excludeIds={(children.data ?? []).map((link) => link.studentId)}
+      />
     </PageContainer>
+  );
+}
+
+/**
+ * The reverse of the student's own "Link a guardian" — for the moment a
+ * guardian turns out to already exist (an email clash while adding a new
+ * one, say) and the quickest way to attach them to the right child is from
+ * right here, rather than hunting that child down to use their own sheet.
+ */
+function LinkStudentSheet({
+  guardianId,
+  open,
+  onOpenChange,
+  excludeIds,
+}: {
+  guardianId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  excludeIds: string[];
+}) {
+  const link = useLinkStudentToGuardian(guardianId);
+  const [studentQuery, setStudentQuery] = useState('');
+  const [studentLabel, setStudentLabel] = useState('');
+  const results = useStudentSearch(studentQuery, { enabled: studentQuery.length >= 2 });
+  const matches = (results.data ?? []).filter((match) => !excludeIds.includes(match.id));
+
+  const form = useForm<LinkStudentValues>({
+    resolver: zodResolver(linkStudentSchema),
+    defaultValues: {
+      studentId: '',
+      relationship: 'GUARDIAN',
+      isPrimaryContact: false,
+      isEmergencyContact: false,
+      isFinanciallyResponsible: false,
+      canPickUp: true,
+    },
+  });
+
+  const selectedStudentId = form.watch('studentId');
+
+  const close = () => {
+    form.reset();
+    setStudentQuery('');
+    setStudentLabel('');
+    onOpenChange(false);
+  };
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    await link.mutateAsync(values);
+    close();
+  });
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => (next ? onOpenChange(true) : close())}
+      title="Link a student"
+      description="Attach this guardian to a child already registered at the school."
+      footer={
+        <>
+          <Button data-cy="guardian-link-student-cancel" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+          <Button data-cy="guardian-link-student-submit" onClick={onSubmit} loading={link.isPending}>
+            Link student
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        <FormError error={link.error} />
+
+        {selectedStudentId && studentLabel ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+            <p className="truncate text-sm font-medium">{studentLabel}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                form.setValue('studentId', '', { shouldValidate: true });
+                setStudentLabel('');
+              }}
+            >
+              Change
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="link-student-query" required>
+              Student
+            </Label>
+            <SearchInput
+              id="link-student-query"
+              data-cy="guardian-link-student-query"
+              value={studentQuery}
+              onValueChange={setStudentQuery}
+              placeholder="Search by name or admission number…"
+              isSearching={results.isSearching}
+            />
+            {form.formState.errors.studentId && (
+              <p className="text-xs text-danger">{form.formState.errors.studentId.message}</p>
+            )}
+            {matches.length > 0 && (
+              <ul className="max-h-56 overflow-y-auto rounded-md border border-border">
+                {matches.map((match) => (
+                  <li key={match.id}>
+                    <button
+                      type="button"
+                      data-cy={`guardian-link-student-result-${match.id}`}
+                      onClick={() => {
+                        form.setValue('studentId', match.id, { shouldValidate: true });
+                        setStudentLabel(`${match.fullName} · ${match.admissionNo}`);
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{match.fullName}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {match.admissionNo}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <SelectField
+          control={form.control}
+          name="relationship"
+          label="Relationship to the student"
+          required
+          options={RELATIONSHIP_OPTIONS}
+          native
+        />
+
+        <fieldset className="space-y-3 rounded-lg border border-border p-4">
+          <legend className="px-1 text-sm font-medium">Responsibilities</legend>
+          <CheckboxField
+            control={form.control}
+            name="isPrimaryContact"
+            label="Primary contact"
+            description="The first person the school calls about this child."
+          />
+          <CheckboxField control={form.control} name="isEmergencyContact" label="Emergency contact" />
+          <CheckboxField
+            control={form.control}
+            name="isFinanciallyResponsible"
+            label="Financially responsible"
+            description="Receives invoices and fee reminders for this child."
+          />
+          <CheckboxField
+            control={form.control}
+            name="canPickUp"
+            label="Authorised to collect the child"
+          />
+        </fieldset>
+      </form>
+    </Sheet>
   );
 }

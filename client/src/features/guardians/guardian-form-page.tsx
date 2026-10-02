@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useMemo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { isApiError } from '@/lib/api-error';
-import { useCreateGuardian, useGuardian, useUpdateGuardian } from './api';
+import { useCreateGuardian, useGuardian, useGuardians, useUpdateGuardian } from './api';
 import { guardianFormSchema, type GuardianFormValues } from './schema';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent } from '@/components/ui/primitives';
@@ -14,7 +14,12 @@ import {
   TextField,
   TextareaField,
 } from '@/components/forms/form-field';
-import { LoadingState } from '@/components/ui/feedback';
+import { Alert, LoadingState } from '@/components/ui/feedback';
+
+/** Digits only, so "070-1234 5678" and "07012345678" compare equal. */
+function normalisePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
 
 const emptyValues: GuardianFormValues = {
   title: '',
@@ -38,10 +43,35 @@ export function GuardianFormPage() {
   const updateGuardian = useUpdateGuardian(id ?? '');
   const mutation = isEdit ? updateGuardian : createGuardian;
 
+  // The same list "Link a guardian" already searches — reused here to warn
+  // before a mistake, not after: an email clash is refused on submit anyway,
+  // but a shared phone number isn't, and is just as often two parents who
+  // are already the same person in this school's records as it is a
+  // household landline two different guardians happen to share.
+  const guardians = useGuardians({ page: 1, pageSize: 200, sortBy: 'fullName' });
+
   const form = useForm<GuardianFormValues>({
     resolver: zodResolver(guardianFormSchema),
     defaultValues: emptyValues,
   });
+
+  const watchedEmail = useWatch({ control: form.control, name: 'email' });
+  const watchedPhone = useWatch({ control: form.control, name: 'phone' });
+
+  const possibleDuplicate = useMemo(() => {
+    const rows = (guardians.data?.items ?? []).filter((guardian) => guardian.id !== id);
+    const email = watchedEmail?.trim().toLowerCase();
+    const phone = normalisePhone(watchedPhone ?? '');
+
+    const byEmail = email ? rows.find((guardian) => guardian.email?.toLowerCase() === email) : undefined;
+    if (byEmail) return { guardian: byEmail, matchedOn: 'email' as const };
+
+    const byPhone =
+      phone.length >= 7 ? rows.find((guardian) => normalisePhone(guardian.phone) === phone) : undefined;
+    if (byPhone) return { guardian: byPhone, matchedOn: 'phone' as const };
+
+    return null;
+  }, [guardians.data, watchedEmail, watchedPhone, id]);
 
   useEffect(() => {
     if (!existing.data) return;
@@ -143,6 +173,35 @@ export function GuardianFormPage() {
                 className="sm:col-span-2"
               />
             </FormSection>
+
+            {possibleDuplicate && (
+              <Alert
+                tone="warning"
+                title={
+                  possibleDuplicate.matchedOn === 'email'
+                    ? 'Already a guardian with this email'
+                    : 'Already a guardian with this phone number'
+                }
+                action={
+                  <Link
+                    to={`/guardians/${possibleDuplicate.guardian.id}`}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Open {possibleDuplicate.guardian.fullName} to link a student
+                  </Link>
+                }
+              >
+                {possibleDuplicate.guardian.fullName} is already on record
+                {possibleDuplicate.guardian.studentCount > 0
+                  ? ` for ${possibleDuplicate.guardian.studentCount} ${possibleDuplicate.guardian.studentCount === 1 ? 'child' : 'children'}`
+                  : ''}
+                . If this is the same person, cancel here — their own page has a "Link a student"
+                button to attach this child instead of creating a second record.{' '}
+                {possibleDuplicate.matchedOn === 'email'
+                  ? 'An email address can only belong to one guardian record.'
+                  : "A shared phone number isn't always the same person, so this is only a check."}
+              </Alert>
+            )}
 
             <FormSection title="Parent portal" columns={1}>
               <SwitchField

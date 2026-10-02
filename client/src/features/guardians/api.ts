@@ -4,7 +4,7 @@ import { toast } from '@/lib/toast-bus';
 import { useSchoolId } from '@/app/providers/auth-provider';
 import type { ListQuery } from '@/types/api';
 import type { SelectOption } from '@/components/ui/input';
-import type { GuardianFormValues } from './schema';
+import type { GuardianFormValues, LinkStudentValues } from './schema';
 import { GuardianEndpoints } from './guardians.endpoints';
 
 export function useGuardians(query: ListQuery) {
@@ -60,6 +60,29 @@ export function useUpdateGuardian(id: string) {
       queryClient.setQueryData(queryKeys.guardians.detail(schoolId, id), guardian);
       void queryClient.invalidateQueries({ queryKey: queryKeys.guardians.list(schoolId) });
       toast.success('Guardian updated');
+    },
+  });
+}
+
+/**
+ * Links this guardian to a child from the guardian's own page — for the
+ * moment a guardian turns out to already exist and the quickest way back is
+ * from right here, rather than hunting the right student down to use their
+ * own "Link a guardian".
+ */
+export function useLinkStudentToGuardian(guardianId: string) {
+  const schoolId = useSchoolId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: LinkStudentValues) => GuardianEndpoints.linkStudent(guardianId, values),
+    onSuccess: (_, values) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.guardians.children(schoolId, guardianId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.students.guardians(schoolId, values.studentId),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.guardians.list(schoolId) });
+      toast.success('Guardian linked to student');
     },
   });
 }

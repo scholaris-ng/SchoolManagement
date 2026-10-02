@@ -46,3 +46,15 @@ export const guardianFormSchema = z
   });
 
 export type GuardianFormValues = z.infer<typeof guardianFormSchema>;
+
+/** Linking a guardian to a child from the guardian's own page — the reverse of `guardianLinkSchema` on the student's. */
+export const linkStudentSchema = z.object({
+  studentId: z.string().min(1, 'Select a student'),
+  relationship: z.enum(['FATHER', 'MOTHER', 'GUARDIAN', 'SPONSOR', 'OTHER']),
+  isPrimaryContact: z.boolean().default(false),
+  isEmergencyContact: z.boolean().default(false),
+  isFinanciallyResponsible: z.boolean().default(false),
+  canPickUp: z.boolean().default(true),
+});
+
+export type LinkStudentValues = z.infer<typeof linkStudentSchema>;
