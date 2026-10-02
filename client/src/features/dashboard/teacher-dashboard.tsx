@@ -87,7 +87,7 @@ export function TeacherDashboard() {
         <LoadingState label="Loading your day…" />
       ) : (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Today&rsquo;s lessons</CardTitle>
@@ -183,7 +183,7 @@ export function TeacherDashboard() {
             </Card>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card>
               <CardHeader>
                 <CardTitle>Registers to take</CardTitle>

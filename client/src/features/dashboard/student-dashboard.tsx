@@ -62,7 +62,7 @@ export function StudentDashboard() {
         <LoadingState label="Loading your dashboard…" />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Attendance"
               value={formatPercent(data?.attendanceRate ?? 0)}
@@ -96,7 +96,7 @@ export function StudentDashboard() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card>
               <CardHeader>
                 <CardTitle>Today&rsquo;s timetable</CardTitle>
@@ -180,7 +180,7 @@ export function StudentDashboard() {
             </Card>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Open tests and practice</CardTitle>

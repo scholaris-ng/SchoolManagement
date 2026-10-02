@@ -72,7 +72,7 @@ export function BursarDashboard() {
         <LoadingState label="Loading the ledger…" />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Billed this term"
               value={formatCurrency(data?.billed ?? 0, currency)}
@@ -104,7 +104,7 @@ export function BursarDashboard() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Billed against collected</CardTitle>
