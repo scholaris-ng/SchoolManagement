@@ -87,10 +87,20 @@ export function AddCoGuardianSheet({
   };
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (links.length > 0 && values.studentIds.length === 0) {
+      form.setError('studentIds', { message: 'Select at least one child' });
+      return;
+    }
+
     const { guardian, failedCount } = await add.mutateAsync(values);
     const openGuardian = { label: 'Open', onClick: () => navigate(`/guardians/${guardian.id}`) };
 
-    if (failedCount > 0) {
+    if (values.studentIds.length === 0) {
+      toast.success('Guardian added', {
+        description: `${guardian.fullName} isn’t linked to a child yet.`,
+        action: openGuardian,
+      });
+    } else if (failedCount > 0) {
       toast.warning(`${guardian.fullName} was added, but not linked to every child`, {
         description: `${failedCount} link${failedCount === 1 ? '' : 's'} failed. Use “Link a student” on their page.`,
         action: openGuardian,
@@ -124,7 +134,6 @@ export function AddCoGuardianSheet({
             data-cy="guardian-add-co-guardian-submit"
             onClick={onSubmit}
             loading={add.isPending}
-            disabled={links.length === 0}
           >
             Add guardian
           </Button>
@@ -177,8 +186,8 @@ export function AddCoGuardianSheet({
           <legend className="px-1 text-sm font-medium">Children</legend>
           {links.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {guardianName} has no children linked yet. Link a student first, then add the other
-              guardian.
+              {guardianName} has no children linked yet, so this guardian will be added on their
+              own. Use “Link a student” on their page to attach them to a child afterwards.
             </p>
           ) : (
             links.map((link) => (

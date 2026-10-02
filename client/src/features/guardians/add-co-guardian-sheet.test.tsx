@@ -141,10 +141,20 @@ describe('AddCoGuardianSheet', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('blocks adding when the guardian has no children to share', async () => {
+  it('still adds a guardian when the one being viewed has no children to share', async () => {
+    const user = userEvent.setup();
     renderSheet({ links: [] });
 
     expect(await screen.findByText(/has no children linked yet/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add guardian' })).toBeDisabled();
+    const submit = screen.getByRole('button', { name: 'Add guardian' });
+    expect(submit).toBeEnabled();
+
+    await user.type(screen.getByLabelText(/^First name/), 'Ngozi');
+    await user.type(screen.getByLabelText(/^Surname/), 'Eze');
+    await user.type(screen.getByLabelText(/^Phone number/), '08031234567');
+    await user.click(submit);
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ studentIds: [] });
   });
 });

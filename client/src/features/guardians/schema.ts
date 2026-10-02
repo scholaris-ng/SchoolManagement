@@ -76,7 +76,12 @@ export const coGuardianSchema = z.object({
   lastName: z.string().trim().min(1, 'Surname is required').max(60),
   phone: phoneNumber,
   email: optionalEmail,
-  studentIds: z.array(z.string()).min(1, 'Select at least one child'),
+  /**
+   * May be empty: a guardian with no children on record has none to share.
+   * Where there *are* children to choose from, picking none is a mistake the
+   * sheet itself refuses, since it knows how many there were.
+   */
+  studentIds: z.array(z.string()),
   isPrimaryContact: z.boolean().default(false),
   isEmergencyContact: z.boolean().default(false),
   isFinanciallyResponsible: z.boolean().default(false),
