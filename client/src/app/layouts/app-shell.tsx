@@ -14,7 +14,7 @@ import { OfflineBanner } from '@/components/layout/offline-banner';
 import { useAuth } from '@/app/providers/auth-provider';
 import { isLocked } from '@/features/subscription/school-access';
 import { SubscriptionLockedFrame } from '@/features/subscription/subscription-locked-frame';
-import { SupportWidget } from '@/features/support/support-widget';
+// import { SupportWidget } from '@/features/support/support-widget';
 
 /**
  * The authenticated application frame — or, for a school whose trial or
@@ -119,7 +119,8 @@ function UnlockedShell() {
         </main>
       </div>
 
-      <SupportWidget />
+      {/* Replaced by the TestMate live chat widget (see client/index.html). */}
+      {/* <SupportWidget /> */}
     </div>
   );
 }
