@@ -16,7 +16,18 @@ export function SiteProgrammePage() {
   const programme = content.programmes.find((item) => item.slug === slug);
   const others = content.programmes.filter((item) => item.slug !== slug);
 
-  if (!programme) return <Navigate to={path(`schools/${content.programmes[0].slug}`)} replace />;
+  // A tenant with no authored programmes never links here (`site-nav.ts`
+  // builds its "what we offer" entry from `levels` instead when `programmes`
+  // is empty) — but the address is still typeable, so it still has to resolve
+  // to something rather than crash on an empty array's first entry.
+  if (!programme) {
+    return (
+      <Navigate
+        to={content.programmes[0] ? path(`schools/${content.programmes[0].slug}`) : path('')}
+        replace
+      />
+    );
+  }
 
   return (
     <>

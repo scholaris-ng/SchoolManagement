@@ -24,6 +24,8 @@ export interface PublicSchoolPage {
   website: WebsiteContent;
   news: NewsPost[];
   events: CalendarEvent[];
+  /** The school's own levels, in teaching order — what the site's "what we offer" section is built from. */
+  levels: { id: string; name: string }[];
 }
 
 /** The body the public application form posts. */

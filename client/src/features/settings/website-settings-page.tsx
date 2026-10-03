@@ -16,10 +16,11 @@ import {
   Switch,
 } from '@/components/ui/primitives';
 import { Button } from '@/components/ui/button';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
+import { SITE_ICON_OPTIONS } from '@/features/site/site-content';
 import { SettingsTabs } from './settings-tabs';
 
 const SOCIAL_PLATFORMS = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube', 'WhatsApp'];
@@ -166,11 +167,18 @@ export function WebsiteSettingsPage() {
       socialLinks: draft.socialLinks,
       testimonials: draft.testimonials,
       gallery: draft.gallery,
+      founder: draft.founder,
+      values: draft.values,
+      leadership: draft.leadership,
     });
     setDirty(false);
   };
 
   const fieldErrors = isApiError(update.error) ? update.error.fieldErrors() : {};
+  // Bound to a local rather than read through `draft` in each handler below:
+  // narrowing a property access does not survive into a callback, and the
+  // founder card's fields only exist while this is non-null anyway.
+  const founder = draft.founder;
   // The subdomain form (`siteUrlForSlug`) is the eventual address (spec
   // section 31), but it needs a real domain with wildcard DNS in front of it
   // that isn't set up yet — this is the one that actually resolves today.
@@ -330,6 +338,265 @@ export function WebsiteSettingsPage() {
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Founder</CardTitle>
+            <CardDescription>
+              The one person the public page names as founder or proprietor, if the school has one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {founder ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="founder-name" required>
+                      Name
+                    </Label>
+                    <Input
+                      data-cy="website-settings-founder-name"
+                      id="founder-name"
+                      value={founder.name}
+                      onChange={(event) => set({ founder: { ...founder, name: event.target.value } })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="founder-role">Role</Label>
+                    <Input
+                      data-cy="website-settings-founder-role"
+                      id="founder-role"
+                      value={founder.role}
+                      placeholder="Founder, Proprietor, Proprietress…"
+                      onChange={(event) => set({ founder: { ...founder, role: event.target.value } })}
+                    />
+                  </div>
+                </div>
+
+                <FileUpload
+                  preset="image"
+                  purpose="website-founder"
+                  variant="avatar"
+                  label="Photograph"
+                  description="Shown beside the About copy. A portrait works best."
+                  value={founder.photoUrl ? { url: founder.photoUrl } : null}
+                  onUploaded={(file) => set({ founder: { ...founder, photoUrl: file.downloadUrl } })}
+                  onRemove={() => set({ founder: { ...founder, photoUrl: null } })}
+                />
+
+                <Button
+                  data-cy="settings-website-settings-remove-founder"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => set({ founder: null })}
+                >
+                  <Trash2 />
+                  Remove founder
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  No founder named. The public page leaves the section out entirely.
+                </p>
+                <Button
+                  data-cy="settings-website-settings-add-founder"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => set({ founder: { name: '', role: '', photoUrl: null } })}
+                >
+                  <Plus />
+                  Name a founder
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>Core values</CardTitle>
+              <CardDescription>What the school stands for, each shown with an icon.</CardDescription>
+            </div>
+            <Button
+              data-cy="settings-website-settings-add-value"
+              variant="outline"
+              size="sm"
+              onClick={() => set({ values: [...draft.values, { name: '', icon: 'sparkles' }] })}
+            >
+              <Plus />
+              Add value
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {draft.values.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No values yet.</p>
+            ) : (
+              draft.values.map((value, index) => (
+                <div key={index} className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[12rem] flex-1 space-y-1.5">
+                    <Label htmlFor={`value-name-${index}`} required>
+                      Value
+                    </Label>
+                    <Input
+                      data-cy="website-settings-value-name"
+                      id={`value-name-${index}`}
+                      value={value.name}
+                      placeholder="Integrity, Excellence, Service…"
+                      onChange={(event) =>
+                        set({
+                          values: draft.values.map((entry, position) =>
+                            position === index ? { ...entry, name: event.target.value } : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="w-40 space-y-1.5">
+                    <Label htmlFor={`value-icon-${index}`}>Icon</Label>
+                    <NativeSelect
+                      data-cy="website-settings-value-icon"
+                      id={`value-icon-${index}`}
+                      value={value.icon}
+                      onChange={(event) =>
+                        set({
+                          values: draft.values.map((entry, position) =>
+                            position === index ? { ...entry, icon: event.target.value } : entry,
+                          ),
+                        })
+                      }
+                    >
+                      {SITE_ICON_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    data-cy={`website-value-remove-${index}`}
+                    aria-label={`Remove ${value.name || 'value'}`}
+                    onClick={() =>
+                      set({ values: draft.values.filter((_, position) => position !== index) })
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>Leadership team</CardTitle>
+              <CardDescription>The people running the school, as families should meet them.</CardDescription>
+            </div>
+            <Button
+              data-cy="settings-website-settings-add-leader"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                set({
+                  leadership: [
+                    ...draft.leadership,
+                    { id: `tmp_${Date.now()}`, name: '', role: '', photoUrl: null },
+                  ],
+                })
+              }
+            >
+              <Plus />
+              Add member
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {draft.leadership.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No leadership team yet.</p>
+            ) : (
+              draft.leadership.map((person, index) => (
+                <div key={person.id} className="space-y-3 rounded-lg border border-border p-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`leader-name-${index}`} required>
+                        Name
+                      </Label>
+                      <Input
+                        data-cy="website-settings-leader-name"
+                        id={`leader-name-${index}`}
+                        value={person.name}
+                        onChange={(event) =>
+                          set({
+                            leadership: draft.leadership.map((entry, position) =>
+                              position === index ? { ...entry, name: event.target.value } : entry,
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`leader-role-${index}`}>Role</Label>
+                      <Input
+                        data-cy="website-settings-leader-role"
+                        id={`leader-role-${index}`}
+                        value={person.role}
+                        placeholder="Head teacher, Vice principal…"
+                        onChange={(event) =>
+                          set({
+                            leadership: draft.leadership.map((entry, position) =>
+                              position === index ? { ...entry, role: event.target.value } : entry,
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <FileUpload
+                    preset="image"
+                    purpose="website-leadership"
+                    variant="avatar"
+                    label="Photograph"
+                    value={person.photoUrl ? { url: person.photoUrl } : null}
+                    data-cy={`upload-website-leadership-${index}`}
+                    onUploaded={(file) =>
+                      set({
+                        leadership: draft.leadership.map((entry, position) =>
+                          position === index ? { ...entry, photoUrl: file.downloadUrl } : entry,
+                        ),
+                      })
+                    }
+                    onRemove={() =>
+                      set({
+                        leadership: draft.leadership.map((entry, position) =>
+                          position === index ? { ...entry, photoUrl: null } : entry,
+                        ),
+                      })
+                    }
+                  />
+
+                  <Button
+                    data-cy="settings-website-settings-remove-leader"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      set({
+                        leadership: draft.leadership.filter((_, position) => position !== index),
+                      })
+                    }
+                  >
+                    <Trash2 />
+                    Remove
+                  </Button>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 

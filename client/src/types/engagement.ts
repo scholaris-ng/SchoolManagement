@@ -132,6 +132,11 @@ export interface WebsiteContent {
   socialLinks: { platform: string; url: string }[];
   testimonials: { id: string; author: string; role: string; quote: string }[];
   gallery: { id: string; url: string; caption?: string | null }[];
+  /** The school's own proprietor or founder — one prominent figure, or none yet. */
+  founder: { name: string; role: string; photoUrl?: string | null } | null;
+  /** What the school stands for, each paired with one of the site's own icon keys. */
+  values: { name: string; icon: string }[];
+  leadership: { id: string; name: string; role: string; photoUrl?: string | null }[];
   updatedAt: string;
 }
 

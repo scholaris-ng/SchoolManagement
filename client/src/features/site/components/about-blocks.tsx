@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Compass, Flag, HeartHandshake, Telescope } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useSite } from '../site-context';
 import { Container, Reveal, Section, SectionHeading, SiteIcon, SiteImage } from './site-ui';
 
@@ -15,16 +16,27 @@ import { Container, Reveal, Section, SectionHeading, SiteIcon, SiteImage } from 
 export function AboutIntro({ showReadMore = false }: { showReadMore?: boolean }) {
   const { content, path } = useSite();
   const { about } = content;
+  const hasFounder = Boolean(about.founder.name);
 
   return (
     <Section>
       <Container>
-        <p className="site-eyebrow">Offers</p>
-        <p className="site-display mt-3 max-w-3xl text-[1.25rem] leading-snug text-[var(--site-ink)]">
-          {content.offers}
-        </p>
+        {content.offers && (
+          <>
+            <p className="site-eyebrow">Offers</p>
+            <p className="site-display mt-3 max-w-3xl text-[1.25rem] leading-snug text-[var(--site-ink)]">
+              {content.offers}
+            </p>
+          </>
+        )}
 
-        <div className="mt-12 grid gap-12 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
+        <div
+          className={cn(
+            'grid gap-12 lg:gap-16',
+            content.offers ? 'mt-12' : '',
+            hasFounder ? 'lg:grid-cols-[1.4fr_1fr]' : '',
+          )}
+        >
           <Reveal>
             <h2 className="text-[1.75rem] sm:text-[2.125rem]">{about.title}</h2>
             <div className="mt-5 space-y-4">
@@ -42,24 +54,29 @@ export function AboutIntro({ showReadMore = false }: { showReadMore?: boolean })
             )}
           </Reveal>
 
-          <Reveal delayMs={80}>
-            <figure className="site-card overflow-hidden">
-              {about.founder.photo && (
-                <SiteImage
-                  image={about.founder.photo}
-                  className="aspect-[4/3] w-full object-cover object-top"
-                />
-              )}
-              <figcaption className="p-6">
-                <p className="site-display text-lg font-semibold text-[var(--site-ink)]">
-                  {about.founder.name}
-                </p>
-                <p className="mt-1 text-sm font-medium text-[var(--site-accent)]">
-                  {about.founder.role}
-                </p>
-              </figcaption>
-            </figure>
-          </Reveal>
+          {/* No admin path exists yet to name a founder or principal for a
+              school that isn't AB.10 — this stays hidden until one does,
+              rather than show an empty name and role. */}
+          {hasFounder && (
+            <Reveal delayMs={80}>
+              <figure className="site-card overflow-hidden">
+                {about.founder.photo && (
+                  <SiteImage
+                    image={about.founder.photo}
+                    className="aspect-[4/3] w-full object-cover object-top"
+                  />
+                )}
+                <figcaption className="p-6">
+                  <p className="site-display text-lg font-semibold text-[var(--site-ink)]">
+                    {about.founder.name}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-[var(--site-accent)]">
+                    {about.founder.role}
+                  </p>
+                </figcaption>
+              </figure>
+            </Reveal>
+          )}
         </div>
       </Container>
     </Section>
@@ -72,28 +89,37 @@ export function ExcursionsBlock() {
   const { content } = useSite();
   const { about } = content;
 
+  // No admin path exists yet to write this section for a school that isn't
+  // AB.10 — stays hidden entirely rather than show an empty heading and a
+  // photo strip with nothing in it.
+  if (about.images.length === 0 && !about.excursions.title && !about.excursions.body) return null;
+
   return (
     <Section tone="canvas">
       <Container>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {about.images.map((image) => (
-            <SiteImage
-              key={image.src}
-              image={image}
-              className="aspect-[4/3] w-full rounded-xl object-cover"
-            />
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-col gap-6 rounded-2xl bg-white p-7 sm:flex-row sm:items-center sm:justify-between sm:p-9">
-          <div className="max-w-2xl">
-            <h2 className="text-[1.5rem] sm:text-[1.75rem]">{about.excursions.title}</h2>
-            <p className="site-lede mt-3">{about.excursions.body}</p>
+        {about.images.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {about.images.map((image) => (
+              <SiteImage
+                key={image.src}
+                image={image}
+                className="aspect-[4/3] w-full rounded-xl object-cover"
+              />
+            ))}
           </div>
-          <a href="#becomeastudent" className="site-btn site-btn--primary shrink-0">
-            Get Started Now
-          </a>
-        </div>
+        )}
+
+        {(about.excursions.title || about.excursions.body) && (
+          <div className="mt-10 flex flex-col gap-6 rounded-2xl bg-white p-7 sm:flex-row sm:items-center sm:justify-between sm:p-9">
+            <div className="max-w-2xl">
+              <h2 className="text-[1.5rem] sm:text-[1.75rem]">{about.excursions.title}</h2>
+              <p className="site-lede mt-3">{about.excursions.body}</p>
+            </div>
+            <a href="#becomeastudent" className="site-btn site-btn--primary shrink-0">
+              Get Started Now
+            </a>
+          </div>
+        )}
       </Container>
     </Section>
   );
@@ -105,12 +131,18 @@ export function EthosBlock() {
   const { content } = useSite();
   const { about } = content;
 
+  // Vision and mission already come from `WebsiteContent` the moment a school
+  // fills them in; philosophy and aspiration have no field of their own yet,
+  // so a pillar with nothing to say just does not appear, rather than
+  // standing empty next to the two that do.
   const pillars = [
     { key: 'Our Vision', text: about.vision, strap: undefined, Icon: Telescope },
     { key: 'Our Mision', text: about.mission, strap: undefined, Icon: Flag },
     { key: 'Our Philosophy', text: about.philosophy, strap: about.philosophyStrap, Icon: Compass },
     { key: 'Our Aspiration', text: about.aspiration, strap: undefined, Icon: HeartHandshake },
-  ];
+  ].filter((pillar) => pillar.text);
+
+  if (pillars.length === 0) return null;
 
   return (
     <Section>
@@ -143,6 +175,10 @@ export function EthosBlock() {
 export function SchoolFactsBlock() {
   const { content } = useSite();
   const { about } = content;
+
+  if (!about.location && about.religiousBelief.length === 0 && about.curriculum.length === 0) {
+    return null;
+  }
 
   return (
     <Section tone="canvas">
@@ -181,6 +217,8 @@ export function SchoolFactsBlock() {
 export function NameMeaningBlock() {
   const { content } = useSite();
 
+  if (content.about.nameMeaning.length === 0) return null;
+
   return (
     <Section tone="band">
       <Container>
@@ -216,6 +254,8 @@ export function NameMeaningBlock() {
 export function CoreValuesBlock() {
   const { content } = useSite();
 
+  if (content.about.values.length === 0) return null;
+
   return (
     <Section>
       <Container>
@@ -245,6 +285,8 @@ export function CoreValuesBlock() {
 export function ManagementBlock() {
   const { content } = useSite();
   const { management } = content.about;
+
+  if (management.people.length === 0) return null;
 
   return (
     <Section tone="canvas">

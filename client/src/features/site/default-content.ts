@@ -560,6 +560,10 @@ export const defaultContent: SiteContent = {
       ],
     },
   ],
+  // AB.10's two schools above are its own authored `programmes`, so the nav
+  // builds from those; this is only ever consulted for a tenant that has
+  // none of its own yet (`site-nav.ts`).
+  levels: [],
 
   testimonials: {
     title: 'AB.10 Schools Parents Say!',

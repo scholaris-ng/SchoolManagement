@@ -1,6 +1,7 @@
 import { AppError } from '../../../shared/errors/AppError';
 import type { RequestContext } from '../../../shared/types/context';
 import { AuditService } from '../../audit/services/audit.service';
+import { LevelRepository } from '../../academics/repositories/level.repository';
 import { SchoolRepository } from '../repositories/school.repository';
 import { WebsiteRepository } from '../repositories/website.repository';
 import type { SchoolBranding } from '../entities/school.entity';
@@ -22,6 +23,15 @@ export interface PublicSchoolPageDTO {
   website: WebsiteContent;
   news: unknown[];
   events: unknown[];
+  /**
+   * The school's own academic ladder — Creche through SSS 3, or Reception
+   * through Year 11, whatever it actually is — in teaching order. The site's
+   * "what we offer" section is built from this rather than from copy nobody
+   * has written yet: every school already has levels the moment it sets up
+   * its academic structure, long before it has had a chance to write a
+   * prospectus page for each one.
+   */
+  levels: { id: string; name: string }[];
 }
 
 export class WebsiteService {
@@ -30,6 +40,7 @@ export class WebsiteService {
   private constructor(
     private readonly website = WebsiteRepository.Instance,
     private readonly schools = SchoolRepository.Instance,
+    private readonly levels = LevelRepository.Instance,
     private readonly audit = AuditService.Instance,
   ) {}
 
@@ -58,6 +69,9 @@ export class WebsiteService {
       socialLinks: [],
       testimonials: [],
       gallery: [],
+      founder: null,
+      values: [],
+      leadership: [],
     });
   }
 
@@ -109,6 +123,8 @@ export class WebsiteService {
     // than half-rendered.
     if (!school) throw AppError.notFound('School');
 
+    const levels = await this.levels.fetchForSchool(website.schoolId, null);
+
     return {
       school: {
         name: school.name,
@@ -120,6 +136,7 @@ export class WebsiteService {
       website,
       news: [],
       events: [],
+      levels: levels.map((level) => ({ id: level.id, name: level.name })),
     };
   }
 }

@@ -45,6 +45,44 @@ export type SiteIconName =
   | 'users'
   | 'utensils';
 
+/**
+ * Every icon a value, feature or facility can be paired with, with a label a
+ * school administrator picks from rather than the bare key — used by the
+ * values editor on Settings → Website (`website-settings-page.tsx`), outside
+ * this feature folder, which is why this is plain data and not a component.
+ */
+export const SITE_ICON_OPTIONS: { value: SiteIconName; label: string }[] = [
+  { value: 'award', label: 'Award' },
+  { value: 'bed', label: 'Bed' },
+  { value: 'book', label: 'Book' },
+  { value: 'bus', label: 'Bus' },
+  { value: 'church', label: 'Church' },
+  { value: 'clipboard', label: 'Clipboard' },
+  { value: 'compass', label: 'Compass' },
+  { value: 'cpu', label: 'Computing' },
+  { value: 'droplet', label: 'Droplet' },
+  { value: 'flask', label: 'Science' },
+  { value: 'globe', label: 'Globe' },
+  { value: 'handshake', label: 'Handshake' },
+  { value: 'heart', label: 'Heart' },
+  { value: 'laptop', label: 'Laptop' },
+  { value: 'library', label: 'Library' },
+  { value: 'megaphone', label: 'Megaphone' },
+  { value: 'monitor', label: 'Monitor' },
+  { value: 'music', label: 'Music' },
+  { value: 'palette', label: 'Arts' },
+  { value: 'school', label: 'School' },
+  { value: 'shield', label: 'Shield' },
+  { value: 'shirt', label: 'Uniform' },
+  { value: 'sparkles', label: 'Sparkles' },
+  { value: 'stethoscope', label: 'Health' },
+  { value: 'target', label: 'Target' },
+  { value: 'trees', label: 'Trees' },
+  { value: 'trophy', label: 'Trophy' },
+  { value: 'users', label: 'Teamwork' },
+  { value: 'utensils', label: 'Meals' },
+];
+
 export interface SiteImage {
   src: string;
   alt: string;
@@ -164,6 +202,14 @@ export interface SiteContent {
     management: { title: string; intro: string; people: SitePerson[] };
   };
   programmes: SiteProgramme[];
+  /**
+   * The school's own levels, in teaching order — Creche through SSS 3 or
+   * whatever the school actually runs. The generic "what we offer" nav entry
+   * and section are built from this when `programmes` carries nothing of its
+   * own; a rich, authored `SiteProgramme` always takes precedence where one
+   * exists for a level.
+   */
+  levels: { id: string; name: string }[];
   testimonials: { title: string; intro: string; items: SiteTestimonial[] };
   news: { title: string; subtitle: string; items: SiteNewsItem[] };
   gallery: SiteImage[];

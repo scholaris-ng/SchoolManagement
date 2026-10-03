@@ -154,6 +154,14 @@ export function SectionHeading({
 
 /* -- Media ----------------------------------------------------------------- */
 
+/**
+ * The safe fallback for an image slot a page indexes into — `gallery[8]`, say
+ * — that may not have that many entries yet. `SiteImage` turns the empty
+ * `src` into its usual placeholder block; this is only ever what keeps the
+ * prop itself from being `undefined`.
+ */
+export const EMPTY_SITE_IMAGE: SiteImageData = { src: '', alt: '' };
+
 interface SiteImageProps
   extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt' | 'loading'> {
   image: SiteImageData;
@@ -166,11 +174,16 @@ interface SiteImageProps
  * An image that degrades to a brand-tinted block rather than a broken icon —
  * schools replace these photographs constantly, and a missing file should never
  * put a torn page in front of a prospective parent.
+ *
+ * An empty `src` — the placeholder content's way of saying "no photo yet" —
+ * goes straight to that same block, with no request ever sent: an empty `src`
+ * attribute resolves to the page's own URL, which would otherwise load this
+ * page a second time as an "image".
  */
 export function SiteImage({ image, className, eager = false, ...rest }: SiteImageProps) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
+  if (failed || !image.src) {
     return (
       <div
         className={cn('bg-[var(--site-brand-soft)]', className)}

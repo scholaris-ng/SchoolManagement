@@ -24,14 +24,16 @@ export function SiteHomePage() {
     <>
       <SiteHero />
 
-      <Section tone="canvas">
-        <Container>
-          <SectionHeading title={content.facilities.title} lede={content.facilities.intro} />
-          <div className="mt-12">
-            <FeatureGrid items={content.facilities.items} columns={4} />
-          </div>
-        </Container>
-      </Section>
+      {content.facilities.items.length > 0 && (
+        <Section tone="canvas">
+          <Container>
+            <SectionHeading title={content.facilities.title} lede={content.facilities.intro} />
+            <div className="mt-12">
+              <FeatureGrid items={content.facilities.items} columns={4} />
+            </div>
+          </Container>
+        </Section>
+      )}
 
       <AboutIntro showReadMore />
       <ExcursionsBlock />
@@ -41,18 +43,20 @@ export function SiteHomePage() {
       <CoreValuesBlock />
       <ManagementBlock />
 
-      <Section>
-        <Container>
-          <SectionHeading title={content.testimonials.title} lede={content.testimonials.intro} />
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {content.testimonials.items.map((testimonial, index) => (
-              <Reveal key={testimonial.id} delayMs={index * 80} className="h-full">
-                <TestimonialCard testimonial={testimonial} />
-              </Reveal>
-            ))}
-          </div>
-        </Container>
-      </Section>
+      {content.testimonials.items.length > 0 && (
+        <Section>
+          <Container>
+            <SectionHeading title={content.testimonials.title} lede={content.testimonials.intro} />
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {content.testimonials.items.map((testimonial, index) => (
+                <Reveal key={testimonial.id} delayMs={index * 80} className="h-full">
+                  <TestimonialCard testimonial={testimonial} />
+                </Reveal>
+              ))}
+            </div>
+          </Container>
+        </Section>
+      )}
     </>
   );
 }

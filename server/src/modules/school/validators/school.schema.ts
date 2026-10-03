@@ -196,6 +196,29 @@ export const updateWebsiteSchema = z.object({
         )
         .max(100)
         .optional(),
+      founder: z
+        .object({
+          name: z.string().trim().min(1).max(120),
+          role: z.string().trim().max(120),
+          photoUrl: z.string().url().max(500).nullable().optional(),
+        })
+        .nullable()
+        .optional(),
+      values: z
+        .array(z.object({ name: z.string().trim().min(1).max(60), icon: z.string().trim().min(1).max(40) }))
+        .max(12)
+        .optional(),
+      leadership: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(60),
+            name: z.string().trim().min(1).max(120),
+            role: z.string().trim().max(120),
+            photoUrl: z.string().url().max(500).nullable().optional(),
+          }),
+        )
+        .max(30)
+        .optional(),
     })
     .strict(),
 });

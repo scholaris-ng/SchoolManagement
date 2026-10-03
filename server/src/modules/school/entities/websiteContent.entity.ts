@@ -20,6 +20,25 @@ export interface GalleryImage {
   caption?: string | null;
 }
 
+export interface Founder {
+  name: string;
+  role: string;
+  photoUrl?: string | null;
+}
+
+/** One line of what the school stands for — "Integrity", "Excellence" — paired with a picker icon. */
+export interface SiteValue {
+  name: string;
+  icon: string;
+}
+
+export interface LeadershipMember {
+  id: string;
+  name: string;
+  role: string;
+  photoUrl?: string | null;
+}
+
 /** The school's public marketing page (spec section 31). One row per school. */
 @Entity('website_content')
 export class WebsiteContent extends BaseEntity {
@@ -81,4 +100,19 @@ export class WebsiteContent extends BaseEntity {
 
   @Column({ type: 'jsonb', default: [] })
   gallery: GalleryImage[];
+
+  /**
+   * The school's own proprietor or founder — a single, prominent figure, the
+   * way AB.10's page features theirs. Nullable rather than a zero-value
+   * object: nothing on the public page should claim a school has a named
+   * founder until one has actually been entered.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  founder: Founder | null;
+
+  @Column({ type: 'jsonb', default: [] })
+  values: SiteValue[];
+
+  @Column({ type: 'jsonb', default: [] })
+  leadership: LeadershipMember[];
 }

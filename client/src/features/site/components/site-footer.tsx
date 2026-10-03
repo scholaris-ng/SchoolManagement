@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Facebook, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
 import { useSite } from '../site-context';
-import { Container } from './site-ui';
+import { Container, SiteImage } from './site-ui';
 
 /**
  * The footer, carrying the same three blocks the school's own site ends on:
@@ -18,17 +18,24 @@ export function SiteFooter() {
         <div>
           {/* Name and motto already open the page, in the header right above
               this; the footer's own brand mark is just the crest. */}
-          <img src={content.brand.crestUrl} alt={content.brand.name} className="size-12 object-contain" />
-          <p className="mt-5 text-sm leading-relaxed">{content.offers}</p>
-          <a
-            href={contact.facebook.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="mt-5 inline-flex items-center gap-2 rounded-md border border-white/20 px-3 py-1.5 text-xs font-medium text-white/80 hover:border-white/60 hover:text-white"
-          >
-            <Facebook className="size-3.5" aria-hidden="true" />
-            {contact.facebook.label}
-          </a>
+          {content.brand.crestUrl && (
+            <SiteImage
+              image={{ src: content.brand.crestUrl, alt: content.brand.name }}
+              className="size-12 object-contain"
+            />
+          )}
+          {content.offers && <p className="mt-5 text-sm leading-relaxed">{content.offers}</p>}
+          {contact.facebook.url && (
+            <a
+              href={contact.facebook.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-5 inline-flex items-center gap-2 rounded-md border border-white/20 px-3 py-1.5 text-xs font-medium text-white/80 hover:border-white/60 hover:text-white"
+            >
+              <Facebook className="size-3.5" aria-hidden="true" />
+              {contact.facebook.label}
+            </a>
+          )}
         </div>
 
         <div>
@@ -36,37 +43,48 @@ export function SiteFooter() {
             {contact.title}
           </h3>
           <ul className="mt-5 space-y-3">
-            <li className="flex gap-2.5 text-sm">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
-              <address className="not-italic leading-relaxed">{contact.address}</address>
-            </li>
-            <li className="flex gap-2.5 text-sm">
-              <Phone className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
-              <span className="flex flex-col">
-                {contact.phones.map((phone) => (
-                  <a key={phone} href={`tel:${phone}`} className="hover:text-white">
-                    {phone}
-                  </a>
-                ))}
-              </span>
-            </li>
-            <li className="flex gap-2.5 text-sm">
-              <MessageCircle className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
-              <a
-                href={`https://wa.me/${contact.whatsapp[0]}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="hover:text-white"
-              >
-                {contact.whatsapp[0]}
-              </a>
-            </li>
-            <li className="flex gap-2.5 text-sm">
-              <Mail className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
-              <a href={`mailto:${contact.email}`} className="hover:text-white">
-                {contact.email}
-              </a>
-            </li>
+            {contact.address && (
+              <li className="flex gap-2.5 text-sm">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
+                <address className="not-italic leading-relaxed">{contact.address}</address>
+              </li>
+            )}
+            {contact.phones.length > 0 && (
+              <li className="flex gap-2.5 text-sm">
+                <Phone className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
+                <span className="flex flex-col">
+                  {contact.phones.map((phone) => (
+                    <a key={phone} href={`tel:${phone}`} className="hover:text-white">
+                      {phone}
+                    </a>
+                  ))}
+                </span>
+              </li>
+            )}
+            {contact.whatsapp.length > 0 && (
+              <li className="flex gap-2.5 text-sm">
+                <MessageCircle
+                  className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]"
+                  aria-hidden="true"
+                />
+                <a
+                  href={`https://wa.me/${contact.whatsapp[0]}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hover:text-white"
+                >
+                  {contact.whatsapp[0]}
+                </a>
+              </li>
+            )}
+            {contact.email && (
+              <li className="flex gap-2.5 text-sm">
+                <Mail className="mt-0.5 size-4 shrink-0 text-[var(--site-gold)]" aria-hidden="true" />
+                <a href={`mailto:${contact.email}`} className="hover:text-white">
+                  {contact.email}
+                </a>
+              </li>
+            )}
           </ul>
         </div>
 
@@ -96,32 +114,34 @@ export function SiteFooter() {
         </div>
       </Container>
 
-      <div className="border-t border-white/10">
-        <Container className="py-6">
-          <p className="text-[0.6875rem] uppercase tracking-[0.16em] text-white/40">Subsidiaries</p>
-          <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-            {content.subsidiaries.map((subsidiary) =>
-              subsidiary.href ? (
-                <li key={subsidiary.name}>
-                  <a
-                    href={subsidiary.href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1.5 text-sm hover:text-white"
-                  >
+      {content.subsidiaries.length > 0 && (
+        <div className="border-t border-white/10">
+          <Container className="py-6">
+            <p className="text-[0.6875rem] uppercase tracking-[0.16em] text-white/40">Subsidiaries</p>
+            <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+              {content.subsidiaries.map((subsidiary) =>
+                subsidiary.href ? (
+                  <li key={subsidiary.name}>
+                    <a
+                      href={subsidiary.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1.5 text-sm hover:text-white"
+                    >
+                      {subsidiary.name}
+                      <ArrowUpRight className="size-3.5 opacity-60" aria-hidden="true" />
+                    </a>
+                  </li>
+                ) : (
+                  <li key={subsidiary.name} className="text-sm text-white/50">
                     {subsidiary.name}
-                    <ArrowUpRight className="size-3.5 opacity-60" aria-hidden="true" />
-                  </a>
-                </li>
-              ) : (
-                <li key={subsidiary.name} className="text-sm text-white/50">
-                  {subsidiary.name}
-                </li>
-              ),
-            )}
-          </ul>
-        </Container>
-      </div>
+                  </li>
+                ),
+              )}
+            </ul>
+          </Container>
+        </div>
+      )}
 
       <div className="border-t border-white/10">
         <Container className="flex flex-col gap-2 py-5 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
@@ -129,14 +149,16 @@ export function SiteFooter() {
             © {year} {content.brand.legalName}
           </p>
           <p className="flex items-center gap-4">
-            <a
-              href={footer.policyUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="hover:text-white"
-            >
-              School Policy
-            </a>
+            {footer.policyUrl && (
+              <a
+                href={footer.policyUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="hover:text-white"
+              >
+                School Policy
+              </a>
+            )}
             <span>Powered by Scholaris</span>
           </p>
         </Container>

@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { usePublicSchool } from '@/features/public/api';
 import type { PublicSchoolPage } from '@/features/public/api';
 import { defaultContent } from './default-content';
+import { placeholderContent } from './placeholder-content';
 import { siteSlugFromHost } from './site-host';
+import { SITE_ICON_OPTIONS, type SiteIconName } from './site-content';
 import type { SiteContent } from './site-content';
 
 /**
@@ -21,17 +23,31 @@ if (import.meta.hot) {
 }
 
 /**
+ * The one tenant `default-content.ts` is actually written for. AB.10's own
+ * `website_content` row carries almost none of its site's real copy — no
+ * tagline, no about text, no gallery — because that copy has always lived in
+ * code instead, verbatim from their real site. Swapping it for the neutral
+ * floor below would blank their live page, not fix anything, so this is the
+ * one identity check that keeps their page exactly as it is while every other
+ * school gets the generic floor.
+ *
+ * TODO(multi-tenant): temporary, and should not gain siblings. The real fix
+ * is migrating AB.10's copy into the same `WebsiteContent` fields every
+ * school already edits through Settings → Website, at which point this
+ * constant, `default-content.ts` and this whole comment go away together.
+ */
+const AB10_SLUG = 'ab10schools';
+
+/**
  * Resolves the content one public site renders.
  *
- * The shipped `defaultContent` is the floor: a school that has filled in
- * nothing still gets a complete page rather than a skeleton of empty sections.
- * Whatever the public API returns for the tenant is layered over the top, field
- * by field, so administrators can take ownership of the site one section at a
- * time instead of all at once.
- *
- * TODO(multi-tenant): while the site ships a single school's content, an
- * unrecognised slug still renders the default. Once the CMS is wired up this
- * should 404 instead — the overlay below is the only place that needs to change.
+ * The floor is `placeholderContent` — a neutral, unfinished-but-honest page —
+ * for every tenant except AB.10, whose own rich copy is `defaultContent`
+ * (see `AB10_SLUG` above). Whatever the public API returns for the tenant is
+ * layered over that floor, field by field, so administrators can take
+ * ownership of the site one section at a time instead of all at once; a
+ * section neither side has anything for simply does not render (see the
+ * empty-guards in `about-blocks.tsx`, `home-page.tsx` and `site-footer.tsx`).
  */
 
 interface SiteContextValue {
@@ -46,9 +62,9 @@ interface SiteContextValue {
   loading: boolean;
   /**
    * Set once loading finishes without a page to show — no such address, or
-   * the school has not published one. `content` is still the shipped
-   * default in this case; `SiteLayout` renders its own state instead of the
-   * template rather than let a visitor mistake the default for a real page.
+   * the school has not published one. `content` is still the neutral floor in
+   * this case; `SiteLayout` renders its own state instead of the template
+   * rather than let a visitor mistake the floor for a real page.
    */
   error: unknown;
 }
@@ -83,15 +99,15 @@ export function SiteContentProvider({ children }: { children: React.ReactNode })
     [hostSlug, routeSlug],
   );
 
-  const value = useMemo<SiteContextValue>(
-    () => ({
-      content: overlay(defaultContent, remote.data),
+  const value = useMemo<SiteContextValue>(() => {
+    const floor = remote.data?.website.slug === AB10_SLUG ? defaultContent : placeholderContent;
+    return {
+      content: overlay(floor, remote.data),
       path,
       loading: remote.isPending,
       error: remote.error,
-    }),
-    [remote.data, remote.isPending, remote.error, path],
-  );
+    };
+  }, [remote.data, remote.isPending, remote.error, path]);
 
   return <SiteContext.Provider value={value}>{children}</SiteContext.Provider>;
 }
@@ -101,7 +117,7 @@ export function SiteContentProvider({ children }: { children: React.ReactNode })
 function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteContent {
   if (!page) return base;
 
-  const { school, website, news } = page;
+  const { school, website, news, levels } = page;
 
   return {
     ...base,
@@ -125,12 +141,48 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
           ]
         : base.hero.slides,
     },
+    // The one-line "what the school offers" strap, wherever it appears —
+    // above `about.title` on the About page and the footer's brand column.
+    // `tagline` has carried this since Settings → Website shipped; nothing
+    // read it until now.
+    offers: website.tagline || base.offers,
     about: {
       ...base.about,
       body: website.about ? splitParagraphs(website.about) : base.about.body,
       vision: website.vision || base.about.vision,
       mission: website.mission || base.about.mission,
+      founder: website.founder
+        ? {
+            name: website.founder.name,
+            role: website.founder.role,
+            photo: website.founder.photoUrl
+              ? { src: website.founder.photoUrl, alt: website.founder.name }
+              : undefined,
+          }
+        : base.about.founder,
+      values: website.values.length
+        ? website.values.map((value) => ({ name: value.name, icon: asSiteIcon(value.icon) }))
+        : base.about.values,
+      management: website.leadership.length
+        ? {
+            // No admin field for this heading yet — a school with a real
+            // leadership list gets a plain, honest title rather than an empty
+            // one; AB.10's own richer wording stays untouched since their
+            // `leadership` column is empty and this branch never runs for them.
+            title: 'Our Leadership Team',
+            intro: '',
+            people: website.leadership.map((person) => ({
+              name: person.name,
+              role: person.role,
+              photo: person.photoUrl ? { src: person.photoUrl, alt: person.name } : undefined,
+            })),
+          }
+        : base.about.management,
     },
+    // Every level the school has set up in Academic setup, in teaching order
+    // — the generic stand-in for `programmes` that `site-nav.ts` builds
+    // "Schools" from when nothing richer has been authored (`buildNav`).
+    levels,
     gallery: website.gallery.length
       ? website.gallery.map((item) => ({ src: item.url, alt: item.caption ?? school.name }))
       : base.gallery,
@@ -145,7 +197,7 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
             author: post.authorName,
             image: post.coverImageUrl
               ? { src: post.coverImageUrl, alt: post.title }
-              : base.news.items[0].image,
+              : (base.news.items[0]?.image ?? { src: '', alt: '' }),
           })),
         }
       : base.news,
@@ -184,4 +236,16 @@ function formatDateLabel(iso: string): string {
 function findFacebook(links: { platform: string; url: string }[]) {
   const match = links.find((link) => link.platform.toLowerCase() === 'facebook');
   return match ? { label: match.platform, url: match.url } : undefined;
+}
+
+const VALID_SITE_ICONS = new Set(SITE_ICON_OPTIONS.map((option) => option.value));
+
+/**
+ * A value's icon travels through the database as a plain string, validated
+ * only at the moment it was written — if the site's own icon set ever drops
+ * one that a school already picked, this is what stands between a stale key
+ * and `SiteIcon` (`site-ui.tsx`) silently rendering nothing for it.
+ */
+function asSiteIcon(value: string): SiteIconName {
+  return VALID_SITE_ICONS.has(value as SiteIconName) ? (value as SiteIconName) : 'sparkles';
 }
