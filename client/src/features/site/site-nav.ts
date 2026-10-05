@@ -11,10 +11,9 @@ import type { SiteContent } from './site-content';
  *
  * A school with none of that authored yet — every tenant but AB.10, today —
  * gets a menu built from what it actually has: its own levels stand in for
- * "Schools" (each one points at the admissions form, since there is no
- * per-level page yet to send it to instead), and an item with nothing behind
- * it — Schools with no levels defined, Subsidiaries with none named — is left
- * out rather than shown empty.
+ * "Schools", each one leading to its own page (`programme-page.tsx` resolves
+ * both kinds by slug). An item with nothing behind it — Schools with no levels
+ * defined, Subsidiaries with none named — is left out rather than shown empty.
  */
 
 export interface SiteNavChild {
@@ -85,13 +84,14 @@ function buildSchoolsItem(content: SiteContent): SiteNavItem | null {
     };
   }
 
-  if (content.levels.length > 0) {
+  const [first] = content.levels;
+  if (first) {
     return {
       label: 'What We Offer',
-      href: '#becomeastudent',
+      href: `schools/${first.slug}`,
       children: content.levels.map((level) => ({
         label: level.name,
-        href: '#becomeastudent',
+        href: `schools/${level.slug}`,
       })),
     };
   }

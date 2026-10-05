@@ -6,7 +6,7 @@ import { defaultContent } from './default-content';
 import { placeholderContent } from './placeholder-content';
 import { siteSlugFromHost } from './site-host';
 import { SITE_ICON_OPTIONS, type SiteIconName } from './site-content';
-import type { SiteContent } from './site-content';
+import type { SiteContent, SiteLevel } from './site-content';
 
 /**
  * Mixes a component (`SiteContentProvider`) with plain hooks (`useSite`,
@@ -182,7 +182,7 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
     // Every level the school has set up in Academic setup, in teaching order
     // — the generic stand-in for `programmes` that `site-nav.ts` builds
     // "Schools" from when nothing richer has been authored (`buildNav`).
-    levels,
+    levels: buildLevels(levels, website.levelPages),
     gallery: website.gallery.length
       ? website.gallery.map((item) => ({ src: item.url, alt: item.caption ?? school.name }))
       : base.gallery,
@@ -225,6 +225,50 @@ function overlay(base: SiteContent, page: PublicSchoolPage | undefined): SiteCon
 
 function splitParagraphs(value: string): string[] {
   return value.split(/\n{2,}/).filter(Boolean);
+}
+
+/**
+ * Pairs the school's academic ladder with whatever it has written about each
+ * rung. The ladder drives the list — a level is shown because the school
+ * teaches it, not because someone remembered to write copy for it.
+ */
+function buildLevels(
+  levels: PublicSchoolPage['levels'],
+  pages: PublicSchoolPage['website']['levelPages'],
+): SiteLevel[] {
+  const copy = new Map(pages.map((page) => [page.levelId, page]));
+  const taken = new Set<string>();
+
+  return levels.map((level) => {
+    const page = copy.get(level.id);
+    return {
+      id: level.id,
+      name: level.name,
+      slug: uniqueSlug(slugify(level.name), taken),
+      summary: page?.summary ?? '',
+      body: page?.body ? splitParagraphs(page.body) : [],
+      image: page?.imageUrl ? { src: page.imageUrl, alt: level.name } : undefined,
+    };
+  });
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Two levels can legitimately reduce to the same slug — "Junior Secondary" and
+ * "Junior-Secondary" both become `junior-secondary`. Suffixing the later one
+ * keeps every level's page reachable instead of letting the first swallow the
+ * rest, since the page is resolved by slug (`programme-page.tsx`).
+ */
+function uniqueSlug(base: string, taken: Set<string>): string {
+  const seed = base || 'level';
+  let slug = seed;
+  let suffix = 2;
+  while (taken.has(slug)) slug = `${seed}-${suffix++}`;
+  taken.add(slug);
+  return slug;
 }
 
 function formatDateLabel(iso: string): string {

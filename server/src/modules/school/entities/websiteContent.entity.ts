@@ -39,6 +39,21 @@ export interface LeadershipMember {
   photoUrl?: string | null;
 }
 
+/**
+ * A school's own words for one level of its academic ladder.
+ *
+ * Keyed by the level's id rather than copying its name: the ladder belongs to
+ * the academics module, and a level renamed there should carry its new name
+ * onto the public page rather than leave a stale one stranded here. A level
+ * with no row has simply not been written about yet.
+ */
+export interface LevelPage {
+  levelId: string;
+  summary: string;
+  body: string;
+  imageUrl?: string | null;
+}
+
 /** The school's public marketing page (spec section 31). One row per school. */
 @Entity('website_content')
 export class WebsiteContent extends BaseEntity {
@@ -115,4 +130,7 @@ export class WebsiteContent extends BaseEntity {
 
   @Column({ type: 'jsonb', default: [] })
   leadership: LeadershipMember[];
+
+  @Column({ name: 'level_pages', type: 'jsonb', default: [] })
+  levelPages: LevelPage[];
 }

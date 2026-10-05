@@ -137,6 +137,8 @@ export interface WebsiteContent {
   /** What the school stands for, each paired with one of the site's own icon keys. */
   values: { name: string; icon: string }[];
   leadership: { id: string; name: string; role: string; photoUrl?: string | null }[];
+  /** The school's own words for a level, keyed by its id in Academic setup. */
+  levelPages: { levelId: string; summary: string; body: string; imageUrl?: string | null }[];
   updatedAt: string;
 }
 

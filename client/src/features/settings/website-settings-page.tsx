@@ -21,6 +21,7 @@ import { FileUpload } from '@/components/forms/file-upload';
 import { Alert, ErrorState, LoadingState, Tooltip } from '@/components/ui/feedback';
 import { FormError, UnsavedChangesGuard } from '@/components/forms/form-actions';
 import { SITE_ICON_OPTIONS } from '@/features/site/site-content';
+import { useLevels } from '@/features/academics/api';
 import { SettingsTabs } from './settings-tabs';
 
 const SOCIAL_PLATFORMS = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube', 'WhatsApp'];
@@ -87,6 +88,10 @@ export function WebsiteSettingsPage() {
   const website = useWebsite();
   const school = useSchool();
   const update = useUpdateWebsite();
+  // The academic ladder drives this page's "what we offer" section, so it is
+  // read rather than re-entered here. Deliberately not part of the loading
+  // gate below: a school with no levels yet still has a website to edit.
+  const levels = useLevels();
 
   const [draft, setDraft] = useState<WebsiteContent | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -170,8 +175,27 @@ export function WebsiteSettingsPage() {
       founder: draft.founder,
       values: draft.values,
       leadership: draft.leadership,
+      levelPages: draft.levelPages,
     });
     setDirty(false);
+  };
+
+  /**
+   * Writes one level's copy, creating its row the first time anything is typed
+   * for it. A level the school has not written about has no row at all, which
+   * is what lets the public page tell "nothing written yet" apart from
+   * "deliberately blank".
+   */
+  const setLevelPage = (
+    levelId: string,
+    patch: Partial<WebsiteContent['levelPages'][number]>,
+  ) => {
+    const existing = draft.levelPages.some((page) => page.levelId === levelId);
+    set({
+      levelPages: existing
+        ? draft.levelPages.map((page) => (page.levelId === levelId ? { ...page, ...patch } : page))
+        : [...draft.levelPages, { levelId, summary: '', body: '', imageUrl: null, ...patch }],
+    });
   };
 
   const fieldErrors = isApiError(update.error) ? update.error.fieldErrors() : {};
@@ -489,6 +513,75 @@ export function WebsiteSettingsPage() {
                   </Button>
                 </div>
               ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>What we offer</CardTitle>
+            <CardDescription>
+              Each level you teach gets its own page. The list comes from Academic setup — write
+              what families should know about each one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {levels.isPending ? (
+              <p className="text-sm text-muted-foreground">Loading levels…</p>
+            ) : (levels.data?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No levels yet. Add them under Academic setup and they will appear here, each with
+                its own page on the public site.
+              </p>
+            ) : (
+              levels.data?.map((level) => {
+                const page = draft.levelPages.find((entry) => entry.levelId === level.id);
+                return (
+                  <div key={level.id} className="space-y-3 rounded-lg border border-border p-3">
+                    <p className="text-sm font-medium">{level.name}</p>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`level-summary-${level.id}`}>Summary</Label>
+                      <Input
+                        data-cy="website-settings-level-summary"
+                        id={`level-summary-${level.id}`}
+                        value={page?.summary ?? ''}
+                        placeholder="One line, shown under the heading and on cards"
+                        onChange={(event) =>
+                          setLevelPage(level.id, { summary: event.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`level-body-${level.id}`}>Details</Label>
+                      <Textarea
+                        data-cy="website-settings-level-body"
+                        id={`level-body-${level.id}`}
+                        rows={4}
+                        value={page?.body ?? ''}
+                        placeholder="What the years cover, how they are taught, what a day looks like…"
+                        onChange={(event) => setLevelPage(level.id, { body: event.target.value })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave a blank line between paragraphs.
+                      </p>
+                    </div>
+
+                    <FileUpload
+                      preset="image"
+                      purpose="website-level"
+                      entityId={level.id}
+                      label={`Image for ${level.name}`}
+                      description="Shown across the top of this level's page."
+                      value={page?.imageUrl ? { url: page.imageUrl } : null}
+                      data-cy={`upload-website-level-${level.id}`}
+                      onUploaded={(file) => setLevelPage(level.id, { imageUrl: file.downloadUrl })}
+                      onRemove={() => setLevelPage(level.id, { imageUrl: null })}
+                    />
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>

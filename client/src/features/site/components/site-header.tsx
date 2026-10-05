@@ -43,6 +43,9 @@ export function SiteHeader() {
   }, [drawerOpen]);
 
   const isActive = (href: string) => {
+    // A bare anchor is a place on the page the visitor is already on, not a
+    // page of its own — it is never the one they are "on".
+    if (isAnchor(href)) return false;
     const target = path(href.split('#')[0]);
     if (href === '') return location.pathname === target || location.pathname === `${target}/`;
     return location.pathname.startsWith(target);
@@ -132,15 +135,15 @@ export function SiteHeader() {
           <nav aria-label="Main" className="ml-auto hidden items-center gap-6 xl:flex">
             {nav.map((item) => (
               <div key={item.label} className="site-menu relative">
-                <Link
-                  to={path(item.href)}
+                <SiteNavLink
+                  href={item.href}
                   className="site-nav-link"
                   data-active={isActive(item.href)}
                   aria-haspopup={item.children ? 'true' : undefined}
                 >
                   {item.label}
                   {item.children && <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />}
-                </Link>
+                </SiteNavLink>
 
                 {item.children && (
                   <div className="site-menu__panel absolute left-1/2 top-full w-[270px] -translate-x-1/2 pt-3">
@@ -178,8 +181,43 @@ export function SiteHeader() {
   );
 }
 
-function MenuChild({ child }: { child: SiteNavChild }) {
+/** A menu entry that points at a place on the current page rather than a route. */
+function isAnchor(href: string): boolean {
+  return href.startsWith('#');
+}
+
+/**
+ * One menu entry's clickable element.
+ *
+ * A bare `#hash` renders as a plain anchor rather than a `Link`, because the
+ * router only scrolls when the location actually changes (`site-layout.tsx`).
+ * Every generic "what we offer" level points at the same registration form
+ * (`site-nav.ts`), so as a `Link` the first click would scroll and every click
+ * after it would silently do nothing. The browser re-scrolls on each one.
+ */
+function SiteNavLink({
+  href,
+  children,
+  ...rest
+}: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { path } = useSite();
+
+  if (isAnchor(href)) {
+    return (
+      <a href={href} {...rest}>
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <Link to={path(href)} {...rest}>
+      {children}
+    </Link>
+  );
+}
+
+function MenuChild({ child, onNavigate }: { child: SiteNavChild; onNavigate?: () => void }) {
   const className = 'flex items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-[var(--site-ink)] hover:bg-[var(--site-brand-soft)]';
 
   if (child.external) {
@@ -189,7 +227,13 @@ function MenuChild({ child }: { child: SiteNavChild }) {
       return <span className={`${className} cursor-default text-[var(--site-muted)]`}>{child.label}</span>;
     }
     return (
-      <a href={child.href} target="_blank" rel="noreferrer noopener" className={className}>
+      <a
+        href={child.href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className={className}
+        onClick={onNavigate}
+      >
         {child.label}
         <ExternalLink className="size-3.5 opacity-50" aria-hidden="true" />
       </a>
@@ -197,16 +241,16 @@ function MenuChild({ child }: { child: SiteNavChild }) {
   }
 
   return (
-    <Link to={path(child.href)} className={className}>
+    <SiteNavLink href={child.href} className={className} onClick={onNavigate}>
       {child.label}
-    </Link>
+    </SiteNavLink>
   );
 }
 
 /* -- Drawer ---------------------------------------------------------------- */
 
 function MobileDrawer({ onClose }: { onClose: () => void }) {
-  const { content, path } = useSite();
+  const { content } = useSite();
   const nav = buildNav(content);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -246,12 +290,17 @@ function MobileDrawer({ onClose }: { onClose: () => void }) {
             {nav.map((item) => (
               <li key={item.label} className="border-b border-[var(--site-line)]/70 last:border-0">
                 <div className="flex items-center">
-                  <Link
-                    to={path(item.href)}
+                  {/* Closed here rather than by the location effect in
+                      `SiteHeader`: an anchor entry never changes the location,
+                      so nothing would close the drawer over the form it just
+                      scrolled to. */}
+                  <SiteNavLink
+                    href={item.href}
+                    onClick={onClose}
                     className="flex-1 px-3 py-3.5 text-[0.9375rem] font-medium text-[var(--site-ink)]"
                   >
                     {item.label}
-                  </Link>
+                  </SiteNavLink>
                   {item.children && (
                     <button
                       type="button"
@@ -271,7 +320,7 @@ function MobileDrawer({ onClose }: { onClose: () => void }) {
                   <ul className="pb-2">
                     {item.children.map((child, index) => (
                       <li key={`${child.label}-${index}`} className="px-3">
-                        <MenuChild child={child} />
+                        <MenuChild child={child} onNavigate={onClose} />
                       </li>
                     ))}
                   </ul>

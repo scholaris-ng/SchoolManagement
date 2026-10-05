@@ -1,33 +1,134 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useSite } from '../site-context';
+import type { SiteLevel, SiteProgramme } from '../site-content';
 import { FeatureGrid, PageHero, PhotoGrid } from '../components/site-sections';
-import { Container, Reveal, Section, SectionHeading, SiteImage } from '../components/site-ui';
+import {
+  Container,
+  EMPTY_SITE_IMAGE,
+  Reveal,
+  Section,
+  SectionHeading,
+  SiteImage,
+} from '../components/site-ui';
 
 /**
- * One school section: the High School, or the combined Nursery, Primary, Creche
- * and After School. The school's own menu lists three entries for these two
- * pages, and both entries for the younger years land here.
+ * One section of a school, resolved by slug.
+ *
+ * Two kinds of thing live at this address. AB.10 has authored `programmes`,
+ * rich enough to carry a staff lead, a feature grid and a photo wall. Every
+ * other tenant has `levels` instead — its real academic ladder, with whatever
+ * it has written about each rung so far — which gets the plainer view below.
+ * A level is listed because the school teaches it, so its page has to stand up
+ * before anyone has written a word about it.
  */
 export function SiteProgrammePage() {
   const { programme: slug } = useParams<{ programme: string }>();
   const { content, path } = useSite();
 
   const programme = content.programmes.find((item) => item.slug === slug);
-  const others = content.programmes.filter((item) => item.slug !== slug);
+  const level = content.levels.find((item) => item.slug === slug);
 
-  // A tenant with no authored programmes never links here (`site-nav.ts`
-  // builds its "what we offer" entry from `levels` instead when `programmes`
-  // is empty) — but the address is still typeable, so it still has to resolve
-  // to something rather than crash on an empty array's first entry.
-  if (!programme) {
-    return (
-      <Navigate
-        to={content.programmes[0] ? path(`schools/${content.programmes[0].slug}`) : path('')}
-        replace
+  if (programme) return <ProgrammeView programme={programme} />;
+  if (level) return <LevelView level={level} />;
+
+  // The address is typeable whether or not anything answers to it, so it
+  // resolves to the first thing this tenant does have rather than crashing on
+  // an empty array's first entry.
+  const fallback = content.programmes[0]
+    ? path(`schools/${content.programmes[0].slug}`)
+    : content.levels[0]
+      ? path(`schools/${content.levels[0].slug}`)
+      : path('');
+
+  return <Navigate to={fallback} replace />;
+}
+
+/** One level of the academic ladder, for a school with no authored programmes. */
+function LevelView({ level }: { level: SiteLevel }) {
+  const { content, path } = useSite();
+  const others = content.levels.filter((item) => item.slug !== level.slug);
+
+  return (
+    <>
+      <PageHero
+        title={level.name}
+        lede={level.summary}
+        image={level.image ?? EMPTY_SITE_IMAGE}
+        crumbs={[{ label: level.name }]}
       />
-    );
-  }
+
+      <Section>
+        <Container className="max-w-3xl">
+          <Reveal>
+            {level.body.length > 0 ? (
+              <div className="space-y-4">
+                {level.body.map((paragraph) => (
+                  <p key={paragraph.slice(0, 40)} className="site-lede">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              // Nothing written for this level yet. Saying so plainly beats an
+              // empty page, and the form below every page is the one thing a
+              // visitor can still usefully do from here.
+              <p className="site-lede">
+                We haven’t published the details for {level.name} yet. You are welcome to apply or
+                get in touch, and we will tell you everything you need to know.
+              </p>
+            )}
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href="#becomeastudent" className="site-btn site-btn--primary">
+                Apply to {level.name}
+              </a>
+              <Link to={path('contact')} className="site-btn site-btn--outline">
+                Contact us
+              </Link>
+            </div>
+          </Reveal>
+        </Container>
+      </Section>
+
+      {others.length > 0 && (
+        <Section tone="canvas">
+          <Container>
+            <SectionHeading title="What else we offer" />
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {others.map((other) => (
+                <Link
+                  key={other.slug}
+                  to={path(`schools/${other.slug}`)}
+                  className="site-card site-card--hover group p-5"
+                >
+                  <h3 className="text-lg">{other.name}</h3>
+                  {other.summary && (
+                    <p className="mt-1 line-clamp-2 text-sm text-[var(--site-body)]">
+                      {other.summary}
+                    </p>
+                  )}
+                  <span className="site-inline-link mt-2 text-sm">
+                    Explore
+                    <ArrowRight
+                      className="size-3.5 transition-transform group-hover:translate-x-1"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Container>
+        </Section>
+      )}
+    </>
+  );
+}
+
+/** AB.10's own authored section, unchanged. */
+function ProgrammeView({ programme }: { programme: SiteProgramme }) {
+  const { content, path } = useSite();
+  const others = content.programmes.filter((item) => item.slug !== programme.slug);
 
   return (
     <>

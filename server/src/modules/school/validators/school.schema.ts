@@ -219,6 +219,21 @@ export const updateWebsiteSchema = z.object({
         )
         .max(30)
         .optional(),
+      // Unlike the lists above, a row here is addressed by a level that
+      // already exists rather than named by the administrator, so only
+      // `levelId` is required — a level may legitimately carry a photograph
+      // and no copy yet, or the reverse.
+      levelPages: z
+        .array(
+          z.object({
+            levelId: z.string().trim().min(1).max(60),
+            summary: z.string().trim().max(400),
+            body: z.string().trim().max(20_000),
+            imageUrl: z.string().url().max(500).nullable().optional(),
+          }),
+        )
+        .max(40)
+        .optional(),
     })
     .strict(),
 });

@@ -72,6 +72,7 @@ export class WebsiteService {
       founder: null,
       values: [],
       leadership: [],
+      levelPages: [],
     });
   }
 

@@ -154,6 +154,24 @@ export interface SiteProgramme {
   gallery: SiteImage[];
 }
 
+/**
+ * One level of the school's academic ladder, as the public site shows it.
+ *
+ * The id and name come from Academic setup; the slug is derived from the name
+ * so a level's page has an address without anyone having to invent one, and
+ * the copy is whatever the school has written for it so far — a level nobody
+ * has written about yet is still listed, still has a page, and simply says
+ * less on it.
+ */
+export interface SiteLevel {
+  id: string;
+  name: string;
+  slug: string;
+  summary: string;
+  body: string[];
+  image?: SiteImage;
+}
+
 export interface SiteTestimonial {
   id: string;
   quote: string;
@@ -205,11 +223,11 @@ export interface SiteContent {
   /**
    * The school's own levels, in teaching order — Creche through SSS 3 or
    * whatever the school actually runs. The generic "what we offer" nav entry
-   * and section are built from this when `programmes` carries nothing of its
+   * and its pages are built from this when `programmes` carries nothing of its
    * own; a rich, authored `SiteProgramme` always takes precedence where one
    * exists for a level.
    */
-  levels: { id: string; name: string }[];
+  levels: SiteLevel[];
   testimonials: { title: string; intro: string; items: SiteTestimonial[] };
   news: { title: string; subtitle: string; items: SiteNewsItem[] };
   gallery: SiteImage[];
