@@ -34,22 +34,25 @@ function signedInWith(school: Partial<SchoolAccess>, person: { canManageSubscrip
 afterEach(cleanup);
 
 describe('SchoolPlanBadge', () => {
-  it('shows a trial’s plan and how long it has left', () => {
+  it('shows a trial’s plan, how long it has left, and when it is next due', () => {
     signedInWith({ plan: 'TRIAL', daysLeft: 12 });
     render(<SchoolPlanBadge />);
 
     expect(screen.getByText(/Free trial/)).toBeInTheDocument();
     expect(screen.getByText('12 days left')).toBeInTheDocument();
+    expect(screen.getByText('Next due 2 Oct 2026')).toBeInTheDocument();
     expect(screen.queryByText(/contact admin/i)).not.toBeInTheDocument();
     // The school's own name belongs to the sidebar and account menu, not the header.
     expect(screen.queryByText('Brightfield')).not.toBeInTheDocument();
   });
 
-  it('keeps a healthy paid plan out of the header', () => {
+  it('shows a healthy paid plan’s next due date in the header, without a countdown', () => {
     signedInWith({ plan: 'ACTIVE', endsAt: '2026-10-18T12:00:00.000Z', daysLeft: 28 });
-    const { container } = render(<SchoolPlanBadge />);
+    render(<SchoolPlanBadge />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText(/Active plan/)).toBeInTheDocument();
+    expect(screen.getByText('Next due 18 Oct 2026')).toBeInTheDocument();
+    expect(screen.queryByText(/days left/)).not.toBeInTheDocument();
   });
 
   it('warns in the last few days, and reads the singular correctly on the last one', () => {
@@ -66,6 +69,7 @@ describe('SchoolPlanBadge', () => {
 
     expect(screen.getByText(/Active plan/)).toBeInTheDocument();
     expect(screen.getByText('2 days left')).toBeInTheDocument();
+    expect(screen.getByText('Next due 2 Oct 2026')).toBeInTheDocument();
   });
 
   it('turns into the one button that matters once a school’s trial has ended', () => {
@@ -100,6 +104,8 @@ describe('SchoolPlanBadge', () => {
 
     expect(screen.getByText(/^Ended /)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /contact admin/i })).not.toBeInTheDocument();
+    // An ended plan has no "next" due date to promise.
+    expect(screen.queryByText(/next due/i)).not.toBeInTheDocument();
   });
 
   it('shows nothing from an API that predates subscriptions', () => {
@@ -119,7 +125,15 @@ describe('SchoolPlanSummary', () => {
 
     expect(screen.getByText('Brightfield Academy')).toBeInTheDocument();
     expect(screen.getByText(/Active plan/)).toBeInTheDocument();
-    expect(screen.getByText('Valid until 18 Oct 2026')).toBeInTheDocument();
+    expect(screen.getByText('Next due 18 Oct 2026')).toBeInTheDocument();
+  });
+
+  it('puts a trial’s countdown and its next due date on separate lines', () => {
+    signedInWith({ plan: 'TRIAL', daysLeft: 12 });
+    render(<SchoolPlanSummary />);
+
+    expect(screen.getByText('12 days left')).toBeInTheDocument();
+    expect(screen.getByText('Next due 2 Oct 2026')).toBeInTheDocument();
   });
 
   it('still names the school when the API predates subscriptions', () => {

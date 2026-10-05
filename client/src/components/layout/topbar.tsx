@@ -131,8 +131,8 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   <p className="truncate text-sm font-medium">{user?.displayName}</p>
                   <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
                 </div>
-                {/* The school and its plan live here rather than in the header,
-                    so they read the same on every screen size. */}
+                {/* The school and its plan, with the next due date, live here as
+                    well as in the header, so they read the same on every screen size. */}
                 <div className="border-b border-border px-2 py-2.5">
                   <SchoolPlanSummary />
                   {/* The top-bar badge is hidden on a phone; this is where a

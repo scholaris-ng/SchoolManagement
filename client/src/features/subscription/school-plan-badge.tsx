@@ -11,12 +11,18 @@ type Access = NonNullable<ReturnType<typeof useSchoolAccess>>;
 
 const plural = (n: number) => `${n} day${n === 1 ? '' : 's'}`;
 
-/** What the pill says, and how loudly. A trial counts down; a paid month shows the date it runs to. */
-function pillFor(access: Access): { text: string; tone: 'success' | 'warning' | 'danger' } {
-  if (access.expired) return { text: `Ended ${formatDate(access.endsAt)}`, tone: 'danger' };
-  if (access.warn) return { text: `${plural(access.daysLeft)} left`, tone: 'warning' };
-  if (access.plan === 'TRIAL') return { text: `${plural(access.daysLeft)} left`, tone: 'success' };
-  return { text: `Valid until ${formatDate(access.endsAt)}`, tone: 'success' };
+/**
+ * What the pill says, and how loudly. A trial or a plan near its end counts
+ * down; every plan that is still open also names the date the next payment is
+ * due, so the countdown always has a date to point at.
+ */
+function pillFor(access: Access): { text: string | null; due: string | null; tone: 'success' | 'warning' | 'danger' } {
+  if (access.expired) return { text: `Ended ${formatDate(access.endsAt)}`, due: null, tone: 'danger' };
+
+  const due = `Next due ${formatDate(access.endsAt)}`;
+  if (access.warn) return { text: `${plural(access.daysLeft)} left`, due, tone: 'warning' };
+  if (access.plan === 'TRIAL') return { text: `${plural(access.daysLeft)} left`, due, tone: 'success' };
+  return { text: null, due, tone: 'success' };
 }
 
 const PILL_TONE = {
@@ -32,36 +38,27 @@ const SUMMARY_TONE = {
   danger: 'text-danger',
 } as const;
 
-/** The full sentence, for a tooltip: plan, when it ends, and how long that is. */
+/** The full sentence, for a tooltip: plan, when it is next due, and how long that is. */
 function describe(access: Access): string {
-  return `${PLAN_LABEL[access.plan]} — ${access.expired ? 'ended' : 'ends'} ${formatDate(access.endsAt)}${
+  return `${PLAN_LABEL[access.plan]} — ${access.expired ? 'ended' : 'next due'} ${formatDate(access.endsAt)}${
     access.expired ? '' : ` (${plural(access.daysLeft)} left)`
   }`;
 }
 
 /**
- * Whether the plan has earned a place in the header. A healthy paid plan has
- * nothing to tell anyone every day, so it waits in the account menu; a trial
- * is a countdown someone should be able to see, and a plan in its last days or
- * past its end is a decision.
- */
-function needsAttention(access: Access): boolean {
-  return access.expired || access.warn || access.plan === 'TRIAL';
-}
-
-/**
- * The school's plan, in the header — but only when it needs to be there.
+ * The school's plan, in the header, with the date its next payment is due.
  *
- * Once a school's trial has ended for the people who are locked out by it, this
- * becomes the one button that matters — a way to reach whoever can activate it.
- * The school's own name and mark live in the sidebar and the account menu
- * (`SchoolPlanSummary`); repeating them here put two avatars side by side.
+ * Shown for every open plan — a paid month needs its due date in view as much
+ * as a trial needs its countdown. Once a school's trial has ended for the
+ * people who are locked out by it, this becomes the one button that matters — a
+ * way to reach whoever can activate it. The school's own name and mark live in
+ * the sidebar and the account menu (`SchoolPlanSummary`); repeating them here
+ * put two avatars side by side.
  */
 export function SchoolPlanBadge() {
   const access = useSchoolAccess();
   if (!access) return null;
   if (access.locked) return <ContactAdminButton />;
-  if (!needsAttention(access)) return null;
 
   const pill = pillFor(access);
 
@@ -82,7 +79,9 @@ export function SchoolPlanBadge() {
         {/* Without the plan, "12 days left" doesn't say left of what. An ended
             plan's date already says it all. */}
         {!access.expired && <span className="opacity-80">{PLAN_LABEL[access.plan]} ·</span>}
-        <span>{pill.text}</span>
+        {pill.text && <span>{pill.text}</span>}
+        {pill.text && pill.due && <span aria-hidden="true">·</span>}
+        {pill.due && <span data-cy="school-plan-due">{pill.due}</span>}
       </span>
     </span>
   );
@@ -91,8 +90,8 @@ export function SchoolPlanBadge() {
 /**
  * Which school this is and where its plan stands, for the account menu.
  *
- * Always present — this is where a healthy plan lives, and where anyone on a
- * screen too narrow for the header pill finds the same answer.
+ * Always present — this is where anyone on a screen too narrow for the header
+ * pill finds the same answer: the plan, its countdown, and the next due date.
  */
 export function SchoolPlanSummary() {
   const { membership } = useAuth();
@@ -111,10 +110,22 @@ export function SchoolPlanSummary() {
       <div className="min-w-0 flex-1 leading-tight">
         <p className="truncate text-sm font-medium">{membership.schoolName}</p>
         {access && pill && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={describe(access)}>
-            {PLAN_LABEL[access.plan]} ·{' '}
-            <span className={SUMMARY_TONE[pill.tone]}>{pill.text}</span>
-          </p>
+          <div className="mt-0.5 text-xs text-muted-foreground" title={describe(access)}>
+            <p className="truncate">
+              {PLAN_LABEL[access.plan]}
+              {pill.text && (
+                <>
+                  {' · '}
+                  <span className={SUMMARY_TONE[pill.tone]}>{pill.text}</span>
+                </>
+              )}
+            </p>
+            {pill.due && (
+              <p data-cy="school-plan-summary-due" className="truncate">
+                {pill.due}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
