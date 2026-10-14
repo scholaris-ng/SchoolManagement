@@ -195,6 +195,12 @@ export class LedgerRepository {
    * otherwise be subtracted from a bill this query never added, printing a
    * negative "balance after" for a family that owes nothing — or, for a
    * part-payment, understating what is still owed.
+   *
+   * That rule follows carry-forwards too. A carried-forward invoice holds the
+   * billing (`subtotal`) while the invoice it was rolled into holds only
+   * `brought_forward`, which is never counted — so a payment allocated to the
+   * successor must also pull in every predecessor chained into it, or the
+   * debt it settles is missing and the balance prints as zero.
    */
   async balanceAsOf(
     schoolId: string,
@@ -203,21 +209,28 @@ export class LedgerRepository {
     includePaymentId: string,
   ): Promise<number> {
     const [row] = await this.db.query(
-      `SELECT (COALESCE(b.billed, 0) - COALESCE(b.discount, 0) - COALESCE(p.paid, 0))::float AS balance
+      `WITH RECURSIVE settled_invoices AS (
+         SELECT pa.invoice_id AS id
+           FROM invoices inv
+           JOIN payment_allocations pa ON pa.invoice_id = inv.id
+           JOIN payments pay2 ON pay2.id = pa.payment_id
+          WHERE inv.school_id = $1 AND inv.student_id = $2
+            AND pay2.status = 'SUCCESSFUL'
+            AND (pay2.paid_at <= $3::timestamptz OR pay2.id = $4::uuid)
+         UNION
+         SELECT prev.id
+           FROM invoices prev
+           JOIN settled_invoices s ON prev.carried_forward_to_invoice_id = s.id
+          WHERE prev.school_id = $1
+       )
+       SELECT (COALESCE(b.billed, 0) - COALESCE(b.discount, 0) - COALESCE(p.paid, 0))::float AS balance
          FROM (
            SELECT SUM(i.subtotal) AS billed, SUM(i.discount_total) AS discount
              FROM invoices i
             WHERE i.school_id = $1 AND i.student_id = $2 AND ${REAL_INVOICE}
               AND (
                 i.issue_date <= $3::date
-                OR EXISTS (
-                  SELECT 1
-                    FROM payment_allocations pa
-                    JOIN payments pay2 ON pay2.id = pa.payment_id
-                   WHERE pa.invoice_id = i.id
-                     AND pay2.status = 'SUCCESSFUL'
-                     AND (pay2.paid_at <= $3::timestamptz OR pay2.id = $4::uuid)
-                )
+                OR i.id IN (SELECT id FROM settled_invoices)
               )
          ) b
          CROSS JOIN (
