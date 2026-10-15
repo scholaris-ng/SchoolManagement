@@ -112,6 +112,51 @@ describe('Sidebar sections', () => {
     expect(group(/^communication/i)).toHaveTextContent('3');
   });
 
+  it('closes every section from one button, including the one you are in', async () => {
+    const user = renderSidebar({ route: '/students' });
+
+    await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+
+    for (const heading of [/^overview/i, /^people/i, /^finance/i, /^communication/i]) {
+      expect(group(heading)).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(link('Students')).not.toBeInTheDocument();
+    expect(link('Dashboard')).not.toBeInTheDocument();
+  });
+
+  it('offers to open everything again once it is all closed', async () => {
+    const user = renderSidebar({ route: '/students' });
+    await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+
+    expect(screen.queryByRole('button', { name: 'Collapse all' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Expand all' }));
+
+    expect(group(/^finance/i)).toHaveAttribute('aria-expanded', 'true');
+    expect(link('Invoices')).toBeInTheDocument();
+    expect(link('Dashboard')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse all' })).toBeInTheDocument();
+  });
+
+  it('keeps everything closed on the next visit, except the section the page is in', async () => {
+    const user = renderSidebar({ route: '/students' });
+    await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+    cleanup();
+
+    renderSidebar({ route: '/students' });
+
+    expect(group(/^overview/i)).toHaveAttribute('aria-expanded', 'false');
+    expect(group(/^finance/i)).toHaveAttribute('aria-expanded', 'false');
+    // Landing on a page shows where it is, whatever was closed before.
+    expect(group(/^people/i)).toHaveAttribute('aria-expanded', 'true');
+    expect(link('Students')).toBeInTheDocument();
+  });
+
+  it('does not offer collapse-all in the icon-only rail', () => {
+    renderSidebar({ route: '/students', collapsed: true });
+
+    expect(screen.queryByRole('button', { name: /collapse all|expand all/i })).not.toBeInTheDocument();
+  });
+
   it('lists every link in the icon-only rail, which has no headings to fold under', () => {
     renderSidebar({ route: '/students', collapsed: true });
 

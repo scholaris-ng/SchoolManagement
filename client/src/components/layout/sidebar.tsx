@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChevronRight, ChevronsLeft, GraduationCap } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsLeft,
+  ChevronsUpDown,
+  GraduationCap,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { localStore, storageKeys } from '@/lib/storage';
 import { NAV_SECTIONS, isNavItemVisible, type NavItem } from '@/app/navigation';
@@ -121,6 +127,15 @@ export function Sidebar({
     );
   };
 
+  // One button for both directions: with anything open it closes the lot, and
+  // once everything is closed the same spot offers to open it all again.
+  const allClosed = sections.every((section, index) => !isOpen(section, index));
+  const setAllOpen = (open: boolean) =>
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries(sections.map((section) => [section.id, open])),
+    }));
+
   return (
     <div
       className={cn(
@@ -151,6 +166,25 @@ export function Sidebar({
       {!collapsed && (
         <div className="border-b border-border p-3">
           <SchoolSwitcher />
+        </div>
+      )}
+
+      {/* Outside the scrolling list, so it is still there when the menu is long. */}
+      {!collapsed && sections.length > 1 && (
+        <div className="flex shrink-0 justify-end px-2 pt-2">
+          <button
+            type="button"
+            data-cy="nav-toggle-all"
+            onClick={() => setAllOpen(allClosed)}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {allClosed ? (
+              <ChevronsUpDown className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronsDownUp className="size-3.5" aria-hidden="true" />
+            )}
+            {allClosed ? 'Expand all' : 'Collapse all'}
+          </button>
         </div>
       )}
 
