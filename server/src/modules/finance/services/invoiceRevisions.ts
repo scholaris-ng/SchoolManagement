@@ -264,6 +264,18 @@ export function changesBilling(changes: InvoiceChange[]): boolean {
   );
 }
 
+/**
+ * The part of a charge's saved discount that somebody keyed in by hand.
+ *
+ * What is stored on a charge is one figure — everything taken off it. The named
+ * discounts (a scholarship, a staff concession) can be worked out again from
+ * their definitions; what remains once those are taken away is the hand-keyed
+ * part, and it is what an untouched charge has to keep.
+ */
+export function manualDiscountResidualKobo(savedDiscountKobo: number, namedKobo: number): number {
+  return Math.max(0, savedDiscountKobo - namedKobo);
+}
+
 /** How much one of an earlier invoice's own charges moved, in kobo. */
 export interface SourceLineDelta {
   feeItemId: string;

@@ -30,6 +30,7 @@ import { applyDiscounts, resolveDiscountScope, type ApplicableDiscount } from '.
 import {
   changesBilling,
   diffSnapshots,
+  manualDiscountResidualKobo,
   planCarriedSync,
   planLineSync,
   snapshotOf,
@@ -1035,16 +1036,18 @@ export class InvoicesService {
 
     const ownLines = existing.lines.filter((line) => !line.carriedFromInvoiceId);
 
-    // An earlier invoice moved, so what was brought forward from it moves too.
-    // It cannot go below nothing: an earlier invoice edited down past what it was
-    // paid is overpaid, and that credit stays on the account rather than being
-    // netted off this invoice's own charges.
+    // An earlier invoice moved, so what was brought forward from it moves too —
+    // by exactly that much. It is not floored at nothing: an earlier invoice
+    // edited down past what it was paid is overpaid, and that credit travels
+    // with the balance (a negative figure) so that putting the charge back puts
+    // the balance back to exactly where it was. Flooring it here once turned
+    // ₦106,000 into ₦0 and made the edit impossible to undo.
     const shifts = request.broughtForwardShifts ?? [];
     const shiftKobo = shifts.reduce((sum, shift) => sum + shift.deltaKobo, 0);
     const startingBroughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
     let broughtForwardKobo = startingBroughtForwardKobo;
     if (shiftKobo !== 0) {
-      broughtForwardKobo = Math.max(0, broughtForwardKobo + shiftKobo);
+      broughtForwardKobo += shiftKobo;
       const recorded = await this.invoices.findBroughtForwardSources(
         context.schoolId,
         existing.id,
@@ -1054,7 +1057,7 @@ export class InvoicesService {
         const moved = shifts
           .filter((shift) => shift.invoiceId === source.invoiceId)
           .reduce((sum, shift) => sum + shift.deltaKobo, 0);
-        const next = Math.max(0, Math.round(source.amount * MONEY_SCALE) + moved);
+        const next = Math.round(source.amount * MONEY_SCALE) + moved;
         return { ...source, amount: next / MONEY_SCALE };
       });
     }
@@ -1063,7 +1066,6 @@ export class InvoicesService {
     let lineSync: LineSync | null = null;
     let lineDeltas: SourceLineDelta[] = [];
     let cappedLines: { id: string; totalKobo: number }[] = [];
-    // The shift actually applied, which is less than asked for when it ran into zero.
     let totalKobo =
       Math.round(existing.total * MONEY_SCALE) + (broughtForwardKobo - startingBroughtForwardKobo);
 
@@ -1112,25 +1114,53 @@ export class InvoicesService {
         };
       });
 
-      // Re-priced from whatever the student is entitled to now, plus the
-      // discounts ticked on the form — the edit is a fresh pricing of the
-      // same charges, and the amounts typed on the form are always zero. A
-      // caller that names none keeps the ones the bill already carried, and
-      // one of those that has since been switched off is dropped quietly
-      // rather than failing an edit that never asked for it.
-      const discounts = await this.discountsFor(
+      // The named discounts the invoice already carried, as they apply now.
+      // The invoice's own record of a previously-applied discount has no
+      // memory of which lines it was scoped to, only what it waived in
+      // total — so each reopens applying to every line it can reach, same as
+      // `feeItemIds: []`. One that has since been switched off is dropped
+      // quietly rather than failing an edit that never asked for it.
+      const replayed = await this.discountsFor(
         context.schoolId,
         existing.studentId,
         existing.sessionId,
         existing.termId,
-        // The invoice's own record of a previously-applied discount has no
-        // memory of which lines it was scoped to, only what it waived in
-        // total — an edit that does not resend `discounts` reopens each one
-        // applying to every line it can reach, same as `feeItemIds: []`.
-        request.discounts ??
-          existing.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
-        request.discounts !== undefined,
+        existing.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
+        false,
       );
+
+      // A charge nobody touched keeps the discount it already had. The named
+      // part of it can be worked out again; the part somebody keyed in by hand
+      // cannot, and is the difference between the two. Without this, editing one
+      // line quietly raises every other line that carried a hand-keyed discount.
+      const savedByFeeItem = new Map(ownLines.map((line) => [line.feeItemId, line] as const));
+      const namedBefore = applyDiscounts(
+        priced.map((line) => ({ ...line, discountAmount: 0 })),
+        replayed,
+      ).lineDiscounts;
+      request.lines.forEach((requested, index) => {
+        const saved = savedByFeeItem.get(requested.feeItemId);
+        if (!requested.keepSavedDiscount || !saved) return;
+        priced[index].discountAmount =
+          manualDiscountResidualKobo(
+            Math.round(saved.discountAmount * MONEY_SCALE),
+            Math.round(namedBefore[index] * MONEY_SCALE),
+          ) / MONEY_SCALE;
+      });
+
+      // Priced from the fee list as it stands, plus the discounts ticked on the
+      // form. A caller that names none keeps the ones the bill already carried.
+      const discounts =
+        request.discounts !== undefined
+          ? await this.discountsFor(
+              context.schoolId,
+              existing.studentId,
+              existing.sessionId,
+              existing.termId,
+              request.discounts,
+              true,
+            )
+          : replayed;
       const { lineDiscounts, applied } = applyDiscounts(priced, discounts);
       newLines = priced.map((line, index) => ({ ...line, discountAmount: lineDiscounts[index] }));
 
@@ -1367,6 +1397,13 @@ export class InvoicesService {
         carrier.id,
         dto.id,
       );
+      // An invoice that carries this one's balance as a single lump holds no
+      // copies of its charges, and must not be given any: carrying lines for
+      // only what changed would replace the whole breakdown on its printed copy
+      // with a few odd figures. The lump moves by exactly what changed, and that
+      // is already written with the invoice's own figures.
+      if (copies.length === 0) continue;
+
       const sync = planCarriedSync(
         copies.map((copy) => ({
           id: copy.id,

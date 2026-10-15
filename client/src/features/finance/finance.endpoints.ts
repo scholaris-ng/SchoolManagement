@@ -96,6 +96,12 @@ export interface InvoiceLineInput {
    * fee list. Only ever honoured for a charge that is really there.
    */
   keepSavedPrice?: boolean;
+  /**
+   * Edits only: nobody retyped this charge's discount, so keep whatever it
+   * already had taken off — including a hand-keyed discount, which cannot be
+   * worked out again from the invoice.
+   */
+  keepSavedDiscount?: boolean;
 }
 
 /**

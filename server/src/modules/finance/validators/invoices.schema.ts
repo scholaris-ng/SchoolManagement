@@ -83,7 +83,15 @@ const invoiceLine = z
  * only ever honoured against a charge of that fee item that is really there, so
  * it can reuse an amount the invoice already carries but never name a new one.
  */
-const editLine = invoiceLine.extend({ keepSavedPrice: z.boolean().optional() });
+const editLine = invoiceLine.extend({
+  keepSavedPrice: z.boolean().optional(),
+  /**
+   * The same, for the discount: nobody retyped it, so keep what this charge
+   * already had taken off. Without it an edit would silently drop every discount
+   * keyed by hand, because only the named ones can be worked out again.
+   */
+  keepSavedDiscount: z.boolean().optional(),
+});
 
 const editLines = z
   .array(editLine)

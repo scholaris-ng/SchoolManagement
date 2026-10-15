@@ -260,8 +260,19 @@ describe('InvoiceEditPage brought-forward items', () => {
       {
         invoiceId: 'inv-18',
         lines: [
-          expect.objectContaining({ feeItemId: 'tuition', keepSavedPrice: true }),
-          expect.objectContaining({ feeItemId: 'boarding', keepSavedPrice: true }),
+          // Untouched charges are told to keep both their price and whatever
+          // discount they already had — a hand-keyed one cannot be recovered
+          // afterwards, and dropping it silently raised the charge.
+          expect.objectContaining({
+            feeItemId: 'tuition',
+            keepSavedPrice: true,
+            keepSavedDiscount: true,
+          }),
+          expect.objectContaining({
+            feeItemId: 'boarding',
+            keepSavedPrice: true,
+            keepSavedDiscount: true,
+          }),
         ],
       },
     ]);

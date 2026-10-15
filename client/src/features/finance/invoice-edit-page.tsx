@@ -75,6 +75,18 @@ function keepsSavedPrice(line: LineDraft): boolean {
 }
 
 /**
+ * Whether nobody retyped this charge's discount, so it keeps whatever it already
+ * had taken off. A discount keyed in by hand cannot be recovered from the
+ * invoice once it is saved, so an untouched charge has to say "keep it" or the
+ * edit would quietly raise the charge by that amount.
+ */
+function keepsSavedDiscount(line: LineDraft): boolean {
+  return (
+    line.saved !== undefined && line.saved.feeItemId === line.feeItemId && line.discountValue === ''
+  );
+}
+
+/**
  * One unit of this charge, as the screen should show it.
  *
  * The invoice's own saved price while the item and price option are untouched;
@@ -712,6 +724,26 @@ export function InvoiceEditPage() {
       }));
   }, [lines, items]);
 
+  // What each charge has taken off by hand, for the previews below. A charge
+  // nobody retyped keeps what it already had — but only where the invoice has no
+  // named discount, since for those the figure on the charge is a mix of the
+  // two and the preview applies the named ones itself.
+  const previewManualFor = useCallback(
+    (line: LineDraft) => {
+      const billed = invoice.data;
+      if (billed && billed.appliedDiscounts.length === 0 && keepsSavedDiscount(line)) {
+        const savedLine = billed.lines.find(
+          (entry) => !entry.carriedFromInvoiceId && entry.feeItemId === line.feeItemId,
+        );
+        if (savedLine) {
+          return Math.min(savedLine.discountAmount, unitFor(line) * line.quantity);
+        }
+      }
+      return manualDiscountFor(line);
+    },
+    [invoice.data, unitFor, manualDiscountFor],
+  );
+
   // Granted discounts first, then the ones ticked for this bill — the order
   // the server takes them in. A preview only; the server prices the real bill.
   const discountPreview = useMemo(() => {
@@ -726,17 +758,17 @@ export function InvoiceEditPage() {
         feeItemId: line.feeItemId,
         unitAmount: unitFor(line),
         quantity: line.quantity,
-        discountAmount: manualDiscountFor(line),
+        discountAmount: previewManualFor(line),
       })),
       [...grantedEntries, ...chosenEntries],
     );
-  }, [lines, unitFor, manualDiscountFor, grantedIds, chosenDiscounts, activeDiscounts]);
+  }, [lines, unitFor, previewManualFor, grantedIds, chosenDiscounts, activeDiscounts]);
 
   // The hand-typed line discounts alone, shown as their own row in the totals
   // below since they carry no name the way a ticked discount does.
   const manualDiscountTotal = useMemo(
-    () => lines.reduce((sum, line) => sum + manualDiscountFor(line), 0),
-    [lines, manualDiscountFor],
+    () => lines.reduce((sum, line) => sum + previewManualFor(line), 0),
+    [lines, previewManualFor],
   );
 
   const addLineTo = (current: LineDraft[]): LineDraft[] => {
@@ -924,8 +956,10 @@ export function InvoiceEditPage() {
       : manualDiscountOf(line, items),
     accountIds: line.accountIds,
     priceOptionId: line.priceOptionId,
-    // Untouched charges keep the price they were billed at.
+    // Untouched charges keep the price they were billed at, and the discount
+    // they already had.
     ...(keepsSavedPrice(line) ? { keepSavedPrice: true } : {}),
+    ...(keepsSavedDiscount(line) ? { keepSavedDiscount: true } : {}),
   });
 
   const submit = async () => {

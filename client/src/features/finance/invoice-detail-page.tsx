@@ -453,6 +453,17 @@ export function InvoiceDetailPage() {
                   hint="Unpaid from a previous term"
                 />
               )}
+              {/* An earlier invoice that was edited down past what was paid on it
+                  leaves a credit, which comes off this bill rather than vanishing. */}
+              {record.broughtForward < 0 && (
+                <Row
+                  label="Credit brought forward"
+                  value={`− ${formatCurrency(Math.abs(record.broughtForward), currency, {
+                    showDecimals: false,
+                  })}`}
+                  hint="Paid in excess on an earlier invoice"
+                />
+              )}
               <Row
                 label="Total"
                 value={formatCurrency(record.total, currency, { showDecimals: false })}
