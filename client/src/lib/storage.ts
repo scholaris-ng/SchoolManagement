@@ -79,6 +79,8 @@ export const storageKeys = {
   activeSchoolId: 'active-school-id',
   theme: 'theme',
   sidebarCollapsed: 'sidebar-collapsed',
+  /** Which sidebar sections the person has opened or closed, by section id. */
+  sidebarSections: 'sidebar-sections',
   mockPersona: 'mock-persona',
   outbox: 'outbox',
   attendanceDraft: (classId: string, date: string) => `draft:attendance:${classId}:${date}`,
