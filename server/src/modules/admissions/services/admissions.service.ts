@@ -1405,23 +1405,51 @@ export class AdmissionsService {
       await join(guardian, { relationship: link.relationship, isPrimaryContact: link.isPrimaryContact });
     }
 
-    for (const contact of contacts) {
-      // An email is the only reliable way to recognise a parent already on the
-      // roll. Without one, fall back to an exact match on the same phone and
-      // name among guardians who also have no email — narrow on purpose, since
-      // wrongly merging two people who share a household phone is worse than
-      // leaving a duplicate for the office to tidy.
-      const existing = await manager.findOne(Guardian, {
-        where: contact.email
-          ? { schoolId, email: contact.email }
-          : {
-              schoolId,
-              email: IsNull(),
-              phone: contact.phone,
-              firstName: contact.firstName,
-              lastName: contact.lastName,
-            },
-      });
+    // The primary contact is looked at first. When parents share one address
+    // it is theirs — they are the person the school writes to — and the other
+    // parent is saved without it rather than not saved at all.
+    const byPriority = [...contacts].sort(
+      (a, b) => Number(b.isPrimaryContact) - Number(a.isPrimaryContact),
+    );
+
+    for (const contact of byPriority) {
+      let email = contact.email;
+      let existing: Guardian | null = null;
+
+      if (email) {
+        // An address is how a parent already on the roll is recognised — but it
+        // does not say *who* is at it. Two parents share a family address, and a
+        // placeholder such as `nil@…` gets typed because a form asked for one.
+        // Taking the address as proof of identity folded the second parent into
+        // the first (never saved, never linked) or attached the child to some
+        // other family's record. So the name has to agree as well; otherwise
+        // this is a different person and the address is not theirs to take.
+        // `withDeleted`: a removed guardian still holds the address in the
+        // unique index, so it must be treated as taken, not as free.
+        const holder = await manager.findOne(Guardian, {
+          where: { schoolId, email },
+          withDeleted: true,
+        });
+        if (holder && !holder.deletedAt && isSamePerson(holder, contact)) {
+          existing = holder;
+        } else if (holder) {
+          email = null;
+        }
+      } else {
+        // Without an address, fall back to an exact match on the same phone and
+        // name among guardians who also have none — narrow on purpose, since
+        // wrongly merging two people who share a household phone is worse than
+        // leaving a duplicate for the office to tidy.
+        existing = await manager.findOne(Guardian, {
+          where: {
+            schoolId,
+            email: IsNull(),
+            phone: contact.phone,
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+          },
+        });
+      }
 
       const guardian =
         existing ??
@@ -1431,7 +1459,7 @@ export class AdmissionsService {
             title: contact.title,
             firstName: contact.firstName,
             lastName: contact.lastName,
-            email: contact.email ?? null,
+            email,
             phone: contact.phone,
             occupation: contact.occupation,
             // `Guardian.address` is one free-text field; city and state were
@@ -1514,6 +1542,34 @@ function applicationNumber(sessionName: string, sequence: number): string {
 /** `SCH/2026/0142` — the school's code, the year admitted, then the count. */
 function admissionNumber(schoolCode: string, admissionYear: string, sequence: number): string {
   return `${schoolCode}/${admissionYear}/${String(sequence).padStart(4, '0')}`;
+}
+
+/**
+ * Whether a typed-in contact is the guardian already on file, judged by name.
+ *
+ * Case, spacing and the order of the names are ignored, and one name may be
+ * the other with a middle name added ("Victoria Samuel" / "Samuel Victoria
+ * Ada"). Two different first names are never the same person: a husband and
+ * wife on one address, both surnamed Samuel, must stay two people.
+ */
+function isSamePerson(
+  known: { firstName: string; lastName: string },
+  contact: { firstName: string; lastName: string },
+): boolean {
+  const words = (person: { firstName: string; lastName: string }) =>
+    new Set(
+      `${person.firstName} ${person.lastName}`
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(Boolean),
+    );
+
+  const a = words(known);
+  const b = words(contact);
+  if (a.size === 0 || b.size === 0) return false;
+
+  const [fewer, more] = a.size <= b.size ? [a, b] : [b, a];
+  return [...fewer].every((word) => more.has(word));
 }
 
 /** A street line, city and state, joined the way a person would write them out. */
