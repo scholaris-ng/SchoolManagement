@@ -892,6 +892,19 @@ export function InvoiceEditPage() {
   const valid =
     Boolean(dueDate && (lines.length > 0 || hadNoCharges)) && !reasonMissing && !groupEmptied;
 
+  // Why "Save changes" is greyed out, in words — a disabled button that says
+  // nothing reads as "I am not allowed to", which is never the cause here.
+  // Checked in the order a person would fix them.
+  const saveBlocker: { text: string; focusReason?: boolean } | null = valid
+    ? null
+    : !dueDate
+      ? { text: 'Set a due date to save.' }
+      : lines.length === 0 && !hadNoCharges
+        ? { text: 'This invoice needs at least one charge to save.' }
+        : groupEmptied
+          ? { text: 'Each earlier invoice needs at least one charge to save.' }
+          : { text: 'Say why the charges are changing to save.', focusReason: true };
+
   // What each earlier invoice's charges come to as edited, against as saved —
   // how far the balance brought forward moves. A hint only: the server prices
   // the real bill and is the one that refuses.
@@ -1317,22 +1330,44 @@ export function InvoiceEditPage() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          data-cy="finance-invoice-edit-cancel"
-          variant="outline"
-          onClick={() => navigate(`/finance/invoices/${record.id}`)}
-        >
-          Cancel
-        </Button>
-        <Button
-          data-cy="finance-invoice-edit-save"
-          onClick={() => void submit()}
-          loading={updateInvoice.isPending}
-          disabled={!valid}
-        >
-          Save changes
-        </Button>
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+        {saveBlocker && (
+          <p
+            className="text-sm text-muted-foreground"
+            data-cy="finance-invoice-edit-save-blocker"
+            role="status"
+          >
+            {saveBlocker.focusReason ? (
+              // Takes the person to the box that is missing, which sits further up.
+              <button
+                type="button"
+                className="text-left underline decoration-dotted underline-offset-2 hover:text-foreground"
+                onClick={() => document.getElementById('invoice-edit-reason')?.focus()}
+              >
+                {saveBlocker.text}
+              </button>
+            ) : (
+              saveBlocker.text
+            )}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            data-cy="finance-invoice-edit-cancel"
+            variant="outline"
+            onClick={() => navigate(`/finance/invoices/${record.id}`)}
+          >
+            Cancel
+          </Button>
+          <Button
+            data-cy="finance-invoice-edit-save"
+            onClick={() => void submit()}
+            loading={updateInvoice.isPending}
+            disabled={!valid}
+          >
+            Save changes
+          </Button>
+        </div>
       </div>
     </PageContainer>
   );

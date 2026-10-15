@@ -179,6 +179,40 @@ describe('InvoiceEditPage brought-forward items', () => {
     expect(balance.textContent).toContain('20,000');
   });
 
+  it('says why "Save changes" is greyed out, and stops saying it once the reason is given', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // Nothing changed yet: Save is available and there is nothing to explain.
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.queryByText(/to save\./)).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Remove line' })[2]);
+
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(save).toBeDisabled();
+    const hint = await screen.findByRole('button', { name: /Say why the charges are changing to save/ });
+
+    // The hint takes the person to the box that is missing.
+    await user.click(hint);
+    expect(screen.getByLabelText(/Why are the charges changing/)).toHaveFocus();
+
+    await user.type(screen.getByLabelText(/Why are the charges changing/), 'Bus was a mistake');
+    expect(save).toBeEnabled();
+    expect(screen.queryByText(/Say why the charges are changing to save/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the due date has been cleared', async () => {
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    fireEvent.change(screen.getByLabelText(/Due date/), { target: { value: '' } });
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByText('Set a due date to save.')).toBeInTheDocument();
+  });
+
   it('lets a charge that money was put towards be removed, and says where the money stays', async () => {
     const user = userEvent.setup();
     renderEdit();
@@ -335,7 +369,9 @@ describe('InvoiceEditPage brought-forward items', () => {
     await user.click(screen.getByRole('button', { name: 'Remove line' }));
     await user.type(screen.getByLabelText(/Why are the charges changing/), 'Not needed');
 
-    expect(screen.getByText(/needs at least one charge/)).toBeInTheDocument();
+    // Said next to the group that is empty, and again beside the greyed-out Save.
+    expect(screen.getByText(/put one back to save/)).toBeInTheDocument();
+    expect(screen.getByText(/Each earlier invoice needs at least one charge to save/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 });
