@@ -289,21 +289,21 @@ export interface CarriedCopy {
  * and an item that had been paid in full and is now billed higher starts to owe
  * the difference. Charges are matched by fee item, in order, as everywhere else.
  *
- * `refused` is set instead of a plan when a carried charge would fall below what
- * has already been put towards it — the same rule that stops any charge being
- * cut under what a payment took.
+ * A carried charge may fall below what has been put towards it, or go to
+ * nothing. The money does not disappear — it stays against the invoice — so the
+ * caller is told which updates leave a charge under its payments (`belowPaid`)
+ * and which charges go (`remove`), and releases what was itemised to them.
  */
 export function planCarriedSync(
   copies: CarriedCopy[],
   deltas: SourceLineDelta[],
 ): {
-  update: { id: string; totalKobo: number }[];
+  update: { id: string; totalKobo: number; belowPaid: boolean }[];
   remove: string[];
   insert: { feeItemId: string; totalKobo: number }[];
-  refused: { feeItemId: string; paidKobo: number } | null;
 } {
   const free = [...copies];
-  const update: { id: string; totalKobo: number }[] = [];
+  const update: { id: string; totalKobo: number; belowPaid: boolean }[] = [];
   const remove: string[] = [];
   const insert: { feeItemId: string; totalKobo: number }[] = [];
 
@@ -320,17 +320,13 @@ export function planCarriedSync(
 
     const [copy] = free.splice(at, 1);
     const next = copy.totalKobo + deltaKobo;
-    // Only money actually put towards the carried charge protects it. With none,
-    // a source charge that fell by more than what was carried (some payments on
-    // the earlier invoice were never itemised) simply leaves nothing to carry.
-    if (copy.paidKobo > 0 && next < copy.paidKobo) {
-      return { update: [], remove: [], insert: [], refused: { feeItemId, paidKobo: copy.paidKobo } };
-    }
+    // A source charge can fall by more than was carried (some payments on the
+    // earlier invoice were never itemised), which simply leaves nothing to carry.
     if (next <= 0) remove.push(copy.id);
-    else update.push({ id: copy.id, totalKobo: next });
+    else update.push({ id: copy.id, totalKobo: next, belowPaid: next < copy.paidKobo });
   }
 
-  return { update, remove, insert, refused: null };
+  return { update, remove, insert };
 }
 
 /**

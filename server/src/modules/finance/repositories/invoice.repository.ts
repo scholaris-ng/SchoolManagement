@@ -898,6 +898,85 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   }
 
   /**
+   * Lets go of what had been itemised to charges that are being removed: the
+   * breakdown rows naming them, and any receipt tick that said they were paid.
+   *
+   * The money itself is untouched. An allocation's own `amount` — what the
+   * payment put against the invoice — stays exactly as it was; only the note of
+   * which charge it was *for* goes, which is what the database would otherwise
+   * refuse to let the charge be deleted over. What is left is money against the
+   * invoice as a whole, the same as a payment that was never itemised.
+   */
+  async releaseLinePayments(
+    manager: EntityManager,
+    schoolId: string,
+    lineIds: string[],
+  ): Promise<void> {
+    if (lineIds.length === 0) return;
+
+    await manager.query(
+      `DELETE FROM payment_line_allocations WHERE school_id = $1 AND invoice_line_id = ANY($2::uuid[])`,
+      [schoolId, lineIds],
+    );
+    // A tick naming a charge that no longer exists would only dangle.
+    await manager.query(
+      `UPDATE payment_allocations pa
+          SET paid_line_ids = COALESCE((
+                SELECT jsonb_agg(v)
+                  FROM jsonb_array_elements(pa.paid_line_ids) AS v
+                 WHERE NOT ((v #>> '{}') = ANY($2::text[]))
+              ), '[]'::jsonb)
+        WHERE pa.school_id = $1 AND pa.paid_line_ids ?| $2::text[]`,
+      [schoolId, lineIds],
+    );
+  }
+
+  /**
+   * Brings what is itemised to one charge back under what the charge now comes
+   * to, taking the excess off the most recent payments first.
+   *
+   * A charge cannot have been paid more than it costs, and the write paths
+   * enforce that when they create a breakdown — this is the same rule applied
+   * after the fact, when an edit has lowered the charge beneath the payments
+   * already itemised to it. The money stays on the invoice; it simply stops
+   * being attributed to a charge that no longer needs it.
+   */
+  async capLinePayments(
+    manager: EntityManager,
+    schoolId: string,
+    lineId: string,
+    totalKobo: number,
+  ): Promise<void> {
+    const rows: { id: string; amount: number }[] = await manager.query(
+      `SELECT id, amount::float AS amount
+         FROM payment_line_allocations
+        WHERE school_id = $1 AND invoice_line_id = $2
+        ORDER BY created_at DESC, id`,
+      [schoolId, lineId],
+    );
+
+    let excess =
+      rows.reduce((sum, row) => sum + Math.round(row.amount * 100), 0) - Math.max(0, totalKobo);
+
+    for (const row of rows) {
+      if (excess <= 0) break;
+      const current = Math.round(row.amount * 100);
+      const cut = Math.min(current, excess);
+      const next = current - cut;
+      excess -= cut;
+
+      if (next <= 0) {
+        await manager.query(`DELETE FROM payment_line_allocations WHERE id = $1`, [row.id]);
+      } else {
+        await manager.query(`UPDATE payment_line_allocations SET amount = $2 WHERE id = $1`, [
+          row.id,
+          (next / 100).toFixed(2),
+        ]);
+      }
+    }
+  }
+
+  /**
    * The charges one invoice carries on behalf of an earlier one, each with what
    * has been put towards it here — itemised payments, or a receipt's tick, which
    * the same rule as everywhere else reads as the whole charge.

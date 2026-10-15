@@ -247,7 +247,9 @@ describe('planCarriedSync', () => {
       [{ feeItemId: 'tuition', deltaKobo: -5_000 * 100 }],
     );
 
-    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 20_000 * 100 }]);
+    expect(plan.update).toEqual([
+      { id: 'c-tuition', totalKobo: 20_000 * 100, belowPaid: false },
+    ]);
   });
 
   it('starts a carried charge for an item that had been settled and is now billed higher', () => {
@@ -259,26 +261,37 @@ describe('planCarriedSync', () => {
   it('has nothing to reduce where nothing was carried for the item', () => {
     const plan = planCarriedSync([], [{ feeItemId: 'books', deltaKobo: -10_000 * 100 }]);
 
-    expect(plan).toEqual({ update: [], remove: [], insert: [], refused: null });
+    expect(plan).toEqual({ update: [], remove: [], insert: [] });
   });
 
-  it('refuses to take a carried charge below what has been paid towards it', () => {
+  it('lets a carried charge fall below what has been paid towards it, and says so', () => {
     const plan = planCarriedSync(
       [copy('c-tuition', 'tuition', 25_000, 20_000)],
       [{ feeItemId: 'tuition', deltaKobo: -10_000 * 100 }],
     );
 
-    expect(plan.refused).toEqual({ feeItemId: 'tuition', paidKobo: 20_000 * 100 });
+    // ₦15,000 left on a charge ₦20,000 had been itemised to: the caller trims
+    // the itemisation back under it, and the payment stays on the invoice.
+    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 15_000 * 100, belowPaid: true }]);
+    expect(plan.remove).toEqual([]);
   });
 
-  it('leaves a paid-towards charge in place when it is brought exactly to what was paid', () => {
+  it('is not below what was paid when brought exactly to it', () => {
     const plan = planCarriedSync(
       [copy('c-tuition', 'tuition', 25_000, 20_000)],
       [{ feeItemId: 'tuition', deltaKobo: -5_000 * 100 }],
     );
 
-    expect(plan.refused).toBeNull();
-    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 20_000 * 100 }]);
+    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 20_000 * 100, belowPaid: false }]);
+  });
+
+  it('removes a paid-towards carried charge whose source charge was taken off', () => {
+    const plan = planCarriedSync(
+      [copy('c-tuition', 'tuition', 25_000, 20_000)],
+      [{ feeItemId: 'tuition', deltaKobo: -55_000 * 100 }],
+    );
+
+    expect(plan.remove).toEqual(['c-tuition']);
   });
 });
 

@@ -195,8 +195,9 @@ function freshDraft(item: FeeItem): LineDraft {
  * a price, a quantity, a discount, where to pay it into — or take it off.
  *
  * Used for the invoice's own charges and, with the same rules, for each earlier
- * invoice whose charges it carries. What a charge has already taken in payment
- * pins it: it can be repriced upward, but not removed or swapped for another.
+ * invoice whose charges it carries. Nothing is locked: a charge that money has
+ * been paid towards can still be removed or brought down. The row shows what was
+ * paid so the person can see it, and the payment stays on the invoice.
  */
 function ChargeRows({
   idPrefix,
@@ -252,8 +253,8 @@ function ChargeRows({
         const unit = unitAmountOf(line, items, structureAmounts);
         const gross = unit * line.quantity;
         const lineDiscount = manualDiscountOf(line, items, structureAmounts);
-        // Money already put towards this charge pins it: it can be repriced
-        // upward, but not removed or swapped for another item.
+        // What has been paid towards this charge, shown beside it. It does not
+        // lock the row — see the note on `ChargeRows`.
         const paidTowards = paidOnFeeItem(line.feeItemId);
         // Until the charges are touched this screen shows the invoice as it was
         // billed. Today's fee list can have moved since, and pricing off it
@@ -279,15 +280,14 @@ function ChargeRows({
                     id={`edit-line-item-${idPrefix}-${index}`}
                     className="rounded-md border border-dashed border-danger/50 px-3 py-2 text-sm text-danger"
                   >
-                    {line.description} — this fee item no longer exists.
-                    {paidTowards === 0 && ' Remove this line to save changes.'}
+                    {line.description} — this fee item no longer exists. Remove this line to save
+                    changes.
                   </p>
                 ) : (
                   <NativeSelect
                     data-cy="finance-invoice-edit-fee-item-id"
                     id={`edit-line-item-${idPrefix}-${index}`}
                     value={line.feeItemId}
-                    disabled={paidTowards > 0}
                     onChange={(event) => {
                       // A fresh item is a fresh choice — any quantity or account
                       // set for the old one should not silently carry over onto a
@@ -457,12 +457,6 @@ function ChargeRows({
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Remove line"
-                disabled={paidTowards > 0}
-                title={
-                  paidTowards > 0
-                    ? 'Money has been put towards this charge, so it cannot be removed.'
-                    : undefined
-                }
                 onClick={() => update((current) => current.filter((_, i) => i !== index))}
               >
                 <Trash2 />
@@ -470,8 +464,9 @@ function ChargeRows({
             </div>
             {paidTowards > 0 && (
               <p className="text-xs text-muted-foreground" data-cy="finance-invoice-edit-line-paid">
-                Money has been paid towards this charge, so it can be repriced upward but not
-                removed or brought below the amount paid.
+                {formatCurrency(paidTowards, 'NGN', { showDecimals: false })} has been paid towards
+                this charge. If you remove it or bring it lower, that money stays on the invoice
+                and counts towards what is left.
               </p>
             )}
             {item && item.accounts.length === 1 && (
@@ -529,10 +524,10 @@ interface CarriedDraft {
  * it has brought forward from earlier invoices, which are listed here and
  * edited the same way — and every correction is kept as a version (see
  * `InvoiceHistoryCard`), so a mistake no longer has to be fixed by cancelling
- * the bill and raising another. Once money has landed the same holds with two
- * limits, both enforced by the server: the total cannot fall below what has
- * been paid, and a charge a payment was itemised to cannot be removed or cut
- * below what it took.
+ * the bill and raising another. That holds after money has landed too: a
+ * payment is money received, not a claim about which charges exist, so it stays
+ * on the invoice whatever is removed, and a total that ends up below what was
+ * paid simply leaves the family with a credit.
  */
 export function InvoiceEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -1000,8 +995,9 @@ export function InvoiceEditPage() {
           {hasPayments && (
             <Alert tone="info" data-cy="finance-invoice-edit-paid-notice">
               {formatCurrency(record.amountPaid, 'NGN', { showDecimals: false })} has already been
-              paid on this invoice. You can still correct the charges, but the total cannot fall
-              below what was paid, and a charge that money was put towards cannot be removed.
+              paid on this invoice. You can add, remove or change any charge. Payments stay on the
+              invoice and count towards whatever is left, and the change is recorded in the
+              history.
             </Alert>
           )}
 
@@ -1112,9 +1108,12 @@ export function InvoiceEditPage() {
             {belowPaid && (
               <Alert tone="warning" data-cy="finance-invoice-edit-below-paid">
                 These changes bring the invoice to{' '}
-                {formatCurrency(previewTotal, 'NGN', { showDecimals: false })}, which is less than
-                the {formatCurrency(record.amountPaid, 'NGN', { showDecimals: false })} already
-                paid. It will be refused — reverse or reduce a payment first.
+                {formatCurrency(previewTotal, 'NGN', { showDecimals: false })}, which is{' '}
+                {formatCurrency(record.amountPaid - previewTotal, 'NGN', { showDecimals: false })}{' '}
+                less than the{' '}
+                {formatCurrency(record.amountPaid, 'NGN', { showDecimals: false })} already paid.
+                The invoice will show as settled and the extra will sit as a credit on the
+                student's account.
               </Alert>
             )}
           </CardContent>

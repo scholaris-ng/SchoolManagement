@@ -17,7 +17,7 @@ export function describeChange(change: InvoiceChange): string {
 
   switch (change.kind) {
     case 'LINE_REMOVED':
-      return `Removed ${label} (${naira(change.from)})`;
+      return `Removed ${label} (${naira(change.from)})${change.detail ? ` — ${change.detail}` : ''}`;
     case 'LINE_ADDED':
       return `Added ${label} (${naira(change.to)})`;
     case 'LINE_CHANGED':

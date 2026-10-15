@@ -179,15 +179,54 @@ describe('InvoiceEditPage brought-forward items', () => {
     expect(balance.textContent).toContain('20,000');
   });
 
-  it('will not let a charge that money was put towards be removed', async () => {
+  it('lets a charge that money was put towards be removed, and says where the money stays', async () => {
+    const user = userEvent.setup();
     renderEdit();
     await screen.findByText('Brought forward from INV/2026-2027/00018');
 
-    const [tuition, boarding, bus] = screen.getAllByRole('button', { name: 'Remove line' });
-    expect(tuition).toBeDisabled();
-    expect(boarding).toBeDisabled();
-    expect(bus).toBeEnabled();
-    expect(screen.getAllByText(/has been paid towards this charge/)).toHaveLength(2);
+    // Nothing is locked: the paid charges are removable like any other.
+    const removes = screen.getAllByRole('button', { name: 'Remove line' });
+    expect(removes).toHaveLength(3);
+    removes.forEach((button) => expect(button).toBeEnabled());
+    // Each paid row says what happens to the money instead of refusing.
+    expect(screen.getAllByText(/stays on the invoice/)).toHaveLength(2);
+
+    // And the fee item on a paid row can be swapped for another.
+    const [tuitionSelect] = screen.getAllByRole('combobox', { name: 'Fee item' });
+    expect(tuitionSelect).toBeEnabled();
+
+    await user.click(removes[0]);
+    await user.type(screen.getByLabelText(/Why are the charges changing/), 'Tuition was billed twice');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(stable.update.mutateAsync).toHaveBeenCalledTimes(1));
+    const { input } = stable.update.mutateAsync.mock.calls[0][0];
+
+    // Tuition (₦30,000 paid) is simply not in what is sent: the server takes it off.
+    expect(input.carried[0].lines.map((entry: { feeItemId: string }) => entry.feeItemId)).toEqual([
+      'boarding',
+      'bus',
+    ]);
+  });
+
+  it('warns that a total below what was paid becomes a credit, instead of refusing it', async () => {
+    stable.invoice = {
+      data: { ...followUp, amountPaid: 100000, balance: 6000 },
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    const user = userEvent.setup();
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // Take Tuition (55,000) and Bus (20,000) off: 106,000 → 31,000, under the 100,000 paid.
+    await user.click(screen.getAllByRole('button', { name: 'Remove line' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'Remove line' })[1]);
+
+    const warning = await screen.findByText(/less than the/);
+    expect(warning).toHaveTextContent(/credit on the student's account/);
+    expect(screen.queryByText(/will be refused/)).not.toBeInTheDocument();
   });
 
   it('asks why before a removed item can be saved, then edits the earlier invoice from here', async () => {

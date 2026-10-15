@@ -136,6 +136,11 @@ interface EditPlan {
   fields: InvoiceFieldUpdate;
   newLines: IssueLine[] | null;
   lineSync: LineSync | null;
+  /**
+   * Charges that stay but now cost less than what had been itemised to them, so
+   * that itemisation is brought back under the new total.
+   */
+  cappedLines: { id: string; totalKobo: number }[];
   before: InvoiceSnapshot;
   after: InvoiceSnapshot;
   changes: InvoiceChange[];
@@ -808,12 +813,15 @@ export class InvoicesService {
    * the thing this replaces: the invoice keeps its number, and its history says
    * what it was, what it became, who changed it and why.
    *
-   * Once money has landed the charges can still move, but only so far as the
-   * money already received stays true:
-   *   - the new total may not fall below what has been paid;
-   *   - a charge a payment was itemised to, or that a receipt ticked as paid,
-   *     may be repriced upward but not removed or brought below what it took.
-   * Anything past that is a payment to reverse first, not an invoice to edit.
+   * Once money has landed the charges can still be changed freely — added,
+   * removed, repriced — because a payment is money received, not a statement
+   * about which charges exist. What changes is where it sits:
+   *   - a charge that is removed, or brought below what was itemised to it,
+   *     lets go of that itemisation (`writeEdit`); the payment itself stays on
+   *     the invoice and counts towards whatever is left;
+   *   - a total that ends up below what was paid leaves the invoice settled
+   *     with the excess as a credit on the account, as any overpayment does.
+   * Every such change is in the history, with the amount that had been paid.
    *
    * **Brought-forward charges.** A follow-up invoice does not own the charges
    * it carries — they are the earlier invoice's own, and only the balance still
@@ -1007,8 +1015,7 @@ export class InvoicesService {
 
   /**
    * Works out what an edit would do to one invoice — the new charges priced, the
-   * totals, the status, the version it would write — and refuses anything that
-   * would make money already received untrue. Writes nothing.
+   * totals, the status, the version it would write. Writes nothing.
    *
    * `broughtForwardShifts` is how an earlier invoice's edit reaches this one: the
    * balance it brought forward from that invoice moves by that much, and so does
@@ -1026,17 +1033,18 @@ export class InvoicesService {
     if (request.dueDate !== undefined) fields.dueDate = request.dueDate;
     if (request.note !== undefined) fields.note = request.note ? request.note : null;
 
+    const ownLines = existing.lines.filter((line) => !line.carriedFromInvoiceId);
+
     // An earlier invoice moved, so what was brought forward from it moves too.
+    // It cannot go below nothing: an earlier invoice edited down past what it was
+    // paid is overpaid, and that credit stays on the account rather than being
+    // netted off this invoice's own charges.
     const shifts = request.broughtForwardShifts ?? [];
     const shiftKobo = shifts.reduce((sum, shift) => sum + shift.deltaKobo, 0);
-    let broughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
+    const startingBroughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
+    let broughtForwardKobo = startingBroughtForwardKobo;
     if (shiftKobo !== 0) {
-      broughtForwardKobo += shiftKobo;
-      if (broughtForwardKobo < 0) {
-        throw AppError.conflict(
-          `These changes would take more off ${existing.invoiceNo} than was brought forward onto it. Reverse or reduce a payment first.`,
-        );
-      }
+      broughtForwardKobo = Math.max(0, broughtForwardKobo + shiftKobo);
       const recorded = await this.invoices.findBroughtForwardSources(
         context.schoolId,
         existing.id,
@@ -1054,7 +1062,10 @@ export class InvoicesService {
     let newLines: IssueLine[] | null = null;
     let lineSync: LineSync | null = null;
     let lineDeltas: SourceLineDelta[] = [];
-    let totalKobo = Math.round(existing.total * MONEY_SCALE) + shiftKobo;
+    let cappedLines: { id: string; totalKobo: number }[] = [];
+    // The shift actually applied, which is less than asked for when it ran into zero.
+    let totalKobo =
+      Math.round(existing.total * MONEY_SCALE) + (broughtForwardKobo - startingBroughtForwardKobo);
 
     if (request.lines) {
       const items = await this.feeItems.fetchForSchool(context.schoolId);
@@ -1132,26 +1143,19 @@ export class InvoicesService {
 
       totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
 
-      const ownLines = existing.lines.filter((line) => !line.carriedFromInvoiceId);
       lineSync = planLineSync(ownLines, newLines);
 
-      for (const removedId of lineSync.remove) {
-        const line = ownLines.find((candidate) => candidate.id === removedId);
-        if (line && Math.round(line.amountPaid * MONEY_SCALE) > 0) {
-          throw AppError.conflict(
-            `"${line.description}" has ${formatNairaWhole(line.amountPaid)} paid towards it, so it cannot be removed. Take that payment off the charge on its receipt first.`,
-          );
-        }
-      }
-      for (const kept of lineSync.keep) {
+      // A charge may be removed, or brought down, whatever has been paid towards
+      // it. The money is not lost — it stays against the invoice — but what had
+      // been itemised to a charge that is going, or that no longer costs that
+      // much, has to be let go of, which `writeEdit` does.
+      cappedLines = lineSync.keep.flatMap((kept) => {
         const line = ownLines.find((candidate) => candidate.id === kept.id);
-        const nextTotalKobo = lineTotalKobo(newLines[kept.index]);
-        if (line && nextTotalKobo < Math.round(line.amountPaid * MONEY_SCALE)) {
-          throw AppError.conflict(
-            `"${line.description}" has ${formatNairaWhole(line.amountPaid)} paid towards it, so it cannot be brought down to ${formatNairaWhole(nextTotalKobo / MONEY_SCALE)}.`,
-          );
-        }
-      }
+        const nextTotalKobo = lineTotalKobo(newLines![kept.index]);
+        return line && nextTotalKobo < Math.round(line.amountPaid * MONEY_SCALE)
+          ? [{ id: kept.id, totalKobo: nextTotalKobo }]
+          : [];
+      });
 
       // What each of the invoice's own charges moved by — what an invoice that
       // carried them has to follow.
@@ -1184,13 +1188,9 @@ export class InvoicesService {
     }
 
     if (request.lines || shiftKobo !== 0) {
-      // Money already received must stay true. Refused here, before anything
-      // is written, with the figure that makes it so.
-      if (totalKobo < amountPaidKobo) {
-        throw AppError.conflict(
-          `These changes would bring ${existing.invoiceNo} to ${formatNairaWhole(totalKobo / MONEY_SCALE)}, which is less than the ${formatNairaWhole(existing.amountPaid)} already paid against it. Reverse or reduce a payment first.`,
-        );
-      }
+      // A total that falls below what has been paid is allowed: the family
+      // overpaid, and the invoice settles with the excess left as a credit on
+      // their account — the same state an overpayment has always been.
       fields.total = fromKobo(totalKobo);
       // An invoice that was carried forward stays closed whatever its total does.
       if (!options.keepStatus) fields.status = statusAfterEdit(totalKobo, amountPaidKobo);
@@ -1225,13 +1225,33 @@ export class InvoicesService {
       total: fields.total !== undefined ? Number(fields.total) : before.total,
     };
 
-    const changes = diffSnapshots(before, after);
+    // The history should say when a charge that money had been paid towards was
+    // taken off or brought down, since that is the change a bursar is asked about.
+    const paidOnLine = new Map(ownLines.map((line) => [line.description, line.amountPaid]));
+    const changes = diffSnapshots(before, after).map((change) => {
+      const paid = change.label ? (paidOnLine.get(change.label) ?? 0) : 0;
+      if (paid <= 0) return change;
+
+      if (change.kind === 'LINE_REMOVED') {
+        return { ...change, detail: `${formatNairaWhole(paid)} had been paid towards it` };
+      }
+      if (change.kind === 'LINE_CHANGED' && typeof change.to === 'number' && change.to < paid) {
+        return {
+          ...change,
+          detail: [change.detail, `now below the ${formatNairaWhole(paid)} paid towards it`]
+            .filter(Boolean)
+            .join(' · '),
+        };
+      }
+      return change;
+    });
 
     return {
       existing,
       fields,
       newLines,
       lineSync,
+      cappedLines,
       before,
       after,
       changes,
@@ -1296,6 +1316,14 @@ export class InvoicesService {
         accounts: line.accounts,
       });
 
+      // What had been itemised to a charge that is going, or that now costs less
+      // than was itemised to it, is let go of first — the database refuses to
+      // delete a charge that payments still name. The payments themselves stay.
+      await this.invoices.releaseLinePayments(manager, context.schoolId, lineSync.remove);
+      for (const capped of plan.cappedLines) {
+        await this.invoices.capLinePayments(manager, context.schoolId, capped.id, capped.totalKobo);
+      }
+
       await this.invoices.deleteLinesById(manager, lineSync.remove);
       for (const kept of lineSync.keep) {
         await this.invoices.updateLine(manager, kept.id, rowFor(newLines[kept.index], kept.index));
@@ -1320,8 +1348,9 @@ export class InvoicesService {
    *
    * Only follow-ups raised for the same term hold real carried lines; an earlier
    * term's arrears is a lump with nothing to move, and the loop finds no copies
-   * for it. Refuses a carried charge that would fall below what has already been
-   * put towards it there.
+   * for it. A carried charge may go to nothing or below what was put towards it
+   * here; what had been itemised to it is let go of, and the payment stays on
+   * the invoice.
    */
   private async syncCarriedCopies(
     manager: EntityManager,
@@ -1348,21 +1377,21 @@ export class InvoicesService {
         plan.lineDeltas,
       );
 
-      if (sync.refused) {
-        const name =
-          dto.lines.find((line) => line.feeItemId === sync.refused?.feeItemId)?.description ??
-          'That charge';
-        throw AppError.conflict(
-          `"${name}" is carried on ${carrier.invoiceNo}, where ${formatNairaWhole(sync.refused.paidKobo / MONEY_SCALE)} has been paid towards it, so it cannot be brought lower.`,
-        );
-      }
-
       for (const update of sync.update) {
+        if (update.belowPaid) {
+          await this.invoices.capLinePayments(
+            manager,
+            context.schoolId,
+            update.id,
+            update.totalKobo,
+          );
+        }
         await this.invoices.updateLine(manager, update.id, {
           unitAmount: fromKobo(update.totalKobo),
           lineTotal: fromKobo(update.totalKobo),
         });
       }
+      await this.invoices.releaseLinePayments(manager, context.schoolId, sync.remove);
       await this.invoices.deleteLinesById(manager, sync.remove);
 
       if (sync.insert.length > 0) {

@@ -132,9 +132,9 @@ export interface CreateInvoiceInput {
 
 /**
  * The student and term never appear here — those are fixed once an invoice
- * is issued. `lines` may be sent after money has landed, and the server then
- * refuses only what would make that money untrue: a total below what was paid,
- * or a charge a payment was itemised to being removed or cut below what it took.
+ * is issued. `lines` may be sent after money has landed: a charge can be removed
+ * or brought down whatever was paid towards it. The payment stays on the invoice,
+ * and what had been itemised to that charge is let go of.
  */
 export interface UpdateInvoiceInput {
   dueDate?: string;
