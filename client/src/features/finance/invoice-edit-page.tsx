@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Landmark, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, toDateInputValue } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { isApiError } from '@/lib/api-error';
 import { toast } from '@/lib/toast-bus';
 import type { FeeItem, Invoice, InvoiceLine } from '@/types/finance';
@@ -262,11 +263,16 @@ function ChargeRows({
           : savedLines.find((entry) => entry.feeItemId === line.feeItemId);
         const shownGross = saved ? saved.unitAmount * saved.quantity : gross;
         const shownDiscount = saved ? saved.discountAmount : lineDiscount;
+        // What is still owing on the charge as it now stands — the same Amount,
+        // Paid, Balance the invoice itself reads in, so editing a charge never
+        // hides how much of it has already been settled.
+        const shownNet = shownGross - shownDiscount;
+        const shownBalance = Math.max(0, shownNet - paidTowards);
 
         return (
           <li key={index} className="space-y-2 rounded-md border border-border p-3">
-            <div className="flex items-end gap-3">
-              <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+              <div className="min-w-[10rem] flex-1 space-y-1.5">
                 <Label htmlFor={`edit-line-item-${idPrefix}-${index}`}>Fee item</Label>
                 {missing ? (
                   <p
@@ -421,6 +427,31 @@ function ChargeRows({
                   )}
                 </div>
               )}
+              {!missing && (
+                <>
+                  {/* Read-only: money is taken off a charge on its receipt, not
+                      by editing the bill it was paid against. */}
+                  <div className="shrink-0 text-right text-sm" data-cy="finance-invoice-edit-paid">
+                    <p className="text-xs text-muted-foreground">Paid</p>
+                    <p className="tabular-nums text-muted-foreground">
+                      {paidTowards > 0
+                        ? formatCurrency(paidTowards, 'NGN', { showDecimals: false })
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right text-sm" data-cy="finance-invoice-edit-balance">
+                    <p className="text-xs text-muted-foreground">Balance</p>
+                    <p
+                      className={cn(
+                        'font-medium tabular-nums',
+                        shownBalance > 0 ? 'text-danger' : 'text-success',
+                      )}
+                    >
+                      {formatCurrency(shownBalance, 'NGN', { showDecimals: false })}
+                    </p>
+                  </div>
+                </>
+              )}
               <Button
                 data-cy="finance-invoice-edit-remove-line"
                 variant="ghost"
@@ -439,8 +470,8 @@ function ChargeRows({
             </div>
             {paidTowards > 0 && (
               <p className="text-xs text-muted-foreground" data-cy="finance-invoice-edit-line-paid">
-                {formatCurrency(paidTowards, 'NGN', { showDecimals: false })} has been paid towards
-                this charge. It can be repriced upward, but not removed or brought below that.
+                Money has been paid towards this charge, so it can be repriced upward but not
+                removed or brought below the amount paid.
               </p>
             )}
             {item && item.accounts.length === 1 && (

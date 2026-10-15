@@ -145,6 +145,40 @@ describe('InvoiceEditPage brought-forward items', () => {
     adds.forEach((button) => expect(button).toBeEnabled());
   });
 
+  it('shows what is paid and what is left on each item, beside its amount', async () => {
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    const column = (cy: string) =>
+      Array.from(document.querySelectorAll(`[data-cy="${cy}"]`)).map((cell) => cell.textContent ?? '');
+
+    const paid = column('finance-invoice-edit-paid');
+    expect(paid).toHaveLength(3);
+    expect(paid[0]).toContain('30,000'); // Tuition
+    expect(paid[1]).toContain('15,000'); // Boarding
+    expect(paid[2]).toContain('—'); // Bus — nothing paid yet
+
+    const balance = column('finance-invoice-edit-balance');
+    expect(balance[0]).toContain('25,000');
+    expect(balance[1]).toContain('21,000');
+    expect(balance[2]).toContain('20,000');
+  });
+
+  it('updates the balance as an amount is changed, with the paid figure staying put', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // Take 5,000 off Tuition (55,000 billed, 30,000 paid).
+    const discountInputs = screen.getAllByPlaceholderText('0');
+    await user.type(discountInputs[0], '5000');
+
+    const paid = document.querySelectorAll('[data-cy="finance-invoice-edit-paid"]')[0];
+    const balance = document.querySelectorAll('[data-cy="finance-invoice-edit-balance"]')[0];
+    expect(paid.textContent).toContain('30,000');
+    expect(balance.textContent).toContain('20,000');
+  });
+
   it('will not let a charge that money was put towards be removed', async () => {
     renderEdit();
     await screen.findByText('Brought forward from INV/2026-2027/00018');
