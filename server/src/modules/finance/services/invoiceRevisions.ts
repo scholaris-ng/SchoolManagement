@@ -51,6 +51,8 @@ export type InvoiceChangeKind =
   | 'DUE_DATE'
   | 'NOTE'
   | 'DISCOUNT'
+  /** What was carried in from an earlier invoice moved — because that invoice was edited. */
+  | 'BROUGHT_FORWARD'
   | 'TOTAL';
 
 /**
@@ -211,6 +213,15 @@ export function diffSnapshots(before: InvoiceSnapshot, after: InvoiceSnapshot): 
       detail: null,
     });
   }
+  if (kobo(before.broughtForward) !== kobo(after.broughtForward)) {
+    changes.push({
+      kind: 'BROUGHT_FORWARD',
+      label: null,
+      from: before.broughtForward,
+      to: after.broughtForward,
+      detail: null,
+    });
+  }
   if (before.dueDate !== after.dueDate) {
     changes.push({
       kind: 'DUE_DATE',
@@ -248,8 +259,78 @@ export function changesBilling(changes: InvoiceChange[]): boolean {
       change.kind === 'LINE_REMOVED' ||
       change.kind === 'LINE_CHANGED' ||
       change.kind === 'DISCOUNT' ||
+      change.kind === 'BROUGHT_FORWARD' ||
       change.kind === 'TOTAL',
   );
+}
+
+/** How much one of an earlier invoice's own charges moved, in kobo. */
+export interface SourceLineDelta {
+  feeItemId: string;
+  deltaKobo: number;
+}
+
+/** A charge as the follow-up invoice carries it: the balance still owing on that fee item. */
+export interface CarriedCopy {
+  id: string;
+  feeItemId: string;
+  totalKobo: number;
+  /** Already put towards this carried charge — itemised payments, or a receipt tick. */
+  paidKobo: number;
+}
+
+/**
+ * How the follow-up invoice's carried charges follow an edit to the invoice they
+ * came from.
+ *
+ * A carried charge holds what was still owing on one fee item, so when that
+ * item moves by some amount the carried one moves by the same amount: a charge
+ * that went up by ₦10,000 owes ₦10,000 more, one that was removed owes nothing,
+ * and an item that had been paid in full and is now billed higher starts to owe
+ * the difference. Charges are matched by fee item, in order, as everywhere else.
+ *
+ * `refused` is set instead of a plan when a carried charge would fall below what
+ * has already been put towards it — the same rule that stops any charge being
+ * cut under what a payment took.
+ */
+export function planCarriedSync(
+  copies: CarriedCopy[],
+  deltas: SourceLineDelta[],
+): {
+  update: { id: string; totalKobo: number }[];
+  remove: string[];
+  insert: { feeItemId: string; totalKobo: number }[];
+  refused: { feeItemId: string; paidKobo: number } | null;
+} {
+  const free = [...copies];
+  const update: { id: string; totalKobo: number }[] = [];
+  const remove: string[] = [];
+  const insert: { feeItemId: string; totalKobo: number }[] = [];
+
+  for (const { feeItemId, deltaKobo } of deltas) {
+    if (deltaKobo === 0) continue;
+
+    const at = free.findIndex((copy) => copy.feeItemId === feeItemId);
+    if (at === -1) {
+      // Nothing was carried for this item — it was settled, or is new. Only
+      // more owing creates a carried charge; less owing has nothing to reduce.
+      if (deltaKobo > 0) insert.push({ feeItemId, totalKobo: deltaKobo });
+      continue;
+    }
+
+    const [copy] = free.splice(at, 1);
+    const next = copy.totalKobo + deltaKobo;
+    // Only money actually put towards the carried charge protects it. With none,
+    // a source charge that fell by more than what was carried (some payments on
+    // the earlier invoice were never itemised) simply leaves nothing to carry.
+    if (copy.paidKobo > 0 && next < copy.paidKobo) {
+      return { update: [], remove: [], insert: [], refused: { feeItemId, paidKobo: copy.paidKobo } };
+    }
+    if (next <= 0) remove.push(copy.id);
+    else update.push({ id: copy.id, totalKobo: next });
+  }
+
+  return { update, remove, insert, refused: null };
 }
 
 /**

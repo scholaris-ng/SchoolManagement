@@ -2,6 +2,7 @@ import {
   changesBilling,
   diffSnapshots,
   isoDay,
+  planCarriedSync,
   planLineSync,
   snapshotOf,
   statusAfterEdit,
@@ -106,6 +107,19 @@ describe('diffSnapshots', () => {
     expect(changesBilling(changes)).toBe(false);
   });
 
+  it('reports what was brought forward moving, and counts it as billing', () => {
+    const changes = diffSnapshots(
+      snapshot({ broughtForward: 106_000, total: 106_000 }),
+      snapshot({ broughtForward: 46_000, total: 46_000 }),
+    );
+
+    expect(changes).toEqual([
+      { kind: 'BROUGHT_FORWARD', label: null, from: 106_000, to: 46_000, detail: null },
+      { kind: 'TOTAL', label: null, from: 106_000, to: 46_000, detail: null },
+    ]);
+    expect(changesBilling(changes)).toBe(true);
+  });
+
   it('pairs a fee item that appears twice one-to-one', () => {
     const first = line({ feeItemId: 'trip', description: 'Trip', lineTotal: 5_000 });
     const second = line({ feeItemId: 'trip', description: 'Trip', lineTotal: 5_000 });
@@ -204,6 +218,67 @@ describe('planLineSync', () => {
     ]);
     expect(plan.insert).toEqual([]);
     expect(plan.remove).toEqual([]);
+  });
+});
+
+describe('planCarriedSync', () => {
+  const copy = (id: string, feeItemId: string, total: number, paid = 0) => ({
+    id,
+    feeItemId,
+    totalKobo: total * 100,
+    paidKobo: paid * 100,
+  });
+
+  it('removes a carried charge whose source charge was removed', () => {
+    const plan = planCarriedSync(
+      [copy('c-test', 'test', 60_000), copy('c-tuition', 'tuition', 25_000)],
+      [{ feeItemId: 'test', deltaKobo: -100_000 * 100 }],
+    );
+
+    // The source charge was ₦100,000 with ₦40,000 paid, so ₦60,000 was carried;
+    // removing the whole charge takes the carried ₦60,000 below zero.
+    expect(plan.remove).toEqual(['c-test']);
+    expect(plan.update).toEqual([]);
+  });
+
+  it('moves a carried charge by exactly what its source charge moved by', () => {
+    const plan = planCarriedSync(
+      [copy('c-tuition', 'tuition', 25_000)],
+      [{ feeItemId: 'tuition', deltaKobo: -5_000 * 100 }],
+    );
+
+    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 20_000 * 100 }]);
+  });
+
+  it('starts a carried charge for an item that had been settled and is now billed higher', () => {
+    const plan = planCarriedSync([], [{ feeItemId: 'books', deltaKobo: 10_000 * 100 }]);
+
+    expect(plan.insert).toEqual([{ feeItemId: 'books', totalKobo: 10_000 * 100 }]);
+  });
+
+  it('has nothing to reduce where nothing was carried for the item', () => {
+    const plan = planCarriedSync([], [{ feeItemId: 'books', deltaKobo: -10_000 * 100 }]);
+
+    expect(plan).toEqual({ update: [], remove: [], insert: [], refused: null });
+  });
+
+  it('refuses to take a carried charge below what has been paid towards it', () => {
+    const plan = planCarriedSync(
+      [copy('c-tuition', 'tuition', 25_000, 20_000)],
+      [{ feeItemId: 'tuition', deltaKobo: -10_000 * 100 }],
+    );
+
+    expect(plan.refused).toEqual({ feeItemId: 'tuition', paidKobo: 20_000 * 100 });
+  });
+
+  it('leaves a paid-towards charge in place when it is brought exactly to what was paid', () => {
+    const plan = planCarriedSync(
+      [copy('c-tuition', 'tuition', 25_000, 20_000)],
+      [{ feeItemId: 'tuition', deltaKobo: -5_000 * 100 }],
+    );
+
+    expect(plan.refused).toBeNull();
+    expect(plan.update).toEqual([{ id: 'c-tuition', totalKobo: 20_000 * 100 }]);
   });
 });
 

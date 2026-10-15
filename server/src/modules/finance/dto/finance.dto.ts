@@ -296,6 +296,13 @@ export interface InvoiceDTO {
    */
   deletable: boolean;
   /**
+   * Set when this invoice was closed because its balance moved onto a later one.
+   * It reads `CANCELLED` but is not withdrawn: it is still real billing, and its
+   * charges can still be corrected — the invoice named here follows the change.
+   */
+  carriedForwardToInvoiceId: string | null;
+  carriedForwardToInvoiceNo: string | null;
+  /**
    * How many copies of this invoice have reached the family — printed, emailed
    * or sent on WhatsApp (see `DocumentDeliveryDTO`). A refused send is not
    * counted, since nobody holds it. `0` is the one worth showing: the family has

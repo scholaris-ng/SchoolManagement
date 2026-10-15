@@ -89,9 +89,18 @@ export function useUpdateInvoice() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateInvoiceInput }) =>
       FinanceEndpoints.updateInvoice(id, input),
-    onSuccess: (invoice) => {
+    onSuccess: (invoice, { input }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoices(schoolId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoice(schoolId, invoice.id) });
+      // An edit can reach past the invoice that was saved: the earlier ones whose
+      // charges were corrected from here, or the later one that took this over.
+      const alsoMoved = [
+        ...(input.carried ?? []).map((entry) => entry.invoiceId),
+        ...(invoice.carriedForwardToInvoiceId ? [invoice.carriedForwardToInvoiceId] : []),
+      ];
+      for (const movedId of alsoMoved) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.finance.invoice(schoolId, movedId) });
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.overview(schoolId) });
       toast.success('Invoice updated', { description: invoice.invoiceNo });
     },

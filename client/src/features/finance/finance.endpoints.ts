@@ -90,6 +90,12 @@ export interface InvoiceLineInput {
   accountIds?: string[];
   /** One of the fee item's own `priceOptions`; omitted bills the item's own `amount`. */
   priceOptionId?: string;
+  /**
+   * Edits only: this is the charge already on the invoice and its price was left
+   * alone, so keep the price it already has rather than re-pricing from today's
+   * fee list. Only ever honoured for a charge that is really there.
+   */
+  keepSavedPrice?: boolean;
 }
 
 /**
@@ -138,6 +144,12 @@ export interface UpdateInvoiceInput {
   discounts?: InvoiceDiscountInput[];
   /** Why — kept with the version this creates. Required by the server when the charges change. */
   reason?: string;
+  /**
+   * Corrections to the charges this invoice took over from earlier ones — its
+   * "brought forward" items. Each entry replaces that earlier invoice's own charges
+   * and the balance brought forward follows.
+   */
+  carried?: { invoiceId: string; lines: InvoiceLineInput[]; discounts?: InvoiceDiscountInput[] }[];
 }
 
 /** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */

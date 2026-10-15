@@ -71,8 +71,22 @@ const invoiceLine = z
   })
   .strict();
 
-const invoiceLines = z
-  .array(invoiceLine)
+/**
+ * A charge on an invoice being *edited*. The same as a new one, plus whether the
+ * person left its price alone.
+ *
+ * An edit re-prices the bill from the fee list as it stands now, which is right
+ * for a charge somebody just added and wrong for one they never touched: tuition
+ * billed at ₦55,000 last term must not become ₦70,000 because removing a
+ * different charge re-priced the whole invoice. `keepSavedPrice` says "this is
+ * the charge already on the invoice, at the price it is already at" — and is
+ * only ever honoured against a charge of that fee item that is really there, so
+ * it can reuse an amount the invoice already carries but never name a new one.
+ */
+const editLine = invoiceLine.extend({ keepSavedPrice: z.boolean().optional() });
+
+const editLines = z
+  .array(editLine)
   .min(1, 'An invoice needs at least one charge')
   .max(50, 'That is more charges than one invoice should carry')
   .refine(
@@ -157,7 +171,7 @@ export const updateInvoiceSchema = z.object({
     .object({
       dueDate: isoDate.optional(),
       note: z.string().trim().max(2000).optional().or(z.literal('')),
-      lines: invoiceLines.optional(),
+      lines: editLines.optional(),
       /** Only read alongside `lines`. Omitted, the invoice keeps the discounts it already carries. */
       discounts: invoiceDiscounts.optional(),
       /**
@@ -167,6 +181,30 @@ export const updateInvoiceSchema = z.object({
        * turns out to change nothing is not a version at all.
        */
       reason: z.string().trim().max(500).optional(),
+      /**
+       * Corrections to the charges this invoice took over from an earlier one —
+       * the "brought forward" items. Each entry replaces that earlier invoice's
+       * own charges wholesale, exactly as `lines` does for this one; the balance
+       * carried here follows. An earlier invoice can only be named if this one
+       * absorbed it.
+       */
+      carried: z
+        .array(
+          z
+            .object({
+              invoiceId: z.string().uuid(),
+              lines: editLines,
+              /** Omitted, the earlier invoice keeps the discounts it already carries. */
+              discounts: invoiceDiscounts.optional(),
+            })
+            .strict(),
+        )
+        .max(10, 'That is more earlier invoices than one bill should carry')
+        .refine(
+          (entries) => new Set(entries.map((entry) => entry.invoiceId)).size === entries.length,
+          'The same earlier invoice appears twice',
+        )
+        .optional(),
     })
     .strict(),
 });

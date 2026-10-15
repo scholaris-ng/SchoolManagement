@@ -32,6 +32,8 @@ export function describeChange(change: InvoiceChange): string {
       return 'Note edited';
     case 'DISCOUNT':
       return `Discounts: ${naira(change.from)} → ${naira(change.to)}`;
+    case 'BROUGHT_FORWARD':
+      return `Brought forward: ${naira(change.from)} → ${naira(change.to)}`;
     case 'TOTAL':
       return `Total: ${naira(change.from)} → ${naira(change.to)}`;
   }

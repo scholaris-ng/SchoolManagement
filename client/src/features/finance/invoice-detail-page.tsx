@@ -181,7 +181,9 @@ export function InvoiceDetailPage() {
                 // onto the page the sender is still looking at.
                 onShared={() => void deliveries.refetch()}
               />
-              {record.status !== 'CANCELLED' && (
+              {/* A balance carried onto a later invoice reads CANCELLED but was not
+                  withdrawn — its charges are still real and still correctable. */}
+              {(record.status !== 'CANCELLED' || record.carriedForwardToInvoiceId) && (
                 <PermissionGate require="invoice.manage">
                   <Button data-cy="finance-invoice-detail-edit" variant="outline" asChild>
                     <Link to={`/finance/invoices/${record.id}/edit`}>

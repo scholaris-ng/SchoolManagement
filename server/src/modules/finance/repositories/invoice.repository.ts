@@ -52,6 +52,12 @@ const PROJECTION = `
   i.note, i.created_at AS "createdAt", i.version,
   COALESCE(del.sent_count, 0)::int AS "sentCount",
   del.last_sent_at AS "lastSentAt",
+  -- Where this invoice's balance went, when it was closed by being carried
+  -- forward. Such an invoice is CANCELLED but is not a mistake, and its charges
+  -- can still be corrected — the invoice that took them over follows.
+  i.carried_forward_to_invoice_id AS "carriedForwardToInvoiceId",
+  (SELECT nx.invoice_no FROM invoices nx WHERE nx.id = i.carried_forward_to_invoice_id)
+    AS "carriedForwardToInvoiceNo",
   -- Hard-delete is refused once any of these hold — see deleteMany() below
   -- and the note on the Invoice entity. Surfaced here so the list and
   -- detail screens can grey the option out instead of hitting the refusal.
@@ -837,7 +843,15 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     fields: Partial<
       Pick<
         Invoice,
-        'dueDate' | 'note' | 'subtotal' | 'discountTotal' | 'appliedDiscounts' | 'total' | 'status'
+        | 'dueDate'
+        | 'note'
+        | 'subtotal'
+        | 'discountTotal'
+        | 'appliedDiscounts'
+        | 'broughtForward'
+        | 'broughtForwardFrom'
+        | 'total'
+        | 'status'
       >
     >,
     manager?: EntityManager,
@@ -881,6 +895,44 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   async deleteLinesById(manager: EntityManager, ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await manager.getRepository(InvoiceLine).delete(ids);
+  }
+
+  /**
+   * The charges one invoice carries on behalf of an earlier one, each with what
+   * has been put towards it here — itemised payments, or a receipt's tick, which
+   * the same rule as everywhere else reads as the whole charge.
+   */
+  async findCarriedCopies(
+    manager: EntityManager,
+    schoolId: string,
+    invoiceId: string,
+    sourceInvoiceId: string,
+  ): Promise<{ id: string; feeItemId: string; total: number; paid: number }[]> {
+    return manager.query(
+      `SELECT il.id, il.fee_item_id AS "feeItemId", il.line_total::float AS total,
+              (CASE WHEN ${LINE_SETTLED_BY_TICK} THEN il.line_total ELSE COALESCE(lpd.paid, 0) END)::float AS paid
+         FROM invoice_lines il
+         LEFT JOIN LATERAL (
+           SELECT SUM(pla.amount) AS paid
+             FROM payment_line_allocations pla
+             JOIN payment_allocations pa ON pa.id = pla.payment_allocation_id
+             JOIN payments p ON p.id = pa.payment_id AND p.status = 'SUCCESSFUL'
+            WHERE pla.invoice_line_id = il.id
+         ) lpd ON TRUE
+        WHERE il.school_id = $1 AND il.invoice_id = $2 AND il.carried_from_invoice_id = $3
+        ORDER BY il.sort_order, il.description`,
+      [schoolId, invoiceId, sourceInvoiceId],
+    );
+  }
+
+  /** The next free sort position among an invoice's carried charges, so a new one lands last. */
+  async maxCarriedSortOrder(manager: EntityManager, invoiceId: string): Promise<number | null> {
+    const [row]: { top: number | null }[] = await manager.query(
+      `SELECT MAX(sort_order)::int AS top FROM invoice_lines
+        WHERE invoice_id = $1 AND carried_from_invoice_id IS NOT NULL`,
+      [invoiceId],
+    );
+    return row?.top ?? null;
   }
 
   /* -- Versions ---------------------------------------------------------------- */

@@ -255,6 +255,13 @@ export interface Invoice {
    */
   deletable: boolean;
   /**
+   * Set when this invoice was closed because its balance moved onto a later one.
+   * It reads `CANCELLED` but was not withdrawn: it is still real billing and its
+   * charges can still be corrected, with the invoice named here following.
+   */
+  carriedForwardToInvoiceId?: string | null;
+  carriedForwardToInvoiceNo?: string | null;
+  /**
    * How many copies of this invoice have reached the family — see
    * `DocumentDelivery`. `0` is the interesting value: they have been billed and
    * never told.
@@ -300,6 +307,8 @@ export type InvoiceChangeKind =
   | 'DUE_DATE'
   | 'NOTE'
   | 'DISCOUNT'
+  /** What was carried in from an earlier invoice moved, because that invoice was edited. */
+  | 'BROUGHT_FORWARD'
   | 'TOTAL';
 
 /**
