@@ -63,6 +63,10 @@ export function createApp(): Express {
   // Outside the versioned prefix so a platform probe never tracks an API
   // version, and ahead of the rate limiter so probes are never throttled.
   app.use('/api/health', healthRoutes);
+  // The same probes again under the versioned prefix (`/api/v1/health`), for
+  // anything that only knows the API's base URL. Mounted here for the same
+  // reason: before the rate limiter, and before the auth pair further down.
+  app.use(`${env.apiPrefix}/health`, healthRoutes);
 
   app.use(env.apiPrefix, apiRateLimiter);
 

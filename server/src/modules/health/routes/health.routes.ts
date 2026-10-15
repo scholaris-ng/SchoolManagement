@@ -17,6 +17,14 @@ router.get('/live', (_req, res) => {
   res.status(200).json(ApiResponse.ok({ status: 'ok' }));
 });
 
+/**
+ * The bare `/health` — same answer as `/live`, so a monitor or a browser tab
+ * pointed at `{apiPrefix}/health` gets a plain 200 with no sign-in.
+ */
+router.get('/', (_req, res) => {
+  res.status(200).json(ApiResponse.ok({ status: 'ok' }));
+});
+
 /** Should this instance receive traffic? */
 router.get('/ready', async (_req, res) => {
   const database = await checkDatabase();
