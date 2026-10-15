@@ -27,6 +27,14 @@ import { LedgerRepository } from '../repositories/ledger.repository';
 import { StudentDiscountRepository } from '../repositories/studentDiscount.repository';
 import { DiscountRepository } from '../repositories/discount.repository';
 import { applyDiscounts, resolveDiscountScope, type ApplicableDiscount } from './discountCalculator';
+import {
+  changesBilling,
+  diffSnapshots,
+  planLineSync,
+  snapshotOf,
+  statusAfterEdit,
+  type InvoiceSnapshot,
+} from './invoiceRevisions';
 import { DocumentDeliveriesService, type DeliveryDocument } from './documentDeliveries.service';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import type { InvoiceLine, InvoiceLineAccountSnapshot } from '../entities/invoiceLine.entity';
@@ -36,6 +44,7 @@ import type {
   DeleteInvoicesResultDTO,
   FeeItemDTO,
   InvoiceDTO,
+  InvoiceRevisionDTO,
   StudentFinanceSummaryDTO,
   StudentLedgerResultDTO,
 } from '../dto/finance.dto';
@@ -749,8 +758,19 @@ export class InvoicesService {
   /* -- Editing one --------------------------------------------------------- */
 
   /**
-   * The student and term are fixed at issuance — only the due date, the
-   * note, and (while nothing has been paid) the charges themselves can move.
+   * The student and term are fixed at issuance — everything else can be
+   * corrected, and every correction is kept as a version (`InvoiceRevision`).
+   *
+   * A mistake used to mean cancelling the bill and raising a new one. That is
+   * the thing this replaces: the invoice keeps its number, and its history says
+   * what it was, what it became, who changed it and why.
+   *
+   * Once money has landed the charges can still move, but only so far as the
+   * money already received stays true:
+   *   - the new total may not fall below what has been paid;
+   *   - a charge a payment was itemised to, or that a receipt ticked as paid,
+   *     may be repriced upward but not removed or brought below what it took.
+   * Anything past that is a payment to reverse first, not an invoice to edit.
    */
   async updateInvoice(
     context: RequestContext,
@@ -763,18 +783,16 @@ export class InvoicesService {
       throw AppError.conflict('A cancelled invoice cannot be edited.');
     }
 
+    const amountPaidKobo = Math.round(existing.amountPaid * MONEY_SCALE);
+    const reason = input.reason?.trim() ? input.reason.trim() : null;
+
     const fields: Parameters<typeof this.invoices.updateFields>[1] = {};
     if (input.dueDate !== undefined) fields.dueDate = input.dueDate;
     if (input.note !== undefined) fields.note = input.note ? input.note : null;
 
     let newLines: IssueLine[] | null = null;
+    let lineSync: ReturnType<typeof planLineSync> | null = null;
     if (input.lines) {
-      if (Math.round(existing.amountPaid * MONEY_SCALE) > 0) {
-        throw AppError.conflict(
-          'Money has already been received against this invoice, so the amount cannot be changed. Reverse the payment first, or edit only the due date and note.',
-        );
-      }
-
       const items = await this.feeItems.fetchForSchool(context.schoolId);
       const byId = new Map(items.map((item) => [item.id, item]));
       const structureAmounts = await this.structureAmountsFor(
@@ -840,35 +858,139 @@ export class InvoicesService {
       const broughtForwardKobo = Math.round(existing.broughtForward * MONEY_SCALE);
       const totalKobo = subtotalKobo - discountKobo + broughtForwardKobo;
 
+      // Money already received must stay true. Refused here, before anything
+      // is written, with the figure that makes it so.
+      if (totalKobo < amountPaidKobo) {
+        throw AppError.conflict(
+          `These changes would bring the invoice to ${formatNairaWhole(totalKobo / MONEY_SCALE)}, which is less than the ${formatNairaWhole(existing.amountPaid)} already paid against it. Reverse or reduce a payment first.`,
+        );
+      }
+
+      const ownLines = existing.lines.filter((line) => !line.carriedFromInvoiceId);
+      lineSync = planLineSync(ownLines, newLines);
+
+      for (const removedId of lineSync.remove) {
+        const line = ownLines.find((candidate) => candidate.id === removedId);
+        if (line && Math.round(line.amountPaid * MONEY_SCALE) > 0) {
+          throw AppError.conflict(
+            `"${line.description}" has ${formatNairaWhole(line.amountPaid)} paid towards it, so it cannot be removed. Take that payment off the charge on its receipt first.`,
+          );
+        }
+      }
+      for (const kept of lineSync.keep) {
+        const line = ownLines.find((candidate) => candidate.id === kept.id);
+        const next = newLines[kept.index];
+        const nextTotalKobo =
+          Math.round(next.unitAmount * next.quantity * MONEY_SCALE) -
+          Math.round(next.discountAmount * MONEY_SCALE);
+        if (line && nextTotalKobo < Math.round(line.amountPaid * MONEY_SCALE)) {
+          throw AppError.conflict(
+            `"${line.description}" has ${formatNairaWhole(line.amountPaid)} paid towards it, so it cannot be brought down to ${formatNairaWhole(nextTotalKobo / MONEY_SCALE)}.`,
+          );
+        }
+      }
+
       fields.subtotal = fromKobo(subtotalKobo);
       fields.discountTotal = fromKobo(discountKobo);
       fields.appliedDiscounts = applied;
       fields.total = fromKobo(totalKobo);
-      // Only reachable with nothing paid yet, so the only two states an edit
-      // can land on are the same ones a fresh invoice can — never PART_PAID.
-      fields.status = totalKobo <= 0 ? 'PAID' : 'ISSUED';
+      fields.status = statusAfterEdit(totalKobo, amountPaidKobo);
+    }
+
+    // What the invoice said, and what it will say. Built here rather than read
+    // back afterwards so the version is written in the same transaction as the
+    // edit — it cannot exist for a change that did not happen.
+    const before = snapshotOf(existing);
+    const after: InvoiceSnapshot = {
+      dueDate: input.dueDate ?? before.dueDate,
+      note: input.note !== undefined ? (input.note ? input.note : null) : before.note,
+      lines: newLines
+        ? newLines.map((line) => ({
+            feeItemId: line.feeItemId,
+            description: line.description,
+            quantity: line.quantity,
+            unitAmount: line.unitAmount,
+            discountAmount: line.discountAmount,
+            lineTotal:
+              (Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
+                Math.round(line.discountAmount * MONEY_SCALE)) /
+              MONEY_SCALE,
+            isOptional: line.isOptional,
+          }))
+        : before.lines,
+      subtotal: fields.subtotal !== undefined ? Number(fields.subtotal) : before.subtotal,
+      discountTotal:
+        fields.discountTotal !== undefined ? Number(fields.discountTotal) : before.discountTotal,
+      appliedDiscounts: fields.appliedDiscounts
+        ? fields.appliedDiscounts.map((entry) => ({ name: entry.name, amount: entry.amount }))
+        : before.appliedDiscounts,
+      broughtForward: before.broughtForward,
+      total: fields.total !== undefined ? Number(fields.total) : before.total,
+    };
+    const changes = diffSnapshots(before, after);
+
+    // Saving without changing anything is not a new version.
+    if (changes.length === 0) return this.requireDTO(context.schoolId, id);
+
+    if (changesBilling(changes) && !reason) {
+      throw AppError.validation(
+        'Say why the charges are being changed. The reason is kept with the invoice history.',
+      );
     }
 
     await AppDataSource.transaction(async (manager) => {
-      if (newLines) {
-        await this.invoices.deleteLines(id, manager);
+      await this.invoices.lockForEdit(manager, id);
+
+      let revisionNo = await this.invoices.latestRevisionNo(manager, id);
+      if (revisionNo === 0) {
+        await this.invoices.insertOriginalRevision(manager, {
+          schoolId: context.schoolId,
+          invoiceId: id,
+          snapshot: before,
+          amountPaid: existing.amountPaid,
+        });
+        revisionNo = 1;
+      }
+      revisionNo += 1;
+
+      await this.invoices.insertRevision(manager, {
+        schoolId: context.schoolId,
+        invoiceId: id,
+        revisionNo,
+        snapshot: after,
+        changes,
+        reason,
+        amountPaid: existing.amountPaid,
+        createdByUserId: context.user.id,
+        createdByName: context.user.displayName,
+      });
+
+      if (newLines && lineSync) {
+        const rowFor = (line: IssueLine, index: number) => ({
+          description: line.description,
+          category: line.category,
+          quantity: line.quantity,
+          unitAmount: line.unitAmount.toFixed(2),
+          discountAmount: line.discountAmount.toFixed(2),
+          lineTotal: fromKobo(
+            Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
+              Math.round(line.discountAmount * MONEY_SCALE),
+          ),
+          isOptional: line.isOptional,
+          sortOrder: index,
+          accounts: line.accounts,
+        });
+
+        await this.invoices.deleteLinesById(manager, lineSync.remove);
+        for (const kept of lineSync.keep) {
+          await this.invoices.updateLine(manager, kept.id, rowFor(newLines[kept.index], kept.index));
+        }
         await this.invoices.createLines(
-          newLines!.map((line, index) => ({
+          lineSync.insert.map((index) => ({
             schoolId: context.schoolId,
             invoiceId: id,
-            feeItemId: line.feeItemId,
-            description: line.description,
-            category: line.category,
-            quantity: line.quantity,
-            unitAmount: line.unitAmount.toFixed(2),
-            discountAmount: line.discountAmount.toFixed(2),
-            lineTotal: fromKobo(
-              Math.round(line.unitAmount * line.quantity * MONEY_SCALE) -
-                Math.round(line.discountAmount * MONEY_SCALE),
-            ),
-            isOptional: line.isOptional,
-            sortOrder: index,
-            accounts: line.accounts,
+            feeItemId: newLines![index].feeItemId,
+            ...rowFor(newLines![index], index),
           })),
           manager,
         );
@@ -883,13 +1005,38 @@ export class InvoicesService {
       entityLabel: `${existing.invoiceNo} · ${existing.studentName}`,
       before: { total: existing.total, dueDate: existing.dueDate, note: existing.note },
       after: {
-        total: fields.total !== undefined ? Number(fields.total) : existing.total,
-        dueDate: input.dueDate ?? existing.dueDate,
-        note: input.note !== undefined ? (input.note || null) : existing.note,
+        total: after.total,
+        dueDate: after.dueDate,
+        note: after.note,
+        reason,
+        changes: changes.length,
       },
     });
 
     return this.requireDTO(context.schoolId, id);
+  }
+
+  /* -- Versions -------------------------------------------------------------- */
+
+  /**
+   * Every version this invoice has had, newest first.
+   *
+   * Empty for an invoice nobody has edited — which is not "no history" but
+   * "still the original", and the screen says so. A parent is not offered this:
+   * the reasons are the office's own notes, so the route asks for
+   * `invoice.manage` or `audit.read`, and this still goes through the same
+   * student-visibility check as the invoice itself.
+   */
+  async fetchInvoiceRevisions(
+    context: RequestContext,
+    id: string,
+  ): Promise<InvoiceRevisionDTO[]> {
+    const invoice = await this.invoices.findOneDTO(context.schoolId, id);
+    if (!invoice) throw AppError.notFound('Invoice');
+    if (!(await this.access.canSeeStudent(context, invoice.studentId))) {
+      throw AppError.notFound('Invoice');
+    }
+    return this.invoices.fetchRevisions(context.schoolId, id);
   }
 
   /* -- Deleting many -------------------------------------------------------- */
@@ -1260,6 +1407,11 @@ export function invoiceNumber(sessionName: string, sequence: number): string {
 /** Money is compared in kobo and written back as a fixed-point string. */
 function fromKobo(kobo: number): string {
   return (kobo / MONEY_SCALE).toFixed(2);
+}
+
+/** `₦150,000`, for the sentence in a refusal — kobo only when there are some. */
+function formatNairaWhole(amount: number): string {
+  return `₦${amount.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 }
 
 /**

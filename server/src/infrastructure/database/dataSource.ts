@@ -61,6 +61,7 @@ import { FeeStructure } from '../../modules/finance/entities/feeStructure.entity
 import { FeeStructureLine } from '../../modules/finance/entities/feeStructureLine.entity';
 import { Invoice } from '../../modules/finance/entities/invoice.entity';
 import { InvoiceLine } from '../../modules/finance/entities/invoiceLine.entity';
+import { InvoiceRevision } from '../../modules/finance/entities/invoiceRevision.entity';
 import { PaymentAccount } from '../../modules/finance/entities/paymentAccount.entity';
 import { Payment } from '../../modules/finance/entities/payment.entity';
 import { PaymentAllocation } from '../../modules/finance/entities/paymentAllocation.entity';
@@ -145,6 +146,7 @@ export const entities = [
   FeeStructureLine,
   Invoice,
   InvoiceLine,
+  InvoiceRevision,
   PaymentAccount,
   Payment,
   PaymentAllocation,

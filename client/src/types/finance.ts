@@ -269,6 +269,71 @@ export interface Invoice {
   schoolEmail: string;
 }
 
+/** One of an invoice's own charges as it stood at a version. */
+export interface InvoiceRevisionLine {
+  feeItemId: string;
+  description: string;
+  quantity: number;
+  unitAmount: number;
+  discountAmount: number;
+  lineTotal: number;
+  isOptional: boolean;
+}
+
+/** The whole invoice as one version saw it. Mirrors `InvoiceSnapshot` server-side. */
+export interface InvoiceSnapshot {
+  dueDate: string;
+  note: string | null;
+  /** Its own charges only — a balance carried in from another invoice is `broughtForward`. */
+  lines: InvoiceRevisionLine[];
+  subtotal: number;
+  discountTotal: number;
+  appliedDiscounts: { name: string; amount: number }[];
+  broughtForward: number;
+  total: number;
+}
+
+export type InvoiceChangeKind =
+  | 'LINE_ADDED'
+  | 'LINE_REMOVED'
+  | 'LINE_CHANGED'
+  | 'DUE_DATE'
+  | 'NOTE'
+  | 'DISCOUNT'
+  | 'TOTAL';
+
+/**
+ * One thing that moved between two versions. `from`/`to` are money for the line,
+ * discount and total kinds and text for the due date and note.
+ */
+export interface InvoiceChange {
+  kind: InvoiceChangeKind;
+  label: string | null;
+  from: string | number | null;
+  to: string | number | null;
+  /** Extra wording where the amount alone hides it — "Quantity 1 → 2". */
+  detail: string | null;
+}
+
+/**
+ * One version of an invoice. Mirrors `InvoiceRevisionDTO`.
+ *
+ * Version 1 is the invoice as it stood before its first tracked edit; an
+ * invoice nobody has edited has none, and is still its original self.
+ */
+export interface InvoiceRevision {
+  id: string;
+  revisionNo: number;
+  snapshot: InvoiceSnapshot;
+  /** What differed from the version before. Empty on version 1. */
+  changes: InvoiceChange[];
+  reason: string | null;
+  /** What had been received against the invoice when this version was written. */
+  amountPaid: number;
+  createdByName: string;
+  createdAt: string;
+}
+
 /** One charge on a custom bill. `amount` is the per-unit price; the line totals `amount * quantity`. */
 export interface CustomBillLine {
   description: string;

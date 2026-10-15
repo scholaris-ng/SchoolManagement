@@ -160,6 +160,13 @@ export const updateInvoiceSchema = z.object({
       lines: invoiceLines.optional(),
       /** Only read alongside `lines`. Omitted, the invoice keeps the discounts it already carries. */
       discounts: invoiceDiscounts.optional(),
+      /**
+       * Why this edit was made, kept with the version it creates. Required by
+       * the service whenever what the family is billed actually changes — it is
+       * not required here, because a due-date edit sends none and an edit that
+       * turns out to change nothing is not a version at all.
+       */
+      reason: z.string().trim().max(500).optional(),
     })
     .strict(),
 });

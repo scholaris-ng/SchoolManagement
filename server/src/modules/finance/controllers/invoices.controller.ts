@@ -36,6 +36,17 @@ export class InvoicesController {
     }
   }
 
+  static async revisions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.validated!.params as { id: string };
+      res
+        .status(200)
+        .json(ApiResponse.ok(await service().fetchInvoiceRevisions(contextOf(req), id)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = req.validated!.body as CreateInvoiceInput;

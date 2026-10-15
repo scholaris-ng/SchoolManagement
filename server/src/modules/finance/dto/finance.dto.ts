@@ -1,6 +1,7 @@
 import type { FeeCategory } from '../entities/feeItem.entity';
 import type { DiscountMode, DiscountType } from '../entities/discount.entity';
 import type { AppliedDiscount } from '../services/discountCalculator';
+import type { InvoiceChange, InvoiceSnapshot } from '../services/invoiceRevisions';
 import type { PaymentAccountStatus, PaymentProvider } from '../entities/paymentAccount.entity';
 import type { PaymentMethod, PaymentSource, PaymentStatus } from '../entities/payment.entity';
 import type { PaymentReceiptStatus } from '../entities/paymentReceipt.entity';
@@ -313,6 +314,25 @@ export interface InvoiceDTO {
   schoolAddress: string;
   schoolPhone: string;
   schoolEmail: string;
+}
+
+/**
+ * One version of an invoice — see `InvoiceRevision`. Mirrors `InvoiceRevision`
+ * in `client/src/types/finance.ts`.
+ */
+export interface InvoiceRevisionDTO {
+  id: string;
+  /** 1 is the invoice as it stood before its first tracked edit. */
+  revisionNo: number;
+  /** The whole invoice as it stood at this version — own charges, totals, due date, note. */
+  snapshot: InvoiceSnapshot;
+  /** What differed from the version before. Empty on version 1. */
+  changes: InvoiceChange[];
+  reason: string | null;
+  /** What had been received against the invoice when this version was written. */
+  amountPaid: number;
+  createdByName: string;
+  createdAt: string;
 }
 
 /** Mirrors `PaymentAllocation` in `client/src/types/finance.ts`. */

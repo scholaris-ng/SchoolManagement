@@ -39,6 +39,19 @@ export function useInvoice(id: string | undefined) {
 }
 
 /**
+ * Every version of one invoice. `enabled` keeps the request back for someone
+ * who could not read it anyway — the office's own notes are not for a parent.
+ */
+export function useInvoiceRevisions(id: string | undefined, options: { enabled?: boolean } = {}) {
+  const schoolId = useSchoolId();
+  return useQuery({
+    queryKey: queryKeys.finance.invoiceRevisions(schoolId, id ?? ''),
+    queryFn: () => FinanceEndpoints.fetchInvoiceRevisions(id ?? ''),
+    enabled: Boolean(schoolId && id) && options.enabled !== false,
+  });
+}
+
+/**
  * Several invoices' full detail at once, results in the same order as `ids`.
  * Shares `useInvoice`'s cache entries, so an invoice already open elsewhere on
  * the page is not fetched twice.

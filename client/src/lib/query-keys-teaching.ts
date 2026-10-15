@@ -37,6 +37,8 @@ export const teachingKeys = {
       scoped(schoolId, 'payment-destination-duplicates'),
     invoices: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'invoices', query ?? {}),
     invoice: (schoolId: Scope, id: string) => scoped(schoolId, 'invoices', id),
+    /** Every version of one invoice. Sits under `invoice`, so saving an edit refreshes it too. */
+    invoiceRevisions: (schoolId: Scope, id: string) => scoped(schoolId, 'invoices', id, 'revisions'),
     payments: (schoolId: Scope, query?: ListQuery) => scoped(schoolId, 'payments', query ?? {}),
     payment: (schoolId: Scope, id: string) => scoped(schoolId, 'payments', id),
     paymentAccounts: (schoolId: Scope, studentId: string) =>

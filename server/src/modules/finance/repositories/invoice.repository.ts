@@ -1,12 +1,13 @@
-import { IsNull, type DeepPartial, type EntityManager } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Invoice, type BroughtForwardSource } from '../entities/invoice.entity';
 import { InvoiceLine } from '../entities/invoiceLine.entity';
 import type { FeeCategory } from '../entities/feeItem.entity';
-import type { InvoiceDTO } from '../dto/finance.dto';
+import type { InvoiceDTO, InvoiceRevisionDTO } from '../dto/finance.dto';
 import type { AppliedDiscount } from '../services/discountCalculator';
+import type { InvoiceChange, InvoiceSnapshot } from '../services/invoiceRevisions';
 
 /**
  * Everything the client's `Invoice` needs, assembled in SQL.
@@ -831,16 +832,6 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
     await this.repoFor(manager).delete(ids);
   }
 
-  /**
-   * Removes an invoice's own charges. Lines carried in from an earlier invoice
-   * stay: they are the balance it took over, not something the person editing
-   * the bill chose, and `brought_forward` still counts them.
-   */
-  async deleteLines(invoiceId: string, manager?: EntityManager): Promise<void> {
-    const repo = manager ? manager.getRepository(InvoiceLine) : this.lines;
-    await repo.delete({ invoiceId, carriedFromInvoiceId: IsNull() });
-  }
-
   async updateFields(
     id: string,
     fields: Partial<
@@ -853,6 +844,130 @@ export class InvoiceRepository extends TenantRepository<Invoice> {
   ): Promise<void> {
     if (Object.keys(fields).length === 0) return;
     await this.repoFor(manager).update({ id }, fields);
+  }
+
+  /* -- Editing charges in place ----------------------------------------------- */
+
+  /**
+   * Rewrites one charge where it stands, keeping its id.
+   *
+   * An edit used to delete every charge and insert them afresh, which is fine
+   * while nothing points at them. Once a payment has been itemised to a charge
+   * (`payment_line_allocations`) or a receipt has ticked it, that id is what
+   * ties the money to the fee item, so an edit has to leave a surviving charge
+   * exactly where it is.
+   */
+  async updateLine(
+    manager: EntityManager,
+    id: string,
+    fields: Partial<
+      Pick<
+        InvoiceLine,
+        | 'description'
+        | 'category'
+        | 'quantity'
+        | 'unitAmount'
+        | 'discountAmount'
+        | 'lineTotal'
+        | 'isOptional'
+        | 'sortOrder'
+        | 'accounts'
+      >
+    >,
+  ): Promise<void> {
+    await manager.getRepository(InvoiceLine).update({ id }, fields);
+  }
+
+  async deleteLinesById(manager: EntityManager, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await manager.getRepository(InvoiceLine).delete(ids);
+  }
+
+  /* -- Versions ---------------------------------------------------------------- */
+
+  /**
+   * Takes the invoice's row lock for the rest of the transaction, so two edits
+   * of one bill queue instead of both reading "latest is version 2".
+   */
+  async lockForEdit(manager: EntityManager, invoiceId: string): Promise<void> {
+    await manager.query(`SELECT id FROM invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
+  }
+
+  async latestRevisionNo(manager: EntityManager, invoiceId: string): Promise<number> {
+    const [row]: { latest: number | null }[] = await manager.query(
+      `SELECT MAX(revision_no)::int AS latest FROM invoice_revisions WHERE invoice_id = $1`,
+      [invoiceId],
+    );
+    return row?.latest ?? 0;
+  }
+
+  /**
+   * Writes version 1 — the invoice as it stood before its first tracked edit —
+   * attributed to whoever raised it and dated when it was raised, not to the
+   * person who happens to be making the first correction.
+   */
+  async insertOriginalRevision(
+    manager: EntityManager,
+    params: { schoolId: string; invoiceId: string; snapshot: InvoiceSnapshot; amountPaid: number },
+  ): Promise<void> {
+    await manager.query(
+      `INSERT INTO invoice_revisions
+         (school_id, invoice_id, revision_no, snapshot, changes, reason, amount_paid,
+          created_by_user_id, created_by_name, created_at, updated_at)
+       SELECT i.school_id, i.id, 1, $3::jsonb, '[]'::jsonb, NULL, $4,
+              i.created_by_user_id, COALESCE(NULLIF(u.display_name, ''), 'Unknown'),
+              i.created_at, i.created_at
+         FROM invoices i
+         LEFT JOIN users u ON u.id = i.created_by_user_id
+        WHERE i.school_id = $1 AND i.id = $2`,
+      [params.schoolId, params.invoiceId, JSON.stringify(params.snapshot), params.amountPaid],
+    );
+  }
+
+  async insertRevision(
+    manager: EntityManager,
+    params: {
+      schoolId: string;
+      invoiceId: string;
+      revisionNo: number;
+      snapshot: InvoiceSnapshot;
+      changes: InvoiceChange[];
+      reason: string | null;
+      amountPaid: number;
+      createdByUserId: string;
+      createdByName: string;
+    },
+  ): Promise<void> {
+    await manager.query(
+      `INSERT INTO invoice_revisions
+         (school_id, invoice_id, revision_no, snapshot, changes, reason, amount_paid,
+          created_by_user_id, created_by_name)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9)`,
+      [
+        params.schoolId,
+        params.invoiceId,
+        params.revisionNo,
+        JSON.stringify(params.snapshot),
+        JSON.stringify(params.changes),
+        params.reason,
+        params.amountPaid,
+        params.createdByUserId,
+        params.createdByName,
+      ],
+    );
+  }
+
+  /** Newest first. Empty for an invoice nobody has edited since versions began. */
+  async fetchRevisions(schoolId: string, invoiceId: string): Promise<InvoiceRevisionDTO[]> {
+    return this.repo.query(
+      `SELECT r.id, r.revision_no AS "revisionNo", r.snapshot, r.changes, r.reason,
+              r.amount_paid::float AS "amountPaid",
+              r.created_by_name AS "createdByName", r.created_at AS "createdAt"
+         FROM invoice_revisions r
+        WHERE r.school_id = $1 AND r.invoice_id = $2
+        ORDER BY r.revision_no DESC`,
+      [schoolId, invoiceId],
+    );
   }
 }
 

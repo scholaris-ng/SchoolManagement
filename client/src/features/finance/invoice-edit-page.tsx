@@ -47,14 +47,39 @@ interface LineDraft {
 }
 
 /**
+ * What the charges and discounts on the form add up to, as one comparable
+ * string — so "did the person change the charges?" is a string comparison
+ * rather than a hand-written field-by-field diff that drifts out of date.
+ */
+function draftKey(lines: LineDraft[], discounts: ChosenDiscount[]): string {
+  return JSON.stringify({
+    lines: lines.map((line) => [
+      line.feeItemId,
+      line.quantity,
+      line.priceOptionId ?? null,
+      line.discountMode,
+      line.discountValue,
+      [...line.accountIds].sort(),
+    ]),
+    discounts: discounts
+      .map((entry) => [entry.discountId, [...entry.feeItemIds].sort()])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  });
+}
+
+/**
  * Editing an issued invoice.
  *
  * The student and term are fixed — those are what the bill is *for*, not
  * what it says, so a mistake there means deleting this invoice and raising a
  * fresh one rather than editing this one into a different family's bill.
- * Once any money has landed on the invoice the charges themselves lock too,
- * for the same reason: an amount someone has already paid against cannot
- * quietly become a different amount.
+ *
+ * Everything else can be corrected, and every correction is kept as a version
+ * (see `InvoiceHistoryCard`), so a mistake no longer has to be fixed by
+ * cancelling the bill and raising another. Once money has landed the same holds
+ * with two limits, both enforced by the server: the total cannot fall below
+ * what has been paid, and a charge a payment was itemised to cannot be removed
+ * or cut below what it took.
  */
 export function InvoiceEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -77,6 +102,11 @@ export function InvoiceEditPage() {
   // re-narrow it here if that bill only ever meant to cover one charge.
   const [chosenDiscounts, setChosenDiscounts] = useState<ChosenDiscount[]>([]);
   const [initialised, setInitialised] = useState(false);
+  // Why the charges are changing — kept with the version this save creates.
+  const [reason, setReason] = useState('');
+  // The charges and discounts as they loaded, to tell a due-date or note edit
+  // (which must not re-price a single line) from one that touched the charges.
+  const [initialKey, setInitialKey] = useState('');
 
   // Waits on both the invoice and the fee item list: reconstructing which
   // accounts a line was billed under (see below) needs the item's current
@@ -85,10 +115,12 @@ export function InvoiceEditPage() {
     if (!invoice.data || !feeItems.data || initialised) return;
     setDueDate(toDateInputValue(invoice.data.dueDate));
     setNote(invoice.data.note ?? '');
-    setChosenDiscounts(
-      invoice.data.appliedDiscounts.map((entry) => ({ discountId: entry.discountId, feeItemIds: [] })),
-    );
-    setLines(
+    const initialDiscounts = invoice.data.appliedDiscounts.map((entry) => ({
+      discountId: entry.discountId,
+      feeItemIds: [],
+    }));
+    setChosenDiscounts(initialDiscounts);
+    const initialLines: LineDraft[] =
       // A carried charge is the balance this invoice took over, not one of its
       // own — sending it back as a line would bill it a second time.
       invoice.data.lines.filter((line) => !line.carriedFromInvoiceId).map((line) => {
@@ -127,11 +159,12 @@ export function InvoiceEditPage() {
           // came from which. Reopening it as a manual amount would double it
           // up once the named discounts above are reapplied on top, so this
           // starts blank; re-key it here if this bill still needs it.
-          discountMode: 'FIXED',
+          discountMode: 'FIXED' as const,
           discountValue: '',
         };
-      }),
-    );
+      });
+    setLines(initialLines);
+    setInitialKey(draftKey(initialLines, initialDiscounts));
     setInitialised(true);
   }, [invoice.data, feeItems.data, initialised]);
 
@@ -359,11 +392,27 @@ export function InvoiceEditPage() {
   }
 
   const record = invoice.data;
-  const amountLocked = record.amountPaid > 0;
+  const hasPayments = record.amountPaid > 0;
   // A follow-up that only carries an earlier invoice's balance was born with no
   // charges; its due date and note can still change without inventing one.
   const hadNoCharges = record.lines.every((line) => line.carriedFromInvoiceId);
-  const valid = Boolean(dueDate && (lines.length > 0 || hadNoCharges));
+  // Whether the person touched the charges or discounts at all. Only then are
+  // they sent — and re-priced — and only then is a reason owed.
+  const chargesChanged = initialised && draftKey(lines, chosenDiscounts) !== initialKey;
+  const reasonMissing = chargesChanged && lines.length > 0 && reason.trim().length === 0;
+  const valid = Boolean(dueDate && (lines.length > 0 || hadNoCharges)) && !reasonMissing;
+
+  // What a payment has already been itemised to on this invoice, by fee item.
+  // Such a charge can be repriced upward but not removed or swapped for another.
+  const paidOnFeeItem = (feeItemId: string) =>
+    record.lines.find((line) => !line.carriedFromInvoiceId && line.feeItemId === feeItemId)
+      ?.amountPaid ?? 0;
+
+  // The previews below leave out a balance brought forward, so it is added back
+  // here to compare like with like against what has been paid. A hint only: the
+  // server prices the real bill and is the one that refuses.
+  const previewTotal = subtotal - discountPreview.total + record.broughtForward;
+  const belowPaid = hasPayments && chargesChanged && previewTotal < record.amountPaid;
 
   // Same student-centric trail as the invoice detail page this is reached
   // from — an invoice always belongs to exactly one student.
@@ -398,9 +447,11 @@ export function InvoiceEditPage() {
         input: {
           dueDate,
           note,
-          ...(amountLocked || lines.length === 0
-            ? {}
-            : {
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+          // Sent only when the charges were touched. Sending them re-prices the
+          // whole bill from today's fees, which a due-date edit must never do.
+          ...(chargesChanged && lines.length > 0
+            ? {
                 lines: lines.map((line) => ({
                   feeItemId: line.feeItemId,
                   quantity: line.quantity,
@@ -409,7 +460,8 @@ export function InvoiceEditPage() {
                   priceOptionId: line.priceOptionId,
                 })),
                 discounts: chosenDiscounts,
-              }),
+              }
+            : {}),
         },
       });
       navigate(`/finance/invoices/${record.id}`);
@@ -422,7 +474,7 @@ export function InvoiceEditPage() {
     <PageContainer width="narrow">
       <PageHeader
         title={`Edit ${record.invoiceNo}`}
-        description="The student and term stay fixed — this only changes the due date, the note, and, while nothing has been paid, the charges."
+        description="The student and term stay fixed. Every change you save is kept in this invoice's version history, so the earlier wording is never lost."
         breadcrumbs={breadcrumbs}
       />
 
@@ -464,36 +516,31 @@ export function InvoiceEditPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Charges</CardTitle>
-              <CardDescription>
-                {amountLocked
-                  ? 'A payment has already been recorded against this invoice, so the charges are locked.'
-                  : 'Add or remove the fee items being billed.'}
-              </CardDescription>
+              <CardDescription>Add, remove or reprice the fee items being billed.</CardDescription>
             </div>
-            {!amountLocked && (
-              <div className="flex gap-2">
-                <Button
-                  data-cy="finance-invoice-edit-add-all-standard-fees"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void addStandardItems()}
-                  loading={resolveFeeStructure.isPending}
-                >
-                  Add all standard fees
-                </Button>
-                <Button data-cy="finance-invoice-edit-add-a-line" variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
-                  <Plus />
-                  Add a line
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <Button
+                data-cy="finance-invoice-edit-add-all-standard-fees"
+                variant="outline"
+                size="sm"
+                onClick={() => void addStandardItems()}
+                loading={resolveFeeStructure.isPending}
+              >
+                Add all standard fees
+              </Button>
+              <Button data-cy="finance-invoice-edit-add-a-line" variant="outline" size="sm" onClick={addLine} disabled={items.length === 0}>
+                <Plus />
+                Add a line
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {amountLocked && (
-            <Alert tone="info">
-              Money has already landed on this invoice, so the amount cannot change. Reverse the
-              payment first if the charges genuinely need correcting.
+          {hasPayments && (
+            <Alert tone="info" data-cy="finance-invoice-edit-paid-notice">
+              {formatCurrency(record.amountPaid, 'NGN', { showDecimals: false })} has already been
+              paid on this invoice. You can still correct the charges, but the total cannot fall
+              below what was paid, and a charge that money was put towards cannot be removed.
             </Alert>
           )}
 
@@ -508,6 +555,19 @@ export function InvoiceEditPage() {
                 const missing = !item;
                 const gross = grossFor(line);
                 const lineDiscount = manualDiscountFor(line);
+                // Money already put towards this charge pins it: it can be
+                // repriced upward, but not removed or swapped for another item.
+                const paidTowards = paidOnFeeItem(line.feeItemId);
+                // Until the charges are touched this screen shows the invoice
+                // as it was billed. Today's fee list can have moved since, and
+                // pricing off it would show an amount nobody has been asked to pay.
+                const saved = chargesChanged
+                  ? undefined
+                  : record.lines.find(
+                      (entry) => !entry.carriedFromInvoiceId && entry.feeItemId === line.feeItemId,
+                    );
+                const shownGross = saved ? saved.unitAmount * saved.quantity : gross;
+                const shownDiscount = saved ? saved.discountAmount : lineDiscount;
                 return (
                   <li key={index} className="space-y-2 rounded-md border border-border p-3">
                     <div className="flex items-end gap-3">
@@ -519,14 +579,14 @@ export function InvoiceEditPage() {
                             className="rounded-md border border-dashed border-danger/50 px-3 py-2 text-sm text-danger"
                           >
                             {line.description} — this fee item no longer exists.
-                            {!amountLocked && ' Remove this line to save changes.'}
+                            {paidTowards === 0 && ' Remove this line to save changes.'}
                           </p>
                         ) : (
                           <NativeSelect
                             data-cy="finance-invoice-edit-fee-item-id"
                             id={`edit-line-item-${index}`}
                             value={line.feeItemId}
-                            disabled={amountLocked}
+                            disabled={paidTowards > 0}
                             onChange={(event) => {
                               // A fresh item is a fresh choice — any quantity
                               // or account set for the old one should not
@@ -565,7 +625,6 @@ export function InvoiceEditPage() {
                             data-cy="finance-invoice-edit-price-option"
                             id={`edit-line-price-${index}`}
                             value={line.priceOptionId ?? ''}
-                            disabled={amountLocked}
                             onChange={(event) => {
                               const priceOptionId = event.target.value || undefined;
                               setLines((current) =>
@@ -587,7 +646,7 @@ export function InvoiceEditPage() {
                           </NativeSelect>
                         </div>
                       )}
-                      {!missing && item.hasQuantity && !amountLocked && (
+                      {!missing && item.hasQuantity && (
                         <div className="w-20 shrink-0 space-y-1.5">
                           <Label htmlFor={`edit-line-qty-${index}`}>Qty</Label>
                           <Input
@@ -609,7 +668,7 @@ export function InvoiceEditPage() {
                           />
                         </div>
                       )}
-                      {!missing && !amountLocked && (
+                      {!missing && (
                         <div className="w-48 shrink-0 space-y-1.5">
                           <Label htmlFor={`edit-line-discount-${index}`}>Discount</Label>
                           <div className="flex gap-1.5">
@@ -654,44 +713,52 @@ export function InvoiceEditPage() {
                       {!missing && (
                         <div className="shrink-0 text-right text-sm">
                           <p className="text-xs text-muted-foreground">
-                            {item.hasQuantity
-                              ? amountLocked
-                                ? `Line total (×${line.quantity})`
-                                : 'Line total'
-                              : 'Amount'}
+                            {item.hasQuantity ? 'Line total' : 'Amount'}
                           </p>
-                          {!amountLocked && lineDiscount > 0 ? (
+                          {shownDiscount > 0 ? (
                             <>
                               <p className="text-xs text-muted-foreground line-through">
-                                {formatCurrency(gross, 'NGN', { showDecimals: false })}
+                                {formatCurrency(shownGross, 'NGN', { showDecimals: false })}
                               </p>
                               <p className="font-medium tabular-nums">
-                                {formatCurrency(gross - lineDiscount, 'NGN', { showDecimals: false })}
+                                {formatCurrency(shownGross - shownDiscount, 'NGN', {
+                                  showDecimals: false,
+                                })}
                               </p>
                             </>
                           ) : (
                             <p className="font-medium tabular-nums">
-                              {formatCurrency(
-                                amountFor(line.feeItemId, line.priceOptionId) * line.quantity,
-                                'NGN',
-                                { showDecimals: false },
-                              )}
+                              {formatCurrency(shownGross, 'NGN', { showDecimals: false })}
                             </p>
                           )}
                         </div>
                       )}
-                      {!amountLocked && (
-                        <Button
-                          data-cy="finance-invoice-edit-remove-line"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Remove line"
-                          onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
-                        >
-                          <Trash2 />
-                        </Button>
-                      )}
+                      <Button
+                        data-cy="finance-invoice-edit-remove-line"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove line"
+                        disabled={paidTowards > 0}
+                        title={
+                          paidTowards > 0
+                            ? 'Money has been put towards this charge, so it cannot be removed.'
+                            : undefined
+                        }
+                        onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 />
+                      </Button>
                     </div>
+                    {paidTowards > 0 && (
+                      <p
+                        className="text-xs text-muted-foreground"
+                        data-cy="finance-invoice-edit-line-paid"
+                      >
+                        {formatCurrency(paidTowards, 'NGN', { showDecimals: false })} has been paid
+                        towards this charge. It can be repriced upward, but not removed or brought
+                        below that.
+                      </p>
+                    )}
                     {item && item.accounts.length === 1 && (
                       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Landmark className="size-3.5 shrink-0" aria-hidden="true" />
@@ -715,7 +782,6 @@ export function InvoiceEditPage() {
                               type="checkbox"
                               className="size-3.5 rounded border-input"
                               checked={line.accountIds.includes(account.id)}
-                              disabled={amountLocked}
                               onChange={() => toggleLineAccount(index, account.id)}
                             />
                             {account.label ? `${account.label} — ` : ''}
@@ -742,22 +808,50 @@ export function InvoiceEditPage() {
             />
           </div>
 
-          {/* Once money has landed the charges lock, and so do the discounts
-              taken off them — the invoice's own figures are shown instead. */}
-          {!amountLocked && (
-            <InvoiceDiscountsPicker
-              discounts={activeDiscounts}
-              feeItems={lineFeeItems}
-              grantedIds={grantedIds}
-              selected={chosenDiscounts}
-              onChange={setChosenDiscounts}
-              applied={discountPreview.applied}
-              studentName={record.studentName}
-            />
+          <InvoiceDiscountsPicker
+            discounts={activeDiscounts}
+            feeItems={lineFeeItems}
+            grantedIds={grantedIds}
+            selected={chosenDiscounts}
+            onChange={setChosenDiscounts}
+            applied={discountPreview.applied}
+            studentName={record.studentName}
+          />
+
+          {/* Owed only once the charges have actually changed: a due-date or
+              note edit needs no explanation, and asking for one would only
+              teach people to type a full stop. */}
+          {chargesChanged && (
+            <div className="space-y-1.5">
+              <Label htmlFor="invoice-edit-reason" required>
+                Why are the charges changing?
+              </Label>
+              <Textarea
+                data-cy="finance-invoice-edit-reason"
+                id="invoice-edit-reason"
+                rows={2}
+                maxLength={500}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="e.g. Uniform was added to this invoice by mistake."
+              />
+              <p className="text-xs text-muted-foreground">
+                Kept with this change in the invoice's version history.
+              </p>
+            </div>
+          )}
+
+          {belowPaid && (
+            <Alert tone="warning" data-cy="finance-invoice-edit-below-paid">
+              These changes bring the invoice to{' '}
+              {formatCurrency(previewTotal, 'NGN', { showDecimals: false })}, which is less than the{' '}
+              {formatCurrency(record.amountPaid, 'NGN', { showDecimals: false })} already paid. It
+              will be refused — reverse or reduce a payment first.
+            </Alert>
           )}
 
           <dl className="space-y-1 border-t border-border pt-3 text-sm">
-            {amountLocked ? (
+            {!chargesChanged ? (
               <Row
                 label="Total for this term"
                 value={formatCurrency(record.subtotal - record.discountTotal, 'NGN', {

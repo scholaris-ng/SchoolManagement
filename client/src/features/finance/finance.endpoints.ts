@@ -8,6 +8,7 @@ import type {
   FinanceOverview,
   GenerateInvoicesResult,
   Invoice,
+  InvoiceRevision,
   Payment,
   PaymentAccount,
   PaymentDestination,
@@ -125,8 +126,9 @@ export interface CreateInvoiceInput {
 
 /**
  * The student and term never appear here — those are fixed once an invoice
- * is issued. `lines`, when sent, is refused server-side once any money has
- * landed on the invoice.
+ * is issued. `lines` may be sent after money has landed, and the server then
+ * refuses only what would make that money untrue: a total below what was paid,
+ * or a charge a payment was itemised to being removed or cut below what it took.
  */
 export interface UpdateInvoiceInput {
   dueDate?: string;
@@ -134,6 +136,8 @@ export interface UpdateInvoiceInput {
   lines?: InvoiceLineInput[];
   /** Read only alongside `lines`; omitted, the invoice keeps the discounts it already carries. */
   discounts?: InvoiceDiscountInput[];
+  /** Why — kept with the version this creates. Required by the server when the charges change. */
+  reason?: string;
 }
 
 /** A batch is not all-or-nothing — see `InvoicesService.deleteInvoices` server-side. */
@@ -323,6 +327,10 @@ export const FinanceEndpoints = {
   fetchInvoices: (query: ListQuery) => http.get<Paginated<Invoice>>('/invoices', { query }),
 
   fetchInvoice: (id: string) => http.get<Invoice>(`/invoices/${id}`),
+
+  /** Every version the invoice has had, newest first. Empty when it has never been edited. */
+  fetchInvoiceRevisions: (id: string) =>
+    http.get<InvoiceRevision[]>(`/invoices/${id}/revisions`),
 
   createInvoice: (input: CreateInvoiceInput) => http.post<Invoice>('/invoices', input),
 

@@ -356,8 +356,21 @@ router.get(
 );
 
 /**
- * The student and term are fixed once issued; only the due date, the note,
- * and — while nothing has been paid — the charges themselves can change.
+ * Every version the invoice has had, newest first. Staff only: the reasons are
+ * the office's own notes, so `finance.read` alone — which a parent holds for
+ * their own children — is not enough.
+ */
+router.get(
+  '/invoices/:id/revisions',
+  authorise('invoice.manage', 'audit.read'),
+  validate(invoiceParamSchema),
+  InvoicesController.revisions,
+);
+
+/**
+ * The student and term are fixed once issued. Everything else can be corrected,
+ * and each correction is kept as a version — see `InvoicesService.updateInvoice`
+ * for what a charge edit may not do once money has been received.
  */
 router.patch(
   '/invoices/:id',

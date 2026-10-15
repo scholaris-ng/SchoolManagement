@@ -19,6 +19,7 @@ import { ShareInvoiceButton } from './whatsapp-share-buttons';
 import { PrintReceiptDialog, type PrintMode } from './print-receipt-dialog';
 import { useDocumentDeliveries, useLogDocumentPrint } from './use-document-deliveries';
 import { DocumentDeliveryLog, deliverySummary } from './document-delivery-log';
+import { InvoiceHistoryCard } from './invoice-history-card';
 import { usePrintMode } from './pos-print';
 import { InvoicePos } from './invoice-pos';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -50,6 +51,10 @@ export function InvoiceDetailPage() {
   const printInvoice = usePrintMode();
 
   const canManageInvoice = can('invoice.manage');
+  // The same two permissions the server asks of the history route: the reasons
+  // are the office's own notes, which a parent holding `finance.read` is not
+  // meant to read.
+  const canSeeHistory = can({ anyOf: ['invoice.manage', 'audit.read'] });
   const logPrint = useLogDocumentPrint('INVOICE', id ?? '');
   // Read here as well as inside the log card — one shared query — so the header
   // can say whether the family has this invoice before anybody scrolls.
@@ -530,6 +535,16 @@ export function InvoiceDetailPage() {
           if (result.deletedIds.includes(record.id)) navigate('/finance/invoices');
         }}
       />
+
+      {/* Below the invoice, and never on the paper: what it used to say, and why
+          it changed — the office's own record, not part of the document. */}
+      {canSeeHistory && (
+        <InvoiceHistoryCard
+          invoiceId={record.id}
+          sentCount={record.sentCount}
+          lastSentAt={record.lastSentAt}
+        />
+      )}
 
       {/* Below the invoice, and never on the paper: the office's own record of
           where copies went, not part of the document itself. */}
