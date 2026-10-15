@@ -37,3 +37,40 @@ export function orderByPersonName(
     : [`${primary} ${direction}`, ...asPrinted.map((column) => `${column} ASC`)];
   return columns.join(', ');
 }
+
+/** More words than this is a pasted sentence, not a name; the rest are ignored. */
+const MAX_SEARCH_WORDS = 6;
+
+/**
+ * The `WHERE` condition for a free-text search box over people.
+ *
+ * The term is split into words and every word must match *some* column, in
+ * any order — so "Christiana Idowu" finds Anuoluwapo Christiana Idowu even
+ * though no single column holds that phrase, and a search by middle name or
+ * surname works the same as one by first name. Matching the whole phrase
+ * against each column on its own, as this used to, could only ever find
+ * somebody whose one column contained all of it.
+ *
+ * Each word gets its own parameter, numbered from `firstParam`; the caller
+ * pushes `params` onto its list in order. Returns `null` for a blank term, so
+ * the caller can leave the condition out rather than match everyone twice.
+ * `%`, `_` and `\` in what was typed are matched literally.
+ */
+export function searchWordsClause(
+  term: string,
+  columns: string[],
+  firstParam: number,
+): { sql: string; params: string[] } | null {
+  const words = term.split(/\s+/).filter(Boolean).slice(0, MAX_SEARCH_WORDS);
+  if (words.length === 0 || columns.length === 0) return null;
+
+  const perWord = words.map(
+    (_, index) =>
+      `(${columns.map((column) => `${column} ILIKE $${firstParam + index}`).join(' OR ')})`,
+  );
+
+  return {
+    sql: `(${perWord.join(' AND ')})`,
+    params: words.map((word) => `%${word.replace(/[\\%_]/g, '\\$&')}%`),
+  };
+}

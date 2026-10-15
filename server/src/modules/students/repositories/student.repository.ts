@@ -1,7 +1,7 @@
 import type { DeepPartial, EntityManager } from 'typeorm';
 import { TenantRepository } from '../../../shared/repositories/baseRepository';
 import { paginatedResult, safeSortColumn } from '../../../shared/pagination/paginate';
-import { orderByPersonName } from '../../../shared/pagination/personName';
+import { orderByPersonName, searchWordsClause } from '../../../shared/pagination/personName';
 import type { Paginated } from '../../../shared/response/apiResponse';
 import { Student } from '../entities/student.entity';
 import type { StudentDTO, StudentSummaryDTO } from '../dto/students.dto';
@@ -75,6 +75,9 @@ const SORTABLE: Record<string, string> = {
 
 const NAME_COLUMNS = { first: 's.first_name', middle: 's.middle_name', last: 's.last_name' };
 
+/** What a typed search is matched against, word by word: the whole name, and the admission number. */
+const SEARCH_COLUMNS = [NAME_COLUMNS.first, NAME_COLUMNS.middle, NAME_COLUMNS.last, 's.admission_no'];
+
 export interface StudentFilter {
   page: number;
   pageSize: number;
@@ -120,12 +123,14 @@ export class StudentRepository extends TenantRepository<Student> {
     if (filter.houseId) add((i) => `s.house_id = $${i}`, filter.houseId);
     if (filter.levelId) add((i) => `c.level_id = $${i}`, filter.levelId);
 
-    if (filter.search) {
-      params.push(`%${filter.search}%`);
-      const i = params.length;
-      where.push(
-        `(s.first_name ILIKE $${i} OR s.last_name ILIKE $${i} OR s.admission_no ILIKE $${i} OR c.name ILIKE $${i})`,
-      );
+    const match = searchWordsClause(
+      filter.search ?? '',
+      [...SEARCH_COLUMNS, 'c.name'],
+      params.length + 1,
+    );
+    if (match) {
+      params.push(...match.params);
+      where.push(match.sql);
     }
 
     const whereSql = where.join(' AND ');
@@ -160,11 +165,17 @@ export class StudentRepository extends TenantRepository<Student> {
   ): Promise<StudentSummaryDTO[]> {
     if (visibleIds && visibleIds.length === 0) return [];
 
-    const params: unknown[] = [schoolId, `%${term}%`, limit];
+    const params: unknown[] = [schoolId, limit];
     let scope = '';
     if (visibleIds) {
       params.push(visibleIds);
       scope = `AND s.id = ANY($${params.length}::uuid[])`;
+    }
+
+    const match = searchWordsClause(term, SEARCH_COLUMNS, params.length + 1);
+    if (match) {
+      params.push(...match.params);
+      scope += ` AND ${match.sql}`;
     }
 
     return this.repo.query(
@@ -175,9 +186,8 @@ export class StudentRepository extends TenantRepository<Student> {
        FROM students s
        LEFT JOIN school_classes c ON c.id = s.current_class_id
        WHERE s.school_id = $1 AND s.deleted_at IS NULL ${scope}
-         AND (s.first_name ILIKE $2 OR s.last_name ILIKE $2 OR s.admission_no ILIKE $2)
        ORDER BY s.first_name ASC, s.middle_name ASC, s.last_name ASC
-       LIMIT $3`,
+       LIMIT $2`,
       params,
     );
   }

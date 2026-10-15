@@ -1,4 +1,4 @@
-import { orderByPersonName } from '../pagination/personName';
+import { orderByPersonName, searchWordsClause } from '../pagination/personName';
 
 const student = { first: 's.first_name', middle: 's.middle_name', last: 's.last_name' };
 const staff = { first: 's.first_name', last: 's.last_name' };
@@ -33,5 +33,44 @@ describe('orderByPersonName', () => {
     expect(orderByPersonName('s.designation', 'ASC', staff)).toBe(
       's.designation ASC, s.first_name ASC, s.last_name ASC',
     );
+  });
+});
+
+describe('searchWordsClause', () => {
+  const columns = ['s.first_name', 's.middle_name', 's.last_name'];
+
+  it('matches a single word against every name column, so a middle name or surname is found', () => {
+    expect(searchWordsClause('idowu', columns, 2)).toEqual({
+      sql: '((s.first_name ILIKE $2 OR s.middle_name ILIKE $2 OR s.last_name ILIKE $2))',
+      params: ['%idowu%'],
+    });
+  });
+
+  it('requires every word to match some column, so a phrase can span the name parts', () => {
+    expect(searchWordsClause('Christiana  Idowu', columns, 3)).toEqual({
+      sql:
+        '((s.first_name ILIKE $3 OR s.middle_name ILIKE $3 OR s.last_name ILIKE $3) AND ' +
+        '(s.first_name ILIKE $4 OR s.middle_name ILIKE $4 OR s.last_name ILIKE $4))',
+      params: ['%Christiana%', '%Idowu%'],
+    });
+  });
+
+  it('numbers its parameters from where the caller left off', () => {
+    const match = searchWordsClause('a b', ['x'], 5);
+    expect(match?.sql).toBe('((x ILIKE $5) AND (x ILIKE $6))');
+    expect(match?.params).toHaveLength(2);
+  });
+
+  it('returns nothing for a blank term, so the caller adds no condition', () => {
+    expect(searchWordsClause('', columns, 1)).toBeNull();
+    expect(searchWordsClause('   ', columns, 1)).toBeNull();
+  });
+
+  it('matches wildcard characters literally', () => {
+    expect(searchWordsClause('50%_off\\', ['x'], 1)?.params).toEqual(['%50\\%\\_off\\\\%']);
+  });
+
+  it('ignores words past the sixth', () => {
+    expect(searchWordsClause('a b c d e f g h', ['x'], 1)?.params).toHaveLength(6);
   });
 });
