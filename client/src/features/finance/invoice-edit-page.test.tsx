@@ -329,6 +329,121 @@ describe('InvoiceEditPage brought-forward items', () => {
   });
 });
 
+describe('InvoiceEditPage settled items on an earlier invoice', () => {
+  // INV/00018 billed five charges, but two are paid in full and so are not on
+  // the follow-up INV/00019, which lists only the three still owing.
+  const withSettled = () => {
+    stable.feeItems = {
+      data: {
+        items: [
+          item('tuition', 'Tuition', 55000),
+          item('exam', 'Exam', 40000),
+          item('boarding', 'Boarding', 36000),
+          item('development', 'Development', 25000),
+          item('bus', 'Bus', 20000),
+          item('books', 'Textbooks', 50000),
+        ],
+      },
+    };
+    stable.invoice = {
+      data: {
+        ...followUp,
+        carriedFrom: [
+          {
+            invoiceId: 'inv-18',
+            invoiceNo: 'INV/2026-2027/00018',
+            amount: 106000,
+            unassigned: 0,
+            items: [
+              { description: 'Tuition', amount: 55000, paid: 30000, balance: 25000 },
+              { description: 'Boarding', amount: 36000, paid: 15000, balance: 21000 },
+              { description: 'Bus', amount: 20000, paid: 0, balance: 20000 },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    stable.details = {
+      'inv-18': {
+        data: {
+          ...original,
+          lines: [
+            line('l-tuition', 'tuition', 'Tuition', 55000, 30000),
+            line('l-exam', 'exam', 'Exam', 40000, 40000),
+            line('l-boarding', 'boarding', 'Boarding', 36000, 15000),
+            line('l-dev', 'development', 'Development', 25000, 25000),
+            line('l-bus', 'bus', 'Bus', 20000, 0),
+          ],
+        },
+        isPending: false,
+        isError: false,
+      },
+    };
+    stable.update.mutateAsync = vi.fn().mockResolvedValue({ id: 'inv-19' });
+  };
+
+  beforeEach(withSettled);
+  afterEach(cleanup);
+
+  it('shows only the items the invoice lists, and says the others are left alone', async () => {
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // Three owing items — not the five the earlier invoice actually has.
+    expect(screen.getAllByRole('button', { name: 'Remove line' })).toHaveLength(3);
+    expect(screen.queryByDisplayValue('Exam')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Development')).not.toBeInTheDocument();
+    expect(screen.getByText(/2 fully paid items on/)).toBeInTheDocument();
+  });
+
+  it('keeps the hidden items on the earlier invoice when the others are edited', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // Remove Bus — the third of the three that are shown.
+    await user.click(screen.getAllByRole('button', { name: 'Remove line' })[2]);
+    await user.type(screen.getByLabelText(/Why are the charges changing/), 'Bus was a mistake');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(stable.update.mutateAsync).toHaveBeenCalledTimes(1));
+    const { input } = stable.update.mutateAsync.mock.calls[0][0];
+    const sent = input.carried[0].lines.map((entry: { feeItemId: string }) => entry.feeItemId);
+
+    // Exam and Development were never on screen, and are not deleted by the save.
+    expect(sent).toEqual(['tuition', 'exam', 'boarding', 'development']);
+  });
+
+  it('brings the settled items into view on request', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+
+    expect(screen.getAllByRole('button', { name: 'Remove line' })).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+  });
+
+  it('will not offer a fee item the earlier invoice already has, hidden or not', async () => {
+    renderEdit();
+    await screen.findByText('Brought forward from INV/2026-2027/00018');
+
+    // On the Bus row, "Exam" is already on the invoice (out of sight) and cannot
+    // be picked a second time; an item that is not on it can.
+    const selects = screen.getAllByRole('combobox', { name: 'Fee item' });
+    const busSelect = selects[2];
+    const option = (name: string) =>
+      Array.from(busSelect.querySelectorAll('option')).find((entry) => entry.textContent === name);
+
+    expect(option('Exam')).toBeDisabled();
+    expect(option('Textbooks')).toBeEnabled();
+  });
+});
+
 describe('InvoiceEditPage carried-forward invoice', () => {
   afterEach(cleanup);
 

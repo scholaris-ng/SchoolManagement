@@ -54,6 +54,13 @@ interface LineDraft {
    * being re-priced from a fee list that may have moved since.
    */
   saved?: { feeItemId: string; unitAmount: number; priceOptionId?: string };
+  /**
+   * A charge on an earlier invoice that the invoice carrying it does not list,
+   * because nothing is owing on it. It is still part of that invoice and is sent
+   * back with it, untouched, so editing the others cannot delete it — it is only
+   * not shown until the person asks to see it.
+   */
+  hidden?: boolean;
 }
 
 type Updater = (change: (current: LineDraft[]) => LineDraft[]) => void;
@@ -126,7 +133,17 @@ function draftKey(lines: LineDraft[], discounts: ChosenDiscount[] = []): string 
 }
 
 /** An invoice's own charges as editable rows — what the form starts from. */
-function draftsFromInvoice(invoice: Invoice, items: FeeItem[]): LineDraft[] {
+function draftsFromInvoice(
+  invoice: Invoice,
+  items: FeeItem[],
+  /**
+   * For an earlier invoice being edited from the one that carries it: the
+   * descriptions that invoice actually lists. Every other charge of the earlier
+   * invoice is settled and is kept out of sight, not dropped. Omitted, every
+   * charge is shown.
+   */
+  listed?: Set<string>,
+): LineDraft[] {
   // A carried charge is the balance this invoice took over, not one of its
   // own — sending it back as a line would bill it a second time.
   return invoice.lines
@@ -174,6 +191,7 @@ function draftsFromInvoice(invoice: Invoice, items: FeeItem[]): LineDraft[] {
           unitAmount: line.unitAmount,
           priceOptionId: matchedPriceOption?.id,
         },
+        ...(listed && !listed.has(line.description) ? { hidden: true } : {}),
       };
     });
 }
@@ -207,7 +225,7 @@ function ChargeRows({
   isOptionalFor,
   structureAmounts,
   savedLines,
-  touched,
+  showHidden = false,
 }: {
   idPrefix: string;
   lines: LineDraft[];
@@ -217,8 +235,8 @@ function ChargeRows({
   structureAmounts?: Map<string, number>;
   /** This invoice's own charges as saved — what has been paid towards each, and its billed amount. */
   savedLines: InvoiceLine[];
-  /** Until the list has been touched it shows the invoice as billed, not today's fee list. */
-  touched: boolean;
+  /** Also show the charges that are kept out of sight because nothing is owing on them. */
+  showHidden?: boolean;
 }) {
   const paidOnFeeItem = (feeItemId: string) =>
     savedLines.find((line) => line.feeItemId === feeItemId)?.amountPaid ?? 0;
@@ -237,7 +255,8 @@ function ChargeRows({
       ),
     );
 
-  if (lines.length === 0) {
+  const shown = showHidden ? lines : lines.filter((line) => !line.hidden);
+  if (shown.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
         No charges yet.
@@ -248,6 +267,8 @@ function ChargeRows({
   return (
     <ul className="space-y-2">
       {lines.map((line, index) => {
+        // Kept in the list so every index stays the row's real position, but not drawn.
+        if (line.hidden && !showHidden) return null;
         const item = items.find((entry) => entry.id === line.feeItemId);
         const missing = !item;
         const unit = unitAmountOf(line, items, structureAmounts);
@@ -256,12 +277,17 @@ function ChargeRows({
         // What has been paid towards this charge, shown beside it. It does not
         // lock the row — see the note on `ChargeRows`.
         const paidTowards = paidOnFeeItem(line.feeItemId);
-        // Until the charges are touched this screen shows the invoice as it was
-        // billed. Today's fee list can have moved since, and pricing off it
-        // would show an amount nobody has been asked to pay.
-        const saved = touched
-          ? undefined
-          : savedLines.find((entry) => entry.feeItemId === line.feeItemId);
+        // A row nobody has touched shows the charge as it was billed, discounts
+        // included — even when other rows of the list have been changed. Pricing
+        // it off today's fee list would show an amount nobody has been asked to
+        // pay, and the server keeps it exactly as it is.
+        const savedMatch = savedLines.find((entry) => entry.feeItemId === line.feeItemId);
+        const unchanged =
+          savedMatch !== undefined &&
+          keepsSavedPrice(line) &&
+          line.quantity === savedMatch.quantity &&
+          line.discountValue === '';
+        const saved = unchanged ? savedMatch : undefined;
         const shownGross = saved ? saved.unitAmount * saved.quantity : gross;
         const shownDiscount = saved ? saved.discountAmount : lineDiscount;
         // What is still owing on the charge as it now stands — the same Amount,
@@ -313,7 +339,16 @@ function ChargeRows({
                     }}
                   >
                     {items.map((option) => (
-                      <option key={option.id} value={option.id}>
+                      <option
+                        key={option.id}
+                        value={option.id}
+                        // An invoice carries a fee item once — a second would be
+                        // refused — and that includes the ones kept out of sight.
+                        disabled={lines.some(
+                          (other, otherIndex) =>
+                            otherIndex !== index && other.feeItemId === option.id,
+                        )}
+                      >
                         {option.name}
                         {isOptionalFor(option.id) ? ' (optional)' : ''}
                       </option>
@@ -565,6 +600,8 @@ export function InvoiceEditPage() {
   const [initialKey, setInitialKey] = useState('');
   // One draft per earlier invoice, filled in as each one loads.
   const [carriedDrafts, setCarriedDrafts] = useState<Record<string, CarriedDraft>>({});
+  // Which earlier invoices have had their settled charges brought into view.
+  const [showSettled, setShowSettled] = useState<Record<string, boolean>>({});
 
   // Waits on both the invoice and the fee item list: reconstructing which
   // accounts a line was billed under needs the item's current accounts to
@@ -597,7 +634,18 @@ export function InvoiceEditPage() {
       ...current,
       ...Object.fromEntries(
         fresh.map((source) => {
-          const drafts = draftsFromInvoice(source, feeItems.data.items);
+          // Only what this invoice lists is shown. An earlier invoice can have
+          // more charges than that — the ones that are paid in full — and those
+          // were never part of what the person is looking at.
+          const listedItems =
+            invoice.data?.carriedFrom?.find((entry) => entry.invoiceId === source.id)?.items ?? [];
+          const drafts = draftsFromInvoice(
+            source,
+            feeItems.data.items,
+            listedItems.length > 0
+              ? new Set(listedItems.map((entry) => entry.description))
+              : undefined,
+          );
           return [source.id, { lines: drafts, initialKey: draftKey(drafts) }] as const;
         }),
       ),
@@ -799,6 +847,7 @@ export function InvoiceEditPage() {
         dto,
         draft,
         savedOwn,
+        hiddenCount: draft.lines.filter((line) => line.hidden).length,
         touched: draftKey(draft.lines) !== draft.initialKey,
       },
     ];
@@ -815,11 +864,22 @@ export function InvoiceEditPage() {
   // how far the balance brought forward moves. A hint only: the server prices
   // the real bill and is the one that refuses.
   const carriedShift = touchedGroups.reduce((sum, group) => {
-    const edited = group.draft.lines.reduce(
-      (net, line) =>
-        net + unitAmountOf(line, items) * line.quantity - manualDiscountOf(line, items),
-      0,
-    );
+    const edited = group.draft.lines.reduce((net, line) => {
+      // A charge nobody touched comes to what it was billed at, discounts and
+      // all — only the ones that were changed or added are worked out afresh.
+      const billed = group.savedOwn.find((entry) => entry.feeItemId === line.feeItemId);
+      const unchanged =
+        billed !== undefined &&
+        keepsSavedPrice(line) &&
+        line.quantity === billed.quantity &&
+        line.discountValue === '';
+      return (
+        net +
+        (unchanged
+          ? billed.lineTotal
+          : unitAmountOf(line, items) * line.quantity - manualDiscountOf(line, items))
+      );
+    }, 0);
     const savedNet = group.savedOwn.reduce((net, line) => net + line.lineTotal, 0);
     return sum + (edited - savedNet);
   }, 0);
@@ -1009,7 +1069,6 @@ export function InvoiceEditPage() {
             isOptionalFor={isOptionalFor}
             structureAmounts={structureAmounts}
             savedLines={record.lines.filter((line) => !line.carriedFromInvoiceId)}
-            touched={chargesChanged}
           />
 
           <div className="space-y-1.5">
@@ -1070,8 +1129,38 @@ export function InvoiceEditPage() {
               items={items}
               isOptionalFor={isOptionalFor}
               savedLines={group.savedOwn}
-              touched={group.touched}
+              showHidden={Boolean(showSettled[group.invoiceId])}
             />
+            {/* Charges of that invoice with nothing owing on them are not on the
+                invoice being edited, so they are not listed — but they are still
+                there, and saving leaves them exactly as they are. */}
+            {group.hiddenCount > 0 && (
+              <p
+                className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
+                data-cy="finance-invoice-edit-carried-settled"
+              >
+                <span>
+                  {group.hiddenCount === 1
+                    ? '1 fully paid item on'
+                    : `${group.hiddenCount} fully paid items on`}{' '}
+                  {group.invoiceNo} {group.hiddenCount === 1 ? 'is' : 'are'} not listed here and
+                  will be left as {group.hiddenCount === 1 ? 'it is' : 'they are'}.
+                </span>
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  data-cy="finance-invoice-edit-carried-settled-toggle"
+                  onClick={() =>
+                    setShowSettled((current) => ({
+                      ...current,
+                      [group.invoiceId]: !current[group.invoiceId],
+                    }))
+                  }
+                >
+                  {showSettled[group.invoiceId] ? 'Hide' : 'Show'}
+                </button>
+              </p>
+            )}
             {group.draft.lines.length === 0 && (
               <p className="text-xs text-danger">
                 An invoice needs at least one charge — put one back to save.
