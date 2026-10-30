@@ -39,6 +39,8 @@ const deliveryScope = {
   /** Narrows prints to one shape of paper — "which receipts only ever got a till slip?". */
   printFormat: z.enum(PRINT_FORMATS).optional(),
   studentId: z.string().uuid().optional(),
+  /** The class the child is in now. A fee schedule or custom bill names no child, so a class never matches one. */
+  classId: z.string().uuid().optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
   search: z.string().trim().max(120).optional(),

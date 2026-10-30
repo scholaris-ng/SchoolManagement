@@ -36,6 +36,8 @@ export interface DeliveryScope {
   channel?: string;
   printFormat?: string;
   studentId?: string;
+  /** The student's class today (`students.current_class_id`). Rows with no student never match. */
+  classId?: string;
   /** `YYYY-MM-DD`, inclusive, read as whole days in `timezone`. */
   dateFrom?: string;
   dateTo?: string;
@@ -119,6 +121,18 @@ export class DocumentDeliveryRepository extends TenantRepository<DocumentDeliver
     if (scope.channel) add((i) => `dd.channel = $${i}`, scope.channel);
     if (scope.printFormat) add((i) => `dd.print_format = $${i}`, scope.printFormat);
     if (scope.studentId) add((i) => `dd.student_id = $${i}`, scope.studentId);
+
+    // The register reads one table with no joins, so a class is reached through
+    // `EXISTS` rather than a join. That keeps it usable by `confirmAll`'s
+    // `UPDATE` too, which shares this method: "mark all as delivered" for a
+    // class must touch exactly the rows that class's register shows.
+    if (scope.classId) {
+      add(
+        (i) =>
+          `EXISTS (SELECT 1 FROM students s WHERE s.id = dd.student_id AND s.current_class_id = $${i})`,
+        scope.classId,
+      );
+    }
 
     // `sent_at` is an instant, so "the 1st" has to mean midnight in the school's
     // own zone — the same reasoning, and the same shape, as

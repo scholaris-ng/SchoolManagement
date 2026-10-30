@@ -5,6 +5,7 @@ import { formatCurrency, formatDateTime } from '@/lib/format';
 import { humanizeEnum } from '@/lib/utils';
 import { useListQuery } from '@/hooks/use-list-query';
 import { useAuth } from '@/app/providers/auth-provider';
+import { useClasses } from '@/features/academics/api';
 import { useExportPayments, usePayments, useReconcilePayment } from './api';
 import type { Payment } from '@/types/finance';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
@@ -34,11 +35,12 @@ export function PaymentsPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const list = useListQuery({
-    filterKeys: ['method', 'status', 'reconciled', 'dateFrom', 'dateTo'],
+    filterKeys: ['method', 'status', 'reconciled', 'classId', 'dateFrom', 'dateTo'],
     defaultSortBy: 'paidAt',
     defaultSortDir: 'desc',
   });
   const payments = usePayments(list.query);
+  const classes = useClasses();
   const exportPayments = useExportPayments();
   const reconcile = useReconcilePayment();
   const [pendingReconcile, setPendingReconcile] = useState<Payment | null>(null);
@@ -275,6 +277,12 @@ export function PaymentsPage() {
         onReset={list.isFiltered ? list.reset : undefined}
         filters={[
           { key: 'method', label: 'Method', options: METHOD_OPTIONS, allLabel: 'All methods' },
+          {
+            key: 'classId',
+            label: 'Class',
+            options: (classes.data ?? []).map((c) => ({ value: c.id, label: c.name })),
+            allLabel: 'All classes',
+          },
           {
             key: 'reconciled',
             label: 'Reconciliation',

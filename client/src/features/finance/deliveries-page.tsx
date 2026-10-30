@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Check, CheckCheck, Send } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
 import { useListQuery } from '@/hooks/use-list-query';
+import { useClasses } from '@/features/academics/api';
 import { PageContainer, PageHeader } from '@/components/layout/page-header';
 import { DataTable, type Column } from '@/components/data/data-table';
 import { FilterBar } from '@/components/data/filter-bar';
@@ -72,11 +73,12 @@ function documentHref(delivery: DocumentDelivery): string | null {
  */
 export function DeliveriesPage() {
   const list = useListQuery({
-    filterKeys: ['documentType', 'channel', 'printFormat', 'status', 'dateFrom', 'dateTo'],
+    filterKeys: ['documentType', 'channel', 'printFormat', 'status', 'classId', 'dateFrom', 'dateTo'],
     defaultSortBy: 'sentAt',
     defaultSortDir: 'desc',
   });
   const deliveries = useDeliveries({ ...list.query, ...list.filters });
+  const classes = useClasses();
   const confirm = useConfirmDeliveryFromRegister();
   const confirmAll = useConfirmAllDeliveries();
   const [confirmAllOpen, setConfirmAllOpen] = useState(false);
@@ -272,6 +274,12 @@ export function DeliveriesPage() {
             allLabel: 'Any paper',
           },
           { key: 'status', label: 'Status', options: STATUS_OPTIONS, allLabel: 'Any status' },
+          {
+            key: 'classId',
+            label: 'Class',
+            options: (classes.data ?? []).map((c) => ({ value: c.id, label: c.name })),
+            allLabel: 'All classes',
+          },
         ]}
       />
 

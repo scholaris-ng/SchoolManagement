@@ -22,6 +22,8 @@ export const fetchPaymentsSchema = z.object({
       pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
       search: z.string().trim().max(120).optional(),
       studentId: z.string().uuid().optional(),
+      // The class the student is in now, not the one they were billed in.
+      classId: z.string().uuid().optional(),
       method: z.enum(PAYMENT_METHODS).optional(),
       provider: z.enum(PAYMENT_PROVIDERS).optional(),
       status: z.enum(PAYMENT_STATUSES).optional(),

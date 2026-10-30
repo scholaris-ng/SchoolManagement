@@ -7,6 +7,7 @@ import {
 
 const documentId = '3f2b8c1e-5d4a-4e9b-8a7c-1d2e3f4a5b6c';
 const guardianId = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
+const classId = '7c6d5e4f-3a2b-4c1d-9e8f-0a1b2c3d4e5f';
 const params = { documentType: 'RECEIPT', documentId };
 
 describe('recordDeliverySchema', () => {
@@ -203,6 +204,15 @@ describe('fetchDeliveriesSchema', () => {
     expect(parsed.query.printFormat).toBe('POS');
   });
 
+  it('filters by the class a child is in', () => {
+    const parsed = fetchDeliveriesSchema.parse({ query: { classId } });
+    expect(parsed.query.classId).toBe(classId);
+  });
+
+  it('refuses a class id that is not a uuid', () => {
+    expect(fetchDeliveriesSchema.safeParse({ query: { classId: 'JSS 2' } }).success).toBe(false);
+  });
+
   it('refuses a date bound that is not a plain day', () => {
     expect(
       fetchDeliveriesSchema.safeParse({ query: { dateFrom: '21/09/2026' } }).success,
@@ -241,6 +251,15 @@ describe('confirmAllDeliveriesSchema', () => {
    * A stray `status` is silently dropped rather than refused, the same way an
    * unrecognised key anywhere else in this object would be.
    */
+  /**
+   * If this dropped `classId` the way it drops `status`, "Mark all as delivered"
+   * on a class's register would quietly confirm every class's copies.
+   */
+  it('keeps the class, so a bulk confirm stays inside the register on screen', () => {
+    const parsed = confirmAllDeliveriesSchema.parse({ query: { classId } });
+    expect(parsed.query.classId).toBe(classId);
+  });
+
   it('drops a status, page, or sort field rather than acting on it', () => {
     const parsed = confirmAllDeliveriesSchema.parse({
       query: { status: 'FAILED', page: '2', pageSize: '50', sortBy: 'sentAt' },

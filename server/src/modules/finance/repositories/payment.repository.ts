@@ -101,6 +101,8 @@ export interface PaymentFilter {
   page: number;
   pageSize: number;
   studentId?: string;
+  /** The student's class today (`students.current_class_id`), as on the debtors and students lists. */
+  classId?: string;
   method?: string;
   provider?: string;
   status?: string;
@@ -406,6 +408,7 @@ export class PaymentRepository extends TenantRepository<Payment> {
 
     if (filter.visibleIds) add((i) => `p.student_id = ANY($${i}::uuid[])`, filter.visibleIds);
     if (filter.studentId) add((i) => `p.student_id = $${i}`, filter.studentId);
+    if (filter.classId) add((i) => `s.current_class_id = $${i}`, filter.classId);
     if (filter.method) add((i) => `p.method = $${i}`, filter.method);
     if (filter.provider) add((i) => `p.provider = $${i}`, filter.provider);
     if (filter.status) add((i) => `p.status = $${i}`, filter.status);
